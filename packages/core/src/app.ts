@@ -29,6 +29,8 @@ import {
 } from './routes'
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
+import { traceSpan, wrapTraceBindings } from './utils/request-trace'
+import { queryTraceMiddleware } from './plugins/core-plugins/query-trace-plugin/middleware/query-trace-middleware'
 import { metricsMiddleware } from './middleware/metrics'
 import { csrfProtection } from './middleware/csrf'
 import { securityHeadersMiddleware } from './middleware/security-headers'
@@ -403,6 +405,10 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     setEmailService(new EmailService({ provider, defaultFrom, defaultReplyTo, db: env.DB as never }))
   }
 
+  // Query Trace: always installs passthrough D1/KV proxies, traces /admin only when the
+  // plugin is active + opted in. Not mounted at all under plugins.disableAll.
+  if (!config.plugins?.disableAll) app.use('*', queryTraceMiddleware())
+
   // App version middleware
   app.use('*', async (c, next) => {
     c.set('appVersion', appVersion)
@@ -413,7 +419,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.use('*', metricsMiddleware())
 
   // Bootstrap middleware - runs migrations, syncs collections, and initializes plugins
-  app.use('*', bootstrapMiddleware(config, [...corePluginsBeforeCatchAll, ...corePluginsAfterCatchAll, ...(config.plugins?.register ?? [])]))
+  app.use('*', traceSpan('bootstrap', bootstrapMiddleware(config, [...corePluginsBeforeCatchAll, ...corePluginsAfterCatchAll, ...(config.plugins?.register ?? [])])))
 
   // bootIsolate — extracted from the wiring middleware so it can be called from
   // both HTTP requests AND cron-first cold isolates (scheduled() handlers) that
@@ -421,6 +427,8 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // both once-guarded per isolate.
   const boot: BootIsolateFn = async (env: Record<string, unknown>) => {
     if (config.plugins?.disableAll) return
+    // Cron-first isolates reach here without the HTTP middleware; idempotent on the HTTP path.
+    env = wrapTraceBindings(env as any) as Record<string, unknown>
     firstRequestEnv = env
     try {
       await initEmailService(env)
@@ -436,10 +444,10 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
 
   // Plugin wiring middleware - calls boot() on the first request so it runs after
   // bootstrap. Subsequent requests return the cached once-guard result instantly.
-  app.use('*', async (c, next) => {
+  app.use('*', traceSpan('boot', async (c, next) => {
     await boot(c.env as unknown as Record<string, unknown>)
     return next()
-  })
+  }))
 
   // Custom middleware - before auth
   if (config.middleware?.beforeAuth) {
@@ -492,7 +500,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.use('*', securityHeadersMiddleware())
 
   // CSRF protection middleware
-  app.use('*', csrfProtection())
+  app.use('*', traceSpan('csrf', csrfProtection()))
 
   // Better Auth session middleware: populate c.set('user') (and 'session') from
   // the Better Auth session so existing requireAuth/requireRole and every
@@ -537,12 +545,12 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // `x-api-key` / `Authorization: Bearer sk_…`. Provided by the api-keys plugin;
   // gated on that plugin being active. Runs right after the session middleware
   // so it sits ahead of every route guard, like the security-audit middleware.
-  app.use('*', apiKeyAuthMiddleware())
+  app.use('*', traceSpan('apiKeyAuth', apiKeyAuthMiddleware()))
 
   // Custom JWT Bearer auth: if BA session + API-key both failed to resolve a user,
   // fall back to the custom JWT minted by /auth/login (not a BA session token).
   // Accepts `Authorization: Bearer <jwt>` where the token is NOT an `sk_` API key.
-  app.use('*', async (c, next) => {
+  app.use('*', traceSpan('jwtAuth', async (c, next) => {
     if (!c.get('user')) {
       const authHeader = c.req.header('Authorization')
       if (authHeader?.startsWith('Bearer ') && !authHeader.startsWith('Bearer sk_')) {
@@ -565,7 +573,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       }
     }
     await next()
-  })
+  }))
 
   // Custom middleware - after auth
   if (config.middleware?.afterAuth) {
@@ -577,17 +585,17 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Tenant resolution: sets c.get('tenantId') for every request (API + admin). Short-circuits to
   // 'default' while the multi-tenant plugin is inactive, so single-tenant behavior is unchanged.
   // Runs after auth (admin switcher cookie) and before route handlers read the request context.
-  app.use('*', tenantMiddleware())
+  app.use('*', traceSpan('tenant', tenantMiddleware()))
 
   // Admin panel access control: require authentication and dynamic RBAC portal
   // access. Legacy `users.role` no longer decides who can enter /admin/*.
-  app.use('/admin/*', requireAuth())
-  app.use('/admin/*', requireRbac('portal', 'access'))
+  app.use('/admin/*', traceSpan('requireAuth', requireAuth()))
+  app.use('/admin/*', traceSpan('requireRbac', requireRbac('portal', 'access')))
 
   // Plugin dynamic menu items for admin sidebar
-  app.use('/admin/*', pluginMenuMiddleware())
+  app.use('/admin/*', traceSpan('pluginMenu', pluginMenuMiddleware()))
   // Menu plugin sidebar replacement (DB-driven nav items)
-  app.use('/admin/*', menuMiddleware())
+  app.use('/admin/*', traceSpan('menu', menuMiddleware()))
 
   // RBAC-aware admin shell. Computes the signed-in user's effective permission
   // set once, then (1) redirects the dashboard landing to the first section the
@@ -605,7 +613,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     { path: '/admin/settings', perm: 'settings:manage' },
     { path: '/admin/rbac', perm: 'rbac:manage' },
   ]
-  app.use('/admin/*', async (c, next) => {
+  app.use('/admin/*', traceSpan('rbacPerms+navStrip', async (c, next) => {
     const user = c.get('user') as { userId?: string } | undefined
     if (!user?.userId) return next()
 
@@ -651,7 +659,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     } catch {
       /* leave response as-is on any failure */
     }
-  })
+  }))
 
   // Forced two-factor re-enrolment. Runs last of the /admin/* middleware — after requireAuth
   // (it needs c.get('user')) and after the RBAC shell (a user who owes an enrolment should still
@@ -661,7 +669,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // registration order, and plugin registration is interleaved with the app.route('/admin/...')
   // calls below, so middleware added from a plugin would silently not run for any admin route
   // mounted before it. See recovery.ts.
-  app.use('/admin/*', enforceTwoFactorEnrolment())
+  app.use('/admin/*', traceSpan('enforce2FA', enforceTwoFactorEnrolment()))
 
   // …and on the JSON API, for the same policy. Without it "you must enrol before using the portal"
   // means only the HTML portal: the same session cookie drives /api/*, so a user who owes an

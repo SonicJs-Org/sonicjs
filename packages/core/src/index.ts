@@ -403,3 +403,7 @@ export const VERSION = packageJson.version
  *
  * DO NOT USE IN PRODUCTION - Alpha release for development only
  */
+
+// Request tracing (query-trace plugin): wrap your own middleware / report cache ops
+export { traceSpan, getCurrentTrace } from './utils/request-trace'
+export type { TraceEntry, CacheOutcome } from './utils/request-trace'

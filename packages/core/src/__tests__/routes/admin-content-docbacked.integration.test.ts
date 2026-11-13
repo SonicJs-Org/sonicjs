@@ -189,6 +189,58 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
     expect(db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='content'").get()).toBeFalsy()
   })
 
+  // ── All-view capped count + paging input (D1 overload fix) ─────────────────────────────────
+  // The All view counts at most `offset + limit * 10` matches. Below the cap it shows the exact
+  // total; above it, a lower bound rendered as "N+" in BOTH the header badge and the footer.
+  describe('all-view capped count', () => {
+    const footerTotal = (html: string) => /<span[^>]*>(\d+\+?)<\/span> results/.exec(html)?.[1]
+    const badgeTotal = (html: string) => /(\d+\+?) items?<\/span>/.exec(html)?.[1]
+    const list = async (qs: string) => {
+      const res = await app.request(`/admin/content?model=all${qs}`)
+      expect(res.status).toBe(200)
+      return res.text()
+    }
+
+    beforeEach(async () => {
+      for (let i = 0; i < 25; i++) await createPost(`cap-${i}`)
+    })
+
+    it('shows the exact total (no "+") when matches fit inside the count window', async () => {
+      const html = await list('&limit=100') // cap = 1000
+      const total = footerTotal(html)
+      expect(total).toMatch(/^\d+$/)
+      expect(Number(total)).toBeGreaterThanOrEqual(25)
+      expect(badgeTotal(html)).toBe(total)
+    })
+
+    it('shows a lower bound "N+" in footer and header badge when the cap is hit', async () => {
+      const html = await list('&limit=2') // page 1 → cap = 0 + 2*10 = 20 < 25 posts
+      expect(footerTotal(html)).toBe('20+')
+      expect(badgeTotal(html)).toBe('20+')
+    })
+
+    it('grows the count window as the user pages forward', async () => {
+      const exact = Number(footerTotal(await list('&limit=100')))
+      const html = await list('&limit=2&page=4') // offset 6 → cap = 26
+      const expected = exact > 26 ? '26+' : String(exact)
+      expect(footerTotal(html)).toBe(expected)
+      expect(badgeTotal(html)).toBe(expected)
+    })
+
+    it('clamps invalid paging input instead of running an unbounded count', async () => {
+      // limit=-1 previously produced cap -10 → LIMIT -9 (unlimited) and a negative total.
+      expect(footerTotal(await list('&limit=-1'))).toBe('10+') // clamped to limit=1 → cap 10
+      expect(footerTotal(await list('&limit=0'))).toBe('10+')
+      const exact = footerTotal(await list('&limit=100'))
+      // Garbage → default 20 (cap 200 > 25 posts → exact); oversized → clamped to 100.
+      expect(footerTotal(await list('&limit=abc'))).toBe(exact)
+      expect(footerTotal(await list('&limit=100000'))).toBe(exact)
+      // Non-positive page → page 1 (the first 2 rows, cap 20).
+      expect(footerTotal(await list('&limit=2&page=-5'))).toBe('20+')
+      expect(footerTotal(await list('&limit=2&page=0'))).toBe('20+')
+    })
+  })
+
   it('does NOT offer internal/auth-owned types as content models in the filter dropdown', async () => {
     const res = await app.request('/admin/content')
     expect(res.status).toBe(200)

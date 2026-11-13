@@ -409,7 +409,7 @@ export function renderContentListPage(data: ContentListPageData): string {
                 </div>
               </div>
               <div class="flex items-center gap-x-3">
-                <span class="text-sm/6 font-medium text-zinc-700 dark:text-zinc-300 px-3 py-1.5 rounded-full bg-white/60 dark:bg-zinc-800/60 backdrop-blur-sm">${data.totalItems} ${data.totalItems === 1 ? 'item' : 'items'}</span>
+                <span class="text-sm/6 font-medium text-zinc-700 dark:text-zinc-300 px-3 py-1.5 rounded-full bg-white/60 dark:bg-zinc-800/60 backdrop-blur-sm">${data.totalItems}${data.totalItemsCapped ? '+' : ''} ${data.totalItems === 1 && !data.totalItemsCapped ? 'item' : 'items'}</span>
                 ${filterBarData.actions?.map(action => `
                   <button
                     ${action.onclick ? `onclick="${action.onclick}"` : ''}

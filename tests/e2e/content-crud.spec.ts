@@ -1715,3 +1715,66 @@ test.describe("Source: 63-document-blog-crud.spec.ts", () => {
     })
   })
 })
+
+test.describe("Source: 126-content-all-view-capped-count.spec.ts", () => {
+  const test = source5_test;
+  const expect = source6_expect;
+  const NEW_RECORD_FORM = '/admin/content/new?collection=e2e_test'
+
+  /**
+   * The All view no longer runs an exact COUNT(*): it counts at most `offset + limit * 10` matches
+   * (a full count over every document tripped D1's per-10s resource limit on large installs). Below
+   * the window the total is exact; above it the header badge and pagination footer show "N+".
+   * Each test scopes the list to its own records with `?search=<stamp>` so totals are exact.
+   */
+  async function createRecords(page: Page, stamp: string, n: number) {
+    for (let i = 0; i < n; i++) {
+      await page.goto(NEW_RECORD_FORM)
+      await page.fill('input[name="title"]', `Capped ${stamp} ${i}`)
+      await page.fill('input[name="slug"]', `capped-${stamp}-${i}`)
+      await page.selectOption('select[name="status"]', 'draft')
+      await saveNewContent(page, () =>
+        page.locator('button[type="submit"]').filter({ hasText: /Save|Create/ }).first().click()
+      )
+    }
+  }
+
+  const footer = (page: Page) => page.locator('p', { hasText: /results/ }).first()
+  const badge = (page: Page) => page.locator('span', { hasText: /^\s*\d+\+? items?\s*$/ }).first()
+
+  test.describe('Content All view capped count @content', () => {
+    test.beforeEach(async ({ page }) => {
+      await loginAsAdmin(page)
+    })
+
+    test('shows an exact total when matches fit the count window, and clamps bad paging input', async ({ page }) => {
+      const stamp = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`
+      await createRecords(page, stamp, 2)
+
+      await page.goto(`/admin/content?model=all&search=${stamp}&limit=1`)
+      await expect(footer(page)).toContainText(/of\s*2\s*results/)
+      await expect(badge(page)).toHaveText(/^\s*2 items\s*$/)
+
+      // limit=-1 used to yield a negative count cap → unbounded COUNT and a negative total.
+      const res = await page.goto(`/admin/content?model=all&search=${stamp}&limit=-1&page=-3`)
+      expect(res?.status()).toBe(200)
+      await expect(footer(page)).toContainText(/Showing\s*1\s*to\s*1\s*of\s*2\s*results/)
+    })
+
+    test('shows a lower bound "N+" past the window and grows it when paging forward', async ({ page }) => {
+      test.setTimeout(120_000) // creates 11 records through the form
+      const stamp = `${Date.now()}${Math.random().toString(36).slice(2, 6)}`
+      await createRecords(page, stamp, 11)
+
+      // limit=1, page 1 → window = 10 < 11 matches → lower bound.
+      await page.goto(`/admin/content?model=all&search=${stamp}&limit=1`)
+      await expect(footer(page)).toContainText(/of\s*10\+\s*results/)
+      await expect(badge(page)).toHaveText(/^\s*10\+ items\s*$/)
+
+      // page 2 → offset 1, window = 11 → all 11 matches counted exactly.
+      await page.goto(`/admin/content?model=all&search=${stamp}&limit=1&page=2`)
+      await expect(footer(page)).toContainText(/of\s*11\s*results/)
+      await expect(badge(page)).toHaveText(/^\s*11 items\s*$/)
+    })
+  })
+})

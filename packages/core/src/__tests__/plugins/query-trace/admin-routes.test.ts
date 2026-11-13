@@ -4,8 +4,14 @@ import { Hono } from 'hono'
 import { DEFAULT_QUERY_TRACE_SETTINGS } from '../../../plugins/core-plugins/query-trace-plugin/constants'
 
 const state = { active: true, settings: { ...DEFAULT_QUERY_TRACE_SETTINGS } }
+const seenDb: any[] = []
+const alsFlag = { available: true }
+vi.mock('../../../utils/request-trace', async (orig) => ({
+  ...(await orig<any>()),
+  loadAsyncLocalStorage: async () => (alsFlag.available ? {} : null),
+}))
 vi.mock('../../../plugins/core-plugins/query-trace-plugin/state', () => ({
-  getQueryTraceState: async () => state,
+  getQueryTraceState: async (db: any) => { seenDb.push(db); return state },
   invalidateQueryTraceState: () => {},
 }))
 import { queryTraceAdminRoutes } from '../../../plugins/core-plugins/query-trace-plugin/routes/admin'
@@ -18,6 +24,7 @@ const mk = (user: any) => {
 }
 const env = { DB: {} }
 const P = '/admin/plugins/query-trace'
+import { getTracedD1 } from '../../../utils/request-trace'
 
 describe('query-trace admin routes', () => {
   it('anonymous → redirect, non-admin → 403', async () => {
@@ -51,5 +58,26 @@ describe('query-trace admin routes', () => {
     const html = await (await mk({ role: 'admin' }).request(P, {}, env)).text()
     expect(html).not.toContain('trace-me-enable')
     expect(html).toContain('Inactive')
+  })
+
+  it('reads state through the RAW db, not the traced proxy', async () => {
+    const raw = { prepare: () => ({}) }
+    const traced = getTracedD1(raw)
+    seenDb.length = 0
+    await mk({ role: 'admin' }).request(P, {}, { DB: traced })
+    expect(seenDb[0]).toBe(raw)
+  })
+
+  it('"Tracing for you" is Off when plugin inactive or ALS unavailable', async () => {
+    state.active = true
+    state.settings = { ...DEFAULT_QUERY_TRACE_SETTINGS, visibility: 'all-admins' }
+    const me = (h: string) => /trace-state-me">(\w+)</.exec(h)![1]
+    expect(me(await (await mk({ role: 'admin' }).request(P, {}, env)).text())).toBe('On')
+    alsFlag.available = false
+    expect(me(await (await mk({ role: 'admin' }).request(P, {}, env)).text())).toBe('Off')
+    alsFlag.available = true
+    state.active = false
+    expect(me(await (await mk({ role: 'admin' }).request(P, {}, env)).text())).toBe('Off')
+    state.active = true
   })
 })

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { wrapAdminPage } from '../../_shared/admin-template'
-import { loadAsyncLocalStorage } from '../../../../utils/request-trace'
+import { loadAsyncLocalStorage, RAW } from '../../../../utils/request-trace'
 import { escapeHtml } from '../../../../utils/sanitize'
 import { QUERY_TRACE_COOKIE } from '../constants'
 import { getQueryTraceState } from '../state'
@@ -19,11 +19,14 @@ queryTraceAdminRoutes.use('*', async (c, next) => {
 })
 
 queryTraceAdminRoutes.get('/', async (c) => {
-  const state = await getQueryTraceState(c.env.DB)
+  // getQueryTraceState must read through the RAW binding so its own query is never traced.
+  const db = c.env.DB
+  const state = await getQueryTraceState(db?.[RAW] ?? db)
   const als = await loadAsyncLocalStorage()
   const optedIn = getCookie(c, QUERY_TRACE_COOKIE) === '1'
   const s = state.settings
-  const visible = s.visibility === 'all-admins' || optedIn
+  // "On" only if tracing can actually happen: plugin active, ALS available, and this admin is in scope.
+  const visible = state.active && !!als && (s.visibility === 'all-admins' || optedIn)
 
   const notice = als
     ? ''

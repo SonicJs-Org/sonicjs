@@ -51,6 +51,9 @@ export const queryTraceMiddleware = (): MiddlewareHandler => async (c, next) => 
     trace.closed = true
   }
 
+  // Role is only known here: auth middleware runs downstream of this one (inside next()), so
+  // `all-admins` mode cannot skip tracing non-admins up front without reordering middleware or
+  // parsing the session twice. Tracing is cheap passthrough; the panel/headers are still gated.
   const user = c.get('user') as { role?: string } | undefined
   if (user?.role !== 'admin') return
 

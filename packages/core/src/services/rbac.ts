@@ -255,6 +255,17 @@ export class RbacService {
     return roles.some((r) => r.slug === idOrName || r.data.name === idOrName)
   }
 
+  /** Does any of these roles (slug or name) grant resource+verb on any row? Grants scoped to `own` don't count. */
+  async anyRoleGrants(roleIdsOrNames: string[], resource: string, verb: string): Promise<boolean> {
+    if (roleIdsOrNames.length === 0) return false
+    const want = new Set(roleIdsOrNames)
+    const roles = await this.listDocs<RoleData>(T_ROLE)
+    // A role id names only that role; another role whose name equals it doesn't match.
+    const ids = new Set(roles.map((r) => r.slug))
+    return roles.some((r) => (want.has(r.slug) || (want.has(r.data.name) && !ids.has(r.data.name))) &&
+      (r.data.grants ?? []).some((g) => g.scope !== 'own' && this.grantMatches(g, resource, verb)))
+  }
+
   /** Does a single grant row satisfy the requested (resource, verb)? */
   private grantMatches(g: { resource: string; verb: string }, resource: string, verb: string): boolean {
     const resourceOk =
@@ -429,14 +440,18 @@ export class RbacService {
   /**
    * Replace a user's RBAC role assignments. The `rbac_user_roles` document is the
    * single source of truth for authorization; the legacy `auth_user.role` column
-   * is kept as a derived projection (highest-precedence system role, else
-   * 'viewer') so the two never diverge.
+   * is kept as a derived projection (admin, else editor, else viewer, else the
+   * lowest other role id, else 'viewer') so the two never diverge.
    */
   async setUserRoles(userId: string, roleIds: string[]): Promise<void> {
     const allRoles = await this.listDocs<RoleData>(T_ROLE)
     const byId = new Map(allRoles.map((r) => [r.slug, r.data]))
     const names = roleIds.map((id) => byId.get(id)?.name).filter((n): n is string => !!n)
-    const primaryRole = RbacService.LEGACY_ROLE_PRECEDENCE.find((r) => names.includes(r)) || 'viewer'
+    // Other roles project their id, so they match neither a requireRole label nor the role-keyed baseGrants.
+    const primaryRole =
+      RbacService.LEGACY_ROLE_PRECEDENCE.find((r) => names.includes(r)) ||
+      (names.includes('viewer') ? 'viewer' : roleIds.filter((id) => byId.has(id)).sort()[0]) ||
+      'viewer'
 
     // Self-lockout guard: never leave zero active users who can BOTH enter the
     // portal and manage RBAC (the minimum needed to recover).

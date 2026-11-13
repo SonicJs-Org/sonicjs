@@ -7,6 +7,7 @@ import type { Page } from "./fixtures"
 import { ADMIN_CREDENTIALS } from "./utils/test-helpers"
 import { requestLoginToken } from "./utils/test-helpers"
 import { ensureAdminUserExists } from "./utils/test-helpers"
+import { submitAndWaitForXhr } from "./utils/test-helpers"
 
 // Original module scope: hooks, fixtures and configuration stay isolated.
 test.describe("Source: 115-admin-set-password.spec.ts", () => {
@@ -41,8 +42,7 @@ test.describe("Source: 115-admin-set-password.spec.ts", () => {
           last_name: 'Test',
           password: firstPassword,
           confirm_password: firstPassword,
-          // RBAC role ids are prefixed; an unknown value silently falls back to the first
-          // role, which is the admin one.
+          // RBAC role ids are prefixed; an unknown value is rejected.
           role: 'role-editor',
           is_active: '1',
           email_verified: '1',
@@ -807,5 +807,134 @@ test.describe("Source: 80-user-profile-code-config.spec.ts", () => {
       // No registration profile inputs (custom_* fields) rendered.
       await expect(page.locator('input[name^="custom_"]')).toHaveCount(0)
     })
+  })
+})
+
+// Roles chosen in the admin Users screen are real RBAC roles, and saving a user never promotes them.
+test.describe('Admin user roles @auth @lock-auth-registration', () => {
+  const signIn = async (playwright: any, email: string, password: string) => {
+    const ctx = await playwright.request.newContext({ baseURL: TEST_ORIGIN, extraHTTPHeaders: { Origin: TEST_ORIGIN } })
+    expect((await ctx.post('/auth/sign-in/email', { data: { email, password } })).ok()).toBeTruthy()
+    return ctx
+  }
+
+  test('an editor created in the Users screen can use the admin', async ({ page, playwright }) => {
+    await loginAsAdmin(page)
+    const email = `roles-editor-${Date.now()}@example.com`
+    const password = `RolesEditor${Date.now()}!`
+    await page.goto('/admin/users/new')
+    const form = page.locator('#user-new-form')
+    await form.locator('input[name="first_name"]').fill('Role')
+    await form.locator('input[name="last_name"]').fill('Editor')
+    await form.locator('input[name="email"]').fill(email)
+    await form.locator('select[name="role"]').selectOption('role-editor')
+    await form.locator('input[name="password"]').fill(password)
+    await form.locator('input[name="confirm_password"]').fill(password)
+    await form.locator('input[name="email_verified"]').check()
+    await submitAndWaitForXhr(page, 'POST', '/admin/users/new', () =>
+      page.locator('button[form="user-new-form"]').click()
+    )
+    await expect(page).toHaveURL(/\/admin\/users\?success=/)
+
+    const editor = await signIn(playwright, email, password)
+    expect((await (await editor.get('/auth/get-session')).json()).user.role).toBe('editor')
+    expect((await editor.get('/admin/content', { maxRedirects: 0 })).status()).toBe(200)
+    await editor.dispose()
+  })
+
+  test('saving a user who is not an admin does not make them one', async ({ page, playwright }) => {
+    const email = `roles-member-${Date.now()}@example.com`
+    const password = `RolesMember${Date.now()}!`
+    const anon = await playwright.request.newContext({ baseURL: TEST_ORIGIN, extraHTTPHeaders: { Origin: TEST_ORIGIN } })
+    const signUp = await anon.post('/auth/sign-up/email', { data: { email, password, name: 'Role Member' } })
+    expect(signUp.ok()).toBeTruthy()
+    const userId = (await signUp.json()).user.id
+    await anon.dispose()
+
+    await loginAsAdmin(page)
+    await page.goto(`/admin/users/${userId}/edit`)
+    await expect(page.locator('#user-edit-form select[name="role"]')).not.toHaveValue('role-admin')
+    await page.fill('input[name="phone"]', '555-0100')
+    await submitAndWaitForXhr(page, 'PUT', `/admin/users/${userId}`, () =>
+      page.locator('button[type="submit"]').filter({ hasText: /save|update/i }).click()
+    )
+    // A rejected save would also leave the role unchanged, so prove this one landed.
+    await expect(page.locator('#form-messages')).toContainText('User updated successfully')
+    await page.reload()
+    await expect(page.locator('#user-edit-form input[name="phone"]')).toHaveValue('555-0100')
+
+    const member = await signIn(playwright, email, password)
+    expect(['admin', 'role-admin']).not.toContain((await (await member.get('/auth/get-session')).json()).user.role)
+    await member.dispose()
+  })
+
+  test('a custom role that may read blog posts can read them through /api/documents', async ({ page, playwright }) => {
+    const unique = Date.now()
+    const roleId = `role-reader${unique}`
+    const email = `roles-reader-${unique}@example.com`
+    const password = `RolesReader${unique}!`
+    const anon = await playwright.request.newContext({ baseURL: TEST_ORIGIN, extraHTTPHeaders: { Origin: TEST_ORIGIN } })
+    const signUp = await anon.post('/auth/sign-up/email', { data: { email, password, name: 'Role Reader' } })
+    expect(signUp.ok()).toBeTruthy()
+    const userId = (await signUp.json()).user.id
+
+    await loginAsAdmin(page)
+    const headers = { 'X-CSRF-Token': (await getCsrfTokenFromPage(page)) ?? '' }
+    const role = await page.request.post('/admin/rbac/roles', { headers, form: { name: `reader${unique}`, display_name: `Reader ${unique}` } })
+    expect(role.ok(), await role.text()).toBeTruthy()
+    const grant = await page.request.post('/admin/rbac/grants', { headers, form: { save_roles: roleId, [`g|${roleId}|document_type:blog_post|read`]: 'any' } })
+    expect(grant.ok(), await grant.text()).toBeTruthy()
+    const created = await page.request.post('/api/content', {
+      headers,
+      data: { collectionId: 'blog_post', title: `Reader post ${unique}`, slug: `reader-post-${unique}`, status: 'published', data: { content: 'x' } },
+    })
+    expect(created.ok(), await created.text()).toBeTruthy()
+    const rootId = (await created.json()).data.id
+
+    await page.goto(`/admin/users/${userId}/edit`)
+    await page.locator('#user-edit-form select[name="role"]').selectOption(roleId)
+    await submitAndWaitForXhr(page, 'PUT', `/admin/users/${userId}`, () =>
+      page.locator('button[type="submit"]').filter({ hasText: /save|update/i }).click()
+    )
+    await expect(page.locator('#form-messages')).toContainText('User updated successfully')
+    // The form stays open and must know it now shows the new role.
+    await expect(page.locator('#shown_role')).toHaveValue(roleId)
+
+    // Visitors can read it, so a signed-in reader must too.
+    expect((await anon.get(`/api/documents/root/${rootId}`)).status()).toBe(200)
+    const reader = await signIn(playwright, email, password)
+    expect((await (await reader.get('/auth/get-session')).json()).user.role).toBe(roleId)
+    expect((await reader.get(`/api/documents/root/${rootId}`)).status()).toBe(200)
+    const list = await (await reader.get('/api/documents?type=blog_post&limit=200')).json()
+    expect(list.data.map((d: any) => d.rootId)).toContain(rootId)
+    await reader.dispose()
+    await anon.dispose()
+  })
+
+  test('a form left open while another admin removes the role does not restore it', async ({ page, playwright }) => {
+    const email = `roles-stale-${Date.now()}@example.com`
+    const anon = await playwright.request.newContext({ baseURL: TEST_ORIGIN, extraHTTPHeaders: { Origin: TEST_ORIGIN } })
+    const signUp = await anon.post('/auth/sign-up/email', { data: { email, password: `RolesStale${Date.now()}!`, name: 'Role Stale' } })
+    expect(signUp.ok()).toBeTruthy()
+    const userId = (await signUp.json()).user.id
+    await anon.dispose()
+
+    await loginAsAdmin(page)
+    const headers = { 'X-CSRF-Token': (await getCsrfTokenFromPage(page)) ?? '' }
+    const put = (form: Record<string, string>) =>
+      page.request.put(`/admin/users/${userId}`, { headers, form: { first_name: 'Role', last_name: 'Stale', email, is_active: '1', ...form } })
+    expect(await (await put({ role: 'role-editor' })).text()).toContain('User updated successfully')
+    await page.goto(`/admin/users/${userId}/edit`)
+    await expect(page.locator('#user-edit-form select[name="role"]')).toHaveValue('role-editor')
+
+    // Another admin removes the role while this form is still open.
+    expect(await (await put({ role: '', shown_role: 'role-editor' })).text()).toContain('User updated successfully')
+    await page.fill('input[name="phone"]', '555-0101')
+    await submitAndWaitForXhr(page, 'PUT', `/admin/users/${userId}`, () =>
+      page.locator('button[type="submit"]').filter({ hasText: /save|update/i }).click()
+    )
+    await expect(page.locator('#form-messages')).toContainText('changed since the form was opened')
+    await page.reload()
+    await expect(page.locator('#user-edit-form select[name="role"]')).toHaveValue('')
   })
 })

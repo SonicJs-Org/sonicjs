@@ -14,8 +14,18 @@ describe('redactSql', () => {
   it('handles escaped quotes and keeps identifiers with digits', () => {
     expect(redactSql("select q_1, t2.col from t2 where a = 'it''s' limit 20")).toBe('select q_1, t2.col from t2 where a = ? limit ?')
   })
-  it('keeps quoted identifiers and collapses whitespace', () => {
-    expect(redactSql('SELECT  "a b"\n FROM `t`  WHERE x = 1.5e3')).toBe('SELECT "a b" FROM `t` WHERE x = ?')
+  it('keeps backtick identifiers and table-position quoted identifiers, collapses whitespace', () => {
+    expect(redactSql('SELECT  a\n FROM `t`  WHERE x = 1.5e3')).toBe('SELECT a FROM `t` WHERE x = ?')
+    expect(redactSql('SELECT * FROM "my table" JOIN "o"')).toBe('SELECT * FROM "my table" JOIN "o"')
+  })
+  it('redacts double-quoted tokens outside table position (SQLite string-literal fallback)', () => {
+    expect(redactSql('SELECT * FROM t WHERE token = "secretToken"')).toBe('SELECT * FROM t WHERE token = ?')
+    expect(redactSql('SELECT "a@b.com" FROM t')).toBe('SELECT ? FROM t')
+  })
+  it('strips line and block comments, but not comment-like text inside literals', () => {
+    expect(redactSql('SELECT 1 -- alice@example.com\nFROM t /* tok_abc */ WHERE a = 2')).toBe('SELECT ? FROM t WHERE a = ?')
+    expect(redactSql("SELECT '-- not a comment', 'a /* b */' FROM t -- real")).toBe('SELECT ?, ? FROM t')
+    expect(redactSql('SELECT 1 /* unterminated secret')).toBe('SELECT ?')
   })
   it('keeps bind placeholders and never leaks emails', () => {
     const out = redactSql("WHERE email = 'x@y.com' AND id = ?")
@@ -34,9 +44,14 @@ describe('fingerprintSql', () => {
 })
 
 describe('sqlOp / extractTables / maskParams', () => {
-  it('maps ops, WITH → SELECT', () => {
+  it('maps ops, WITH → verb after the CTE list', () => {
     expect(sqlOp('  select 1')).toBe('SELECT')
     expect(sqlOp('WITH x AS (select 1) select * from x')).toBe('SELECT')
+    expect(sqlOp('WITH RECURSIVE x(n) AS (select 1 union select n+1 from x) select * from x')).toBe('SELECT')
+    expect(sqlOp('WITH x AS (select id from t) DELETE FROM u WHERE id IN (select id from x)')).toBe('DELETE')
+    expect(sqlOp('WITH x AS (select 1) INSERT INTO t select * from x')).toBe('INSERT')
+    expect(sqlOp("WITH x AS (select 'update') UPDATE t SET a = 1")).toBe('UPDATE')
+    expect(sqlOp('WITH x AS (select 1)')).toBe('OTHER')
     expect(sqlOp('insert into t values (1)')).toBe('INSERT')
     expect(sqlOp('UPDATE t SET a=1')).toBe('UPDATE')
     expect(sqlOp('DELETE FROM t')).toBe('DELETE')
@@ -47,6 +62,11 @@ describe('sqlOp / extractTables / maskParams', () => {
     expect(extractTables('SELECT * FROM "a" JOIN `b` ON 1 JOIN [c] ON 1 LEFT JOIN a ON 1')).toEqual(['a', 'b', 'c'])
     expect(extractTables('INSERT INTO documents (a) VALUES (?) ON CONFLICT DO UPDATE SET a = 1')).toEqual(['documents'])
     expect(extractTables('UPDATE users SET a=1')).toEqual(['users'])
+  })
+  it('never copies words from string literals, comments or non-table quotes into tables', () => {
+    expect(extractTables("SELECT 'from secretToken' FROM real_t")).toEqual(['real_t'])
+    expect(extractTables('SELECT 1 FROM t -- join leaked\n')).toEqual(['t'])
+    expect(extractTables('SELECT * FROM t WHERE a = "from evil"')).toEqual(['t'])
   })
   it('masks params by shape', () => {
     expect(maskParams(['abc', 5, null, true])).toEqual(['string(3)', 'number', 'null', 'bool'])
@@ -77,6 +97,24 @@ describe('identityKey', () => {
     expect(identityKey(fp, ['a'])).not.toBe(identityKey(fp, ['b']))
     expect(identityKey(fp, ['a'])).toBe(identityKey(fp, ['a']))
     expect(identityKey(fp, ['a'], 's1')).not.toBe(identityKey(fp, ['a'], 's2'))
+  })
+  it('distinguishes inline literals via raw sql even though the fingerprint is identical', () => {
+    const a = 'SELECT * FROM t WHERE id = 1'
+    const b = 'SELECT * FROM t WHERE id = 2'
+    expect(fingerprintSql(a)).toBe(fingerprintSql(b))
+    expect(identityKey(fingerprintSql(a), [], 's', a)).not.toBe(identityKey(fingerprintSql(b), [], 's', b))
+    expect(identityKey(fingerprintSql(a), [], 's', a)).toBe(identityKey(fingerprintSql(a), [], 's', a))
+  })
+  it('hashes ArrayBuffer / typed-array blobs by bytes', () => {
+    const fp = 'x'
+    const u = new Uint8Array([1, 2, 3])
+    expect(identityKey(fp, [u])).toBe(identityKey(fp, [new Uint8Array([1, 2, 3])]))
+    expect(identityKey(fp, [u])).toBe(identityKey(fp, [u.buffer]))
+    expect(identityKey(fp, [u])).not.toBe(identityKey(fp, [new Uint8Array([1, 2, 4])]))
+    const big = new Uint8Array(5_000_000)
+    const t0 = performance.now()
+    identityKey(fp, [big])
+    expect(performance.now() - t0).toBeLessThan(200)
   })
 })
 

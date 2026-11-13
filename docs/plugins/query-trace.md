@@ -23,7 +23,7 @@ Tracing is request-scoped through `AsyncLocalStorage`. Add the flag to `wrangler
 compatibility_flags = ["nodejs_compat"]
 ```
 
-Without it the plugin still activates, logs one warning, and the plugin page shows "Tracing unavailable: enable nodejs_compat". Requests are served untouched.
+Without it the plugin still activates, logs one warning, and the plugin page shows "Tracing unavailable: enable nodejs_compat". Page rendering and tracing are skipped, so no panel appears. The `?trace=1` / `?trace=0` toggle still sets or clears the cookie and redirects, because that runs before the `nodejs_compat` check.
 
 ## Settings
 
@@ -65,7 +65,7 @@ Sorted by duration, descending. Click a header to re-sort. Click a query to see 
 | `Type` / `Op` | `d1` / `kv` / `cache`, and the operation (`SELECT all`, `get`, …) | |
 | `Query / key` | Redacted SQL, or redacted KV/cache key | |
 | `Tables` | Tables the statement touches | |
-| `Rows ret/read/written` | Rows returned, scanned, written | `read` ≫ `returned` means a missing or unusable index |
+| `Rows ret/read/written` | Rows returned (reads), scanned, written. For writes (`run()` and `batch()` members) the value is rows changed, shown under *written*; *returned* stays `–` | For `SELECT`s, `read` ≫ `returned` means a missing or unusable index |
 | `Cached` | D1: `not cached`. KV `get`: `hit` / `miss`. Cache plugin: `hit:memory` / `hit:kv` / `miss` | Frequent `miss` on a hot key: check TTL or warming |
 | `×` | Number of times this fingerprint ran in the request | `×3` or more: see N+1 |
 | `Span` | Which middleware or `handler` issued it | Find the layer to fix |
@@ -81,7 +81,7 @@ Ordered by severity, then impact in ms.
 |---|---|---|
 | N+1 / repeated query | Same fingerprint 3+ times | Replace with one `WHERE id IN (…)` query, or memoize per request |
 | Identical repeat | Same query **and** same bound values 2+ times | Cache the result in request context |
-| Missing index suspect | `rows_read ≥ 1000` and `read / max(returned,1) ≥ 20` | Add an index on the filtered/sorted columns, or select fewer rows |
+| Missing index suspect (reads only: `SELECT` statements) | `rows_read ≥ 1000` and `read / max(returned,1) ≥ 20` | Add an index on the filtered/sorted columns, or select fewer rows |
 | Slow query / slow batch | Per-statement time, or a batch's wall time, ≥ `slowQueryMs` | Check the plan; split or index |
 | Latency-bound | 5+ D1 calls where more than 80% of wall time is not SQL | Use `db.batch()` or a cache |
 | Serial chain | 3+ consecutive non-overlapping queries in the same span | `Promise.all` or `batch` if they are independent (a hint, not a defect) |

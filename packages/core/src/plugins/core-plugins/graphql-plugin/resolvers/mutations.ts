@@ -21,6 +21,10 @@ async function requireWritePermission(
   // Base grants live on the document type. Passing no settings leaves isAllowed with only
   // per-document ACL rows to go on, which denies every write — including an admin's.
   const docType = await new DocumentTypeRegistry(ctx.db).findById(doc.typeId)
+  // Internal/auth types (rbac_*, site_settings, …) are managed by their own services, never via GraphQL.
+  if (!docType || !docType.isActive || docType.settings?.internal || docType.isAuth) {
+    throw new GraphQLForbiddenError(`Not allowed to ${permission} documents of type ${doc.typeId}`)
+  }
   const allowed = await repo.isAllowed(ctx.principalSet, doc.rootId, permission, docType?.settings ?? {})
   if (!allowed) throw new GraphQLForbiddenError(`Not allowed to ${permission} document ${doc.rootId}`)
 }
@@ -35,6 +39,10 @@ interface CreateArgs {
 
 export async function resolveCreateDocument(args: CreateArgs, ctx: GraphqlResolverContext): Promise<Document> {
   if (!ctx.userId) throw new GraphQLForbiddenError('Authentication required to create documents')
+
+  const repo = new DocumentRepository(ctx.db, ctx.tenantId)
+  await requireWritePermission(repo, { rootId: '', typeId: args.typeId }, 'create', ctx)
+  if (args.publishOnCreate) await requireWritePermission(repo, { rootId: '', typeId: args.typeId }, 'publish', ctx)
 
   const svc = new DocumentsService(ctx.db, { tenantId: ctx.tenantId })
   const input = createDocumentSchema.parse({

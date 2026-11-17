@@ -48,13 +48,18 @@ export interface QuotedTokenSlotAllocator {
 }
 
 function redactSqlFull(sql: string, slots?: QuotedTokenSlotAllocator): string {
-  const out = sql.replace(TOKEN_RE, (tok, offset: number, whole: string) => {
+  // Length-preserving copy with comments blanked, so the table-keyword lookback never sees
+  // keywords inside `--` / `/* */` comments (offsets still line up with the original).
+  const uncommented = sql.replace(TOKEN_RE, (tok) =>
+    (tok[0] === '-' && tok[1] === '-') || (tok[0] === '/' && tok[1] === '*') ? ' '.repeat(tok.length) : tok
+  )
+  const out = sql.replace(TOKEN_RE, (tok, offset: number) => {
     const c = tok[0]!
     if (c === '-' && tok[1] === '-') return ' '
     if (c === '/' && tok[1] === '*') return ' '
     if (c === "'" || ((c === 'x' || c === 'X') && tok[1] === "'")) return '?'
     if (c === '"') {
-      if (TERMINATED_DQ_RE.test(tok) && inTablePosition(whole, offset)) return tok
+      if (TERMINATED_DQ_RE.test(tok) && inTablePosition(uncommented, offset)) return tok
       // Fingerprint only: keep distinct quoted tokens (Drizzle column names) distinct. Tokens are
       // lowercased (so "email"/"EMAIL" group) and kept as keys in the trace-private slot map
       // (never hashed, never exported); each distinct token gets the next sequential slot.

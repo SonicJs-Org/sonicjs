@@ -14,6 +14,8 @@ test.describe('Query Trace plugin @plugins @lock-query-trace', () => {
   let installedByTest = false
   // Install state before the suite ran: 'uninstalled' | 'inactive' | 'active' (card data-status).
   let originalStatus = 'uninstalled'
+  // Operator's saved settings (form field entries from the configure page) when it was already installed.
+  let originalSettings: Record<string, string> | null = null
 
   async function setVisibility(visibility: 'opt-in' | 'all-admins') {
     const csrf = await getCsrfTokenFromPage(page)
@@ -60,6 +62,15 @@ test.describe('Query Trace plugin @plugins @lock-query-trace', () => {
     originalStatus = (await page.locator('.plugin-card[data-name="Query Trace"]').first().getAttribute('data-status')) ?? 'uninstalled'
     // Start from the fresh-install state: not installed.
     if (originalStatus !== 'uninstalled') {
+      // Uninstall drops saved settings, so capture the form values (checkboxes only when checked) first.
+      await page.goto(`/admin/plugins/${PLUGIN}/configure`)
+      originalSettings = await page.evaluate(() => {
+        const form = document.querySelector('form[action$="/configure"]') as HTMLFormElement | null
+        if (!form) return null
+        const out: Record<string, string> = {}
+        for (const [k, v] of new FormData(form).entries()) if (typeof v === 'string') out[k] = v
+        return out
+      })
       const res = await page.request.post(`/admin/plugins/${PLUGIN}/uninstall`, { headers: { Origin: TEST_ORIGIN } })
       expect(res.ok(), `initial uninstall failed: ${res.status()}`).toBe(true)
     }
@@ -76,6 +87,14 @@ test.describe('Query Trace plugin @plugins @lock-query-trace', () => {
           headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
         })
         expect(inst.ok(), `restore install failed: ${inst.status()}`).toBe(true)
+        if (originalSettings) {
+          const csrf = await getCsrfTokenFromPage(page)
+          const cfg = await page.request.post(`/admin/plugins/${PLUGIN}/configure`, {
+            headers: { Origin: TEST_ORIGIN, 'X-CSRF-Token': csrf },
+            multipart: originalSettings,
+          })
+          expect(cfg.ok(), `restore settings failed: ${cfg.status()}`).toBe(true)
+        }
         if (originalStatus === 'inactive') {
           const off = await page.request.post(`/admin/plugins/${PLUGIN}/deactivate`, { headers: { Origin: TEST_ORIGIN } })
           expect(off.ok(), `restore deactivate failed: ${off.status()}`).toBe(true)

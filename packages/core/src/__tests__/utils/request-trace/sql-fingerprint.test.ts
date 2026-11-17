@@ -23,6 +23,19 @@ describe('redactSql hardening', () => {
     expect(redactSql(sql)).toBe('SELECT * FROM "users" WHERE id = ?')
     expect(extractTables(sql)).toEqual(['users'])
   })
+  it('does not treat a table keyword inside a comment as table position', () => {
+    for (const sql of [
+      'SELECT -- from\n "alice@example.com" FROM users',
+      'SELECT /* join */ "alice@example.com" FROM users',
+    ]) {
+      expect(redactSql(sql)).not.toMatch(/alice/)
+      expect(fingerprintSql(sql, new RequestTrace('GET', '/'))).not.toMatch(/alice/)
+    }
+  })
+  it('still keeps a quoted table after a real keyword, even with a comment between', () => {
+    expect(redactSql('SELECT * FROM "users" JOIN /* c */ "posts" ON 1')).toBe('SELECT * FROM "users" JOIN "posts" ON ?')
+    expect(redactSql('SELECT * FROM -- c\n "users"')).toBe('SELECT * FROM "users"')
+  })
   it('sqlOp ignores inherited object property names in CTEs', () => {
     expect(sqlOp('WITH x AS (select 1) constructor toString select * from x')).toBe('SELECT')
     expect(sqlOp('WITH x AS (select 1) constructor')).toBe('OTHER')

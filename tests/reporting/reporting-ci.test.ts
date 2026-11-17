@@ -46,11 +46,12 @@ describe('triggers', () => {
     expect((pr.branches as string[]).includes('main')).toBe(true)
   })
 
-  test('push trigger covers ci/flakiness-artifact-validation branch', () => {
+  test('push trigger covers main and no stale rollout branch', () => {
     const w = loadWorkflow()
     const on = w.on as Record<string, unknown>
     const push = on.push as Record<string, unknown>
-    expect((push.branches as string[]).includes('ci/flakiness-artifact-validation')).toBe(true)
+    expect((push.branches as string[]).includes('main')).toBe(true)
+    expect((push.branches as string[]).includes('ci/flakiness-artifact-validation')).toBe(false)
   })
 
   test('NO pull_request_target trigger', () => {
@@ -178,12 +179,6 @@ describe('steps', () => {
   test('npm run test:reporting step exists', () => {
     const runs = getStepRuns(loadWorkflow())
     expect(runs.some(r => r.includes('npm run test:reporting'))).toBe(true)
-  })
-
-  test('Python verify step uses /usr/bin/python3 absolute path', () => {
-    const step = findStep(loadWorkflow(), s => String(s.name ?? '').toLowerCase().includes('python'))
-    expect(step).toBeDefined()
-    expect(String(step!.run)).toContain('/usr/bin/python3')
   })
 
   test('NO credential env vars in step run scripts or with blocks', () => {

@@ -159,7 +159,7 @@ export interface CreateScheduledHandlerOptions {
    * request) still has a wired hook bus and reachable email service.
    * Without this, `getHookSystem()` may throw in cron handlers.
    */
-  boot?: (env: Record<string, unknown>) => Promise<void>
+  boot?: (env: Record<string, unknown>, ctx?: ExecutionContextLike) => Promise<void>
 }
 
 /**
@@ -186,7 +186,7 @@ export function createScheduledHandler(
     // isolates return immediately.
     if (options.boot) {
       try {
-        await options.boot(env)
+        await options.boot(env, ctx)
       } catch (err) {
         console.error('[cron] boot failed:', err)
       }

@@ -198,4 +198,37 @@ describe('createScheduledHandler', () => {
     expect(ran).toBe(false)
     expect(result.invoked).toEqual([])
   })
+
+  // Regression: `boot` used to be called without the scheduled handler's own
+  // `ctx`, so a cron-first cold isolate's boot-time wiring promise had no way
+  // to extend its own request's I/O context via waitUntil (see #1194 — the
+  // same cross-request-promise-drop risk applies to cron-triggered boots).
+  it('forwards its own ExecutionContext through to `boot`', async () => {
+    const seenCtx: unknown[] = []
+    const boot = async (_env: Record<string, unknown>, ctx?: { waitUntil?(p: Promise<unknown>): void }) => {
+      seenCtx.push(ctx)
+    }
+    const handler = createScheduledHandler({
+      plugins: [],
+      getHooks: () => new HookSystemImpl(),
+      boot,
+    })
+    const ctx = { waitUntil: (_p: Promise<unknown>) => {} }
+    await handler({ cron: EVERY_15, scheduledTime: 0 }, {}, ctx)
+    expect(seenCtx).toEqual([ctx])
+  })
+
+  it('still boots when no ExecutionContext is passed (back-compat)', async () => {
+    const seenCtx: unknown[] = []
+    const boot = async (_env: Record<string, unknown>, ctx?: { waitUntil?(p: Promise<unknown>): void }) => {
+      seenCtx.push(ctx)
+    }
+    const handler = createScheduledHandler({
+      plugins: [],
+      getHooks: () => new HookSystemImpl(),
+      boot,
+    })
+    await handler({ cron: EVERY_15, scheduledTime: 0 }, {})
+    expect(seenCtx).toEqual([undefined])
+  })
 })

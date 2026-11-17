@@ -55,18 +55,30 @@ test.describe("Source: 70-multi-tenant.spec.ts", () => {
 
     test('is off by default: Tenants page shows inactive notice, no nav, no switcher', async ({ page }) => {
       // Establish the inactive baseline (idempotent — a prior run may have left it active).
-      await setPluginState(page, 'deactivate')
+      // Unlike setPluginState() this checks the deactivate response: a swallowed failure here would
+      // surface much later as "the inactive notice never appeared".
+      await page.request.post(`${BASE_URL}/admin/plugins/install`, { data: { name: PLUGIN_ID } }).catch(() => {})
+      const deactivate = await page.request.post(`${BASE_URL}/admin/plugins/${PLUGIN_ID}/deactivate`)
+      expect(deactivate.ok()).toBeTruthy()
 
-      await page.goto(`${BASE_URL}/admin/tenants`)
-      await page.waitForLoadState('networkidle')
-      await expect(page.locator('[data-tenants-inactive]')).toBeVisible()
+      // The notice is server-rendered from the activation flag. On a multi-isolate deployment a
+      // render can briefly come from an isolate that has not seen the flip, so re-load until the
+      // page reflects it instead of asserting once. (No `networkidle`: admin pages keep polling and
+      // never go idle, which is what turned this into a 30s hang.)
+      await expect(async () => {
+        await page.goto(`${BASE_URL}/admin/tenants`, { waitUntil: 'domcontentloaded' })
+        await expect(page.locator('[data-tenants-inactive]')).toBeVisible({ timeout: 5000 })
+      }).toPass({ timeout: 30000 })
       await expect(page.locator('[data-tenants-inactive]')).toContainText(/not active/i)
 
-      // No Tenants nav link and no tenant switcher while inactive.
-      await page.goto(`${BASE_URL}/admin/content`)
-      await page.waitForLoadState('networkidle')
-      expect(await page.locator('a[href="/admin/tenants"]').count()).toBe(0)
-      expect(await page.locator('[data-tenant-switcher]').count()).toBe(0)
+      // No Tenants nav link and no tenant switcher while inactive. Wait for the sidebar to have
+      // rendered first — a `count() === 0` read on a page that has not painted proves nothing.
+      await expect(async () => {
+        await page.goto(`${BASE_URL}/admin/content`, { waitUntil: 'domcontentloaded' })
+        await expect(page.locator('nav a[href="/admin/content"]').first()).toBeVisible({ timeout: 5000 })
+        await expect(page.locator('a[href="/admin/tenants"]')).toHaveCount(0, { timeout: 2000 })
+        await expect(page.locator('[data-tenant-switcher]')).toHaveCount(0, { timeout: 2000 })
+      }).toPass({ timeout: 30000 })
     })
 
     test('can be turned on from the Plugins page', async ({ page }) => {

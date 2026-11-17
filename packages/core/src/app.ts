@@ -243,8 +243,17 @@ export interface SonicJSConfig {
  * Runs email init + plugin wiring, both promise-memoized so calling it multiple
  * times per isolate is a no-op. Pass it to `createScheduledHandler` as the
  * `boot` option so cron-first cold isolates wire up before dispatching.
+ *
+ * `executionCtx`, when provided, is used to extend the wiring promise's
+ * lifetime via `waitUntil()` past the triggering request's own response —
+ * see `createPluginWirer` for why this matters under concurrent cold-isolate
+ * traffic (#1194). Omitting it (e.g. from a context with no `ExecutionContext`)
+ * degrades to the pre-fix behavior rather than throwing.
  */
-export type BootIsolateFn = (env: Record<string, unknown>) => Promise<void>
+export type BootIsolateFn = (
+  env: Record<string, unknown>,
+  executionCtx?: { waitUntil?(promise: Promise<unknown>): void }
+) => Promise<void>
 
 /**
  * The app returned by {@link createSonicJSApp}. Extends the Hono app with a
@@ -425,7 +434,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // both HTTP requests AND cron-first cold isolates (scheduled() handlers) that
   // never receive an HTTP request. Idempotent: initEmailService + wirePlugins are
   // both once-guarded per isolate.
-  const boot: BootIsolateFn = async (env: Record<string, unknown>) => {
+  const boot: BootIsolateFn = async (env: Record<string, unknown>, executionCtx) => {
     if (config.plugins?.disableAll) return
     // Cron-first isolates reach here without the HTTP middleware; idempotent on the HTTP path.
     env = wrapTraceBindings(env as any) as Record<string, unknown>
@@ -436,7 +445,9 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       console.error('[email] init failed:', err)
     }
     try {
-      await wirePlugins()
+      await wirePlugins(
+        executionCtx?.waitUntil ? (promise) => executionCtx.waitUntil!(promise) : undefined
+      )
     } catch (err) {
       console.error('[plugins] wiring failed:', err)
     }
@@ -445,7 +456,17 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Plugin wiring middleware - calls boot() on the first request so it runs after
   // bootstrap. Subsequent requests return the cached once-guard result instantly.
   app.use('*', traceSpan('boot', async (c, next) => {
-    await boot(c.env as unknown as Record<string, unknown>)
+    // Hono's `c.executionCtx` getter THROWS when no ExecutionContext was passed
+    // to `app.fetch()` (true of most non-Worker test harnesses) — guard the
+    // access itself, not just its use, or every request 500s outside a real
+    // Worker runtime.
+    let executionCtx: { waitUntil?(promise: Promise<unknown>): void } | undefined
+    try {
+      executionCtx = c.executionCtx
+    } catch {
+      executionCtx = undefined
+    }
+    await boot(c.env as unknown as Record<string, unknown>, executionCtx)
     return next()
   }))
 

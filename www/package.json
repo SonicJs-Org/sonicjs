@@ -23,11 +23,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sonicjs/sonicjs.git",
+    "url": "git+https://github.com/SonicJs-Org/sonicjs.git",
     "directory": "www"
   },
   "bugs": {
-    "url": "https://github.com/sonicjs/sonicjs/issues"
+    "url": "https://github.com/SonicJs-Org/sonicjs/issues"
   },
   "homepage": "https://sonicjs.com",
   "browserslist": "defaults, not ie <= 11",
@@ -38,7 +38,7 @@
     "@mdx-js/react": "^3.1.0",
     "@next/mdx": "^16",
     "@opennextjs/aws": "^4.0.3",
-    "@opennextjs/cloudflare": "^1.20.0",
+    "@opennextjs/cloudflare": "^1.20.17",
     "@sindresorhus/slugify": "^2.2.1",
     "@tailwindcss/postcss": "^4.1.11",
     "@tailwindcss/typography": "^0.5.16",
@@ -68,6 +68,7 @@
     "typescript": "^5.8.3",
     "unist-util-filter": "^5.0.1",
     "unist-util-visit": "^5.0.0",
+    "worker-mailer": "^1.3.1",
     "zustand": "^5.0.6"
   },
   "devDependencies": {

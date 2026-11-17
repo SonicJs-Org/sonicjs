@@ -82,6 +82,19 @@ test.describe('GraphQL endpoint @api', () => {
     expect(Array.isArray(body.data.documents.items)).toBe(true)
   })
 
+  test('createDocument refuses internal types, even for an admin key', async ({ request }) => {
+    for (const typeId of ['rbac_user_roles', 'site_settings']) {
+      const { body } = await gql(
+        request,
+        `mutation($typeId: String!, $slug: String, $data: JSON!) { createDocument(typeId: $typeId, slug: $slug, data: $data) { id } }`,
+        { typeId, slug: `gql-internal-${Date.now()}`, data: { roleIds: ['role-admin'] } },
+      )
+      // Yoga masks the resolver's message in production; the refusal is the error + no document.
+      expect(body.errors?.length, typeId).toBeGreaterThan(0)
+      expect(body.data?.createDocument ?? null, typeId).toBeNull()
+    }
+  })
+
   test('createDocument → document query → publishDocument → deleteDocument', async ({ request }) => {
     // Create a draft document.
     const { body: createBody } = await gql(

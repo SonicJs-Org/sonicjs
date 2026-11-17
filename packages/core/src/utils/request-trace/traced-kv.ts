@@ -22,7 +22,7 @@ async function traceKv(
   op: 'get' | 'getWithMetadata' | 'put' | 'delete' | 'list',
   arg: unknown,
   exec: () => Promise<Any>,
-  outcome?: (res: Any) => 'hit' | 'miss'
+  outcome?: (res: Any) => 'hit' | 'miss' | null
 ): Promise<Any> {
   const trace = getCurrentTrace()
   if (!trace) return exec()
@@ -58,8 +58,9 @@ async function traceKv(
 const hitMiss = (res: Any): 'hit' | 'miss' => (res === null || res === undefined ? 'miss' : 'hit')
 
 /** Bulk read returns Map<key, value|{value,metadata}|null>. Hit only if every requested key has a non-null value. */
-const bulkHitMiss = (keys: unknown[], res: Any, meta: boolean): 'hit' | 'miss' => {
-  if (!(res instanceof Map) || keys.length === 0) return 'miss'
+const bulkHitMiss = (keys: unknown[], res: Any, meta: boolean): 'hit' | 'miss' | null => {
+  if (keys.length === 0) return null // nothing requested, nothing missed
+  if (!(res instanceof Map)) return 'miss'
   for (const k of keys) {
     const v = res.get(k)
     if ((meta ? v?.value : v) === null || (meta ? v?.value : v) === undefined) return 'miss'
@@ -73,16 +74,21 @@ function makeProxy(rawKv: Any): Any {
       if (prop === RAW) return target
       switch (prop) {
         case 'get':
-          return (key: string | string[], ...rest: unknown[]) =>
-            traceKv('get', key, () => target.get(key, ...rest), Array.isArray(key) ? (r) => bulkHitMiss(key, r, false) : hitMiss)
+          return (key: string | string[], ...rest: unknown[]) => {
+            // snapshot at dispatch: caller may mutate the array before the promise resolves
+            const snap = Array.isArray(key) ? [...key] : key
+            return traceKv('get', snap, () => target.get(key, ...rest), Array.isArray(snap) ? (r) => bulkHitMiss(snap, r, false) : hitMiss)
+          }
         case 'getWithMetadata':
-          return (key: string | string[], ...rest: unknown[]) =>
-            traceKv(
+          return (key: string | string[], ...rest: unknown[]) => {
+            const snap = Array.isArray(key) ? [...key] : key
+            return traceKv(
               'getWithMetadata',
-              key,
+              snap,
               () => target.getWithMetadata(key, ...rest),
-              Array.isArray(key) ? (r) => bulkHitMiss(key, r, true) : (r) => hitMiss(r?.value)
+              Array.isArray(snap) ? (r) => bulkHitMiss(snap, r, true) : (r) => hitMiss(r?.value)
             )
+          }
         case 'put':
           return (key: string, ...rest: unknown[]) => traceKv('put', key, () => target.put(key, ...rest))
         case 'delete':

@@ -68,6 +68,28 @@ describe('getTracedKV', () => {
     expect(JSON.stringify(trace.toJSON())).not.toContain('missingTok')
   })
 
+  it('empty bulk read leaves cache outcome unset', async () => {
+    const p = getTracedKV({ get: async () => new Map(), getWithMetadata: async () => new Map() })
+    const trace = new RequestTrace('GET', '/')
+    await runWithTrace(trace, async () => { await p.get([]); await p.getWithMetadata([]) })
+    expect(trace.entries.map((e) => e.cache ?? null)).toEqual([null, null])
+  })
+
+  it('bulk tracing snapshots keys at dispatch', async () => {
+    const raw = {
+      get: async (keys: string[]) => { const ks = [...keys]; await Promise.resolve(); return new Map(ks.map((k) => [k, 'v'])) },
+      getWithMetadata: async (keys: string[]) => { const ks = [...keys]; await Promise.resolve(); return new Map(ks.map((k) => [k, { value: 'v', metadata: null }])) },
+    }
+    const p = getTracedKV(raw)
+    const trace = new RequestTrace('GET', '/')
+    await runWithTrace(trace, async () => {
+      const k1 = ['config:a']; const r1 = p.get(k1); k1.push('config:b'); k1[0] = 'config:z'; await r1
+      const k2 = ['config:a']; const r2 = p.getWithMetadata(k2); k2.push('config:b'); k2[0] = 'config:z'; await r2
+    })
+    expect(trace.entries.map((e) => e.label)).toEqual(['[config:<redacted:1>]', '[config:<redacted:1>]'])
+    expect(trace.entries.map((e) => e.cache)).toEqual(['hit', 'hit'])
+  })
+
   it('records nothing without a trace, and errors are recorded + rethrown', async () => {
     const kv = mockKv()
     const p = getTracedKV(kv)

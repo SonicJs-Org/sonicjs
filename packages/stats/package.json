@@ -14,7 +14,8 @@
     "db:migrate:production": "wrangler d1 migrations apply DB --env production --remote",
     "db:reset:local": "bash scripts/setup-local.sh",
     "setup:db": "npm run db:reset:local",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@sonicjs-cms/core": "*"

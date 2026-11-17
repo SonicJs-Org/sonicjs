@@ -18,13 +18,14 @@ const navigation = {
     { name: 'Security', href: '/security' },
   ],
   community: [
-    { name: 'GitHub', href: 'https://github.com/lane711/sonicjs' },
+    { name: 'GitHub', href: 'https://github.com/SonicJs-Org/sonicjs' },
     { name: 'Discord', href: 'https://discord.gg/8bMy6bv3sZ' },
     { name: 'Blog', href: '/blog' },
     { name: 'Sponsor', href: '/sponsor' },
+    { name: 'Contact', href: '/contact' },
   ],
   legal: [
-    { name: 'MIT License', href: 'https://github.com/lane711/sonicjs/blob/main/LICENSE' },
+    { name: 'MIT License', href: 'https://github.com/SonicJs-Org/sonicjs/blob/main/LICENSE' },
     { name: 'Privacy Policy', href: '/privacy' },
   ],
 }
@@ -71,7 +72,7 @@ export function MarketingFooter() {
             </p>
             <div className="flex gap-x-6">
               <a
-                href="https://github.com/lane711/sonicjs"
+                href="https://github.com/SonicJs-Org/sonicjs"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-400 hover:text-gray-300"

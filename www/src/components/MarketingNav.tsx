@@ -66,7 +66,7 @@ export function MarketingNav() {
             </Link>
           ))}
           <Link
-            href="https://github.com/lane711/sonicjs"
+            href="https://github.com/SonicJs-Org/sonicjs"
             target="_blank"
             rel="noopener noreferrer"
             className="group"
@@ -127,7 +127,7 @@ export function MarketingNav() {
             ))}
             <div className="mt-2 flex items-center gap-4 px-3 py-2">
               <Link
-                href="https://github.com/lane711/sonicjs"
+                href="https://github.com/SonicJs-Org/sonicjs"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group"

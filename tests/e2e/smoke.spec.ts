@@ -251,45 +251,44 @@ test.describe('Smoke Tests - Critical Path @smoke', () => {
   });
 
   test('Database connectivity via stats query', async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, false);
 
-    // Navigate to admin dashboard
+    // The stats card is an HTMX fragment (`hx-trigger="load"`) that replaces a skeleton. Wait on
+    // that exact response, registered before navigating so it cannot be missed. Do NOT wait for
+    // `networkidle`: the dashboard keeps issuing background requests, so it is never idle and the
+    // wait burns its whole 30s budget.
+    const statsResponse = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === '/admin/dashboard/stats' && r.request().method() === 'GET'
+    );
     await page.goto('/admin');
-    await page.waitForLoadState('networkidle');
+    expect((await statsResponse).ok()).toBeTruthy();
 
-    // Wait for stats to load (requires DB connection)
-    await page.waitForSelector('#stats-container', { timeout: 10000 });
-    await page.waitForTimeout(2000);
-
+    // Stats contain real labels (not skeleton loaders). Retrying assertions cover the swap.
     const statsContainer = page.locator('#stats-container');
-    await expect(statsContainer).toBeVisible();
-
-    // Verify stats contain actual data (not skeleton loaders)
-    const statsText = await statsContainer.textContent();
-    expect(statsText).toContain('Total Collections');
-    expect(statsText).toContain('Content Items');
-    expect(statsText).toContain('Media Files');
-    expect(statsText).toContain('Active Users');
+    await expect(statsContainer).toContainText('Total Collections');
+    await expect(statsContainer).toContainText('Content Items');
+    await expect(statsContainer).toContainText('Media Files');
+    await expect(statsContainer).toContainText('Active Users');
   });
 
   test('Recent activity displays content changes', async ({ page }) => {
-    await loginAsAdmin(page);
-    await page.goto('/admin');
-    await page.waitForLoadState('networkidle');
+    await loginAsAdmin(page, false);
 
-    // Wait for recent activity section to load via HTMX
-    await page.waitForSelector('#recent-activity-container', { timeout: 10000 });
-    await page.waitForTimeout(2000);
+    // Same as the stats test: wait for the HTMX fragment response, not `networkidle` + a sleep.
+    const activityResponse = page.waitForResponse(
+      (r) =>
+        new URL(r.url()).pathname === '/admin/dashboard/recent-activity' &&
+        r.request().method() === 'GET'
+    );
+    await page.goto('/admin');
+    expect((await activityResponse).ok()).toBeTruthy();
 
     const activityContainer = page.locator('#recent-activity-container');
     await expect(activityContainer).toBeVisible();
-
-    // Verify it has the expected structure
     await expect(activityContainer.locator('h3')).toContainText('Recent Activity');
 
     // Should have either activity items or empty state
-    const activityList = activityContainer.locator('ul[role="list"]');
-    await expect(activityList).toBeVisible();
+    await expect(activityContainer.locator('ul[role="list"]')).toBeVisible();
   });
 
   test('API error handling returns proper status codes', async ({ request }) => {

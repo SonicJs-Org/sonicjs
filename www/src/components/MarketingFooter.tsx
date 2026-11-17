@@ -22,6 +22,7 @@ const navigation = {
     { name: 'Discord', href: 'https://discord.gg/8bMy6bv3sZ' },
     { name: 'Blog', href: '/blog' },
     { name: 'Sponsor', href: '/sponsor' },
+    { name: 'Contact', href: '/contact' },
   ],
   legal: [
     { name: 'MIT License', href: 'https://github.com/lane711/sonicjs/blob/main/LICENSE' },

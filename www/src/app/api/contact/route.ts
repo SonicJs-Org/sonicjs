@@ -1,20 +1,13 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { NextResponse } from 'next/server'
 
-// Cloudflare Email Service binding (see wrangler.jsonc `send_email`).
-interface EmailBinding {
-  send(message: {
-    to: string
-    from: { email: string; name?: string }
-    replyTo?: string
-    subject: string
-    text: string
-    html?: string
-  }): Promise<{ messageId?: string }>
-}
-
 interface Env {
-  EMAIL?: EmailBinding
+  // Namecheap Private Email (mail.privateemail.com) — real mailbox, sent via
+  // Cloudflare's TCP Sockets API (worker-mailer), not Cloudflare Email Routing.
+  SMTP_HOST?: string
+  SMTP_PORT?: string
+  SMTP_USER?: string
+  SMTP_PASS?: string
   // Recipient + sender kept server-side so the address is never published.
   SUPPORT_INBOX?: string
   SUPPORT_FROM?: string
@@ -63,6 +56,45 @@ async function verifyTurnstile(
   }
 }
 
+async function sendMail(
+  env: Env,
+  opts: { to: string; reply?: string; subject: string; text: string; html?: string },
+) {
+  if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) {
+    throw new Error('SMTP is not configured (SMTP_HOST/SMTP_USER/SMTP_PASS missing)')
+  }
+  const port = Number(env.SMTP_PORT ?? '587')
+  const from = env.SUPPORT_FROM ?? env.SMTP_USER
+
+  // Deferred import: worker-mailer statically imports `cloudflare:sockets`,
+  // which only exists inside workerd. A top-level import breaks Next.js's
+  // build-time "collect page data" step, which requires this module in plain
+  // Node. Importing it here means it's only loaded when the handler actually
+  // runs (in workerd), never during the Node-based build analysis.
+  const { WorkerMailer } = await import('worker-mailer/dist/index.mjs')
+
+  const mailer = await WorkerMailer.connect({
+    host: env.SMTP_HOST,
+    port,
+    secure: port === 465, // 465 = implicit TLS, 587 = STARTTLS
+    credentials: { username: env.SMTP_USER, password: env.SMTP_PASS },
+    authType: 'plain',
+  })
+
+  try {
+    await mailer.send({
+      from: { name: 'SonicJS Contact Form', email: from },
+      to: opts.to,
+      reply: opts.reply,
+      subject: opts.subject,
+      text: opts.text,
+      html: opts.html,
+    })
+  } finally {
+    mailer.close()
+  }
+}
+
 export async function POST(request: Request) {
   let payload: Record<string, unknown>
   try {
@@ -101,16 +133,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const to = env.SUPPORT_INBOX ?? 'sales@sonicjs.com'
-  const from = env.SUPPORT_FROM ?? 'noreply@sonicjs.com'
-
-  if (!env.EMAIL) {
-    console.error('EMAIL binding missing — cannot send contact message')
-    return NextResponse.json(
-      { error: 'Contact is temporarily unavailable. Please try again later.' },
-      { status: 503 },
-    )
-  }
+  const to = env.SUPPORT_INBOX ?? 'hello@sonicjs.com'
 
   const text = [
     `Name:    ${name}`,
@@ -122,10 +145,9 @@ export async function POST(request: Request) {
   ].join('\n')
 
   try {
-    await env.EMAIL.send({
+    await sendMail(env, {
       to,
-      from: { email: from, name: 'SonicJS Contact Form' },
-      replyTo: email, // reply goes straight to the sender
+      reply: email, // reply goes straight to the sender
       subject: `Contact form — ${subject || name}`,
       text,
     })
@@ -139,10 +161,9 @@ export async function POST(request: Request) {
 
   // Confirmation to the sender — best-effort; never fails the request.
   try {
-    await env.EMAIL.send({
+    await sendMail(env, {
       to: email,
-      from: { email: from, name: 'SonicJS' },
-      replyTo: to,
+      reply: to,
       subject: 'We received your message',
       text: [
         `Hi ${name},`,

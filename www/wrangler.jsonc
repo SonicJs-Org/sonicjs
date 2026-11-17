@@ -11,14 +11,16 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
-  // Cloudflare Email Service — sends the commercial-support intake form to an
-  // internal inbox. Domain sonicjs.com is already onboarded (Email Sending → Enabled).
-  // `remote: true` proxies local dev/preview sends to the real service so you can test.
-  "send_email": [{ "name": "EMAIL", "remote": true }],
+  // Contact form sends real SMTP via Namecheap Private Email (worker-mailer,
+  // over Cloudflare TCP Sockets) — not Cloudflare Email Routing.
+  // SMTP_USER / SMTP_PASS are secrets: set them with
+  // `wrangler secret put SMTP_USER` / `wrangler secret put SMTP_PASS` in prod,
+  // and in www/.dev.vars (gitignored) for local dev — never put them here.
   "vars": {
+    "SMTP_HOST": "mail.privateemail.com",
+    "SMTP_PORT": "587",
     // Recipient + sender live here (not in the page) so the address is never published.
-    // Override per-environment; SUPPORT_FROM must be on the onboarded domain.
-    "SUPPORT_INBOX": "sales@sonicjs.com",
-    "SUPPORT_FROM": "noreply@sonicjs.com"
+    "SUPPORT_INBOX": "hello@sonicjs.com",
+    "SUPPORT_FROM": "hello@sonicjs.com"
   }
 }

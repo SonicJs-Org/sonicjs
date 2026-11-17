@@ -76,9 +76,12 @@ describe('getTracedKV', () => {
   })
 
   it('bulk tracing snapshots keys at dispatch', async () => {
+    // Copy AFTER the await so the mock sees whatever the wrapper actually forwarded: a live
+    // (mutated) array would show up here, a dispatch-time snapshot would not.
+    const seen: string[][] = []
     const raw = {
-      get: async (keys: string[]) => { const ks = [...keys]; await Promise.resolve(); return new Map(ks.map((k) => [k, 'v'])) },
-      getWithMetadata: async (keys: string[]) => { const ks = [...keys]; await Promise.resolve(); return new Map(ks.map((k) => [k, { value: 'v', metadata: null }])) },
+      get: async (keys: string[]) => { await Promise.resolve(); const ks = [...keys]; seen.push(ks); return new Map(ks.map((k) => [k, 'v'])) },
+      getWithMetadata: async (keys: string[]) => { await Promise.resolve(); const ks = [...keys]; seen.push(ks); return new Map(ks.map((k) => [k, { value: 'v', metadata: null }])) },
     }
     const p = getTracedKV(raw)
     const trace = new RequestTrace('GET', '/')
@@ -88,6 +91,7 @@ describe('getTracedKV', () => {
     })
     expect(trace.entries.map((e) => e.label)).toEqual(['[config:<redacted:1>]', '[config:<redacted:1>]'])
     expect(trace.entries.map((e) => e.cache)).toEqual(['hit', 'hit'])
+    expect(seen).toEqual([['config:a'], ['config:a']])
   })
 
   it('records nothing without a trace, and errors are recorded + rethrown', async () => {

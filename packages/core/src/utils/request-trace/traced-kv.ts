@@ -68,6 +68,14 @@ const bulkHitMiss = (keys: unknown[], res: Any, meta: boolean): 'hit' | 'miss' |
   return 'hit'
 }
 
+/**
+ * Bulk key arrays are copied at dispatch (caller may mutate before the promise resolves) so the
+ * trace and the forwarded call agree. Untraced calls pass through uncopied (no O(n) allocation).
+ */
+function snapshotKeys(key: string | string[]): string | string[] {
+  return Array.isArray(key) && getCurrentTrace() ? [...key] : key
+}
+
 function makeProxy(rawKv: Any): Any {
   return new Proxy(rawKv, {
     get(target, prop) {
@@ -75,17 +83,16 @@ function makeProxy(rawKv: Any): Any {
       switch (prop) {
         case 'get':
           return (key: string | string[], ...rest: unknown[]) => {
-            // snapshot at dispatch: caller may mutate the array before the promise resolves
-            const snap = Array.isArray(key) ? [...key] : key
-            return traceKv('get', snap, () => target.get(key, ...rest), Array.isArray(snap) ? (r) => bulkHitMiss(snap, r, false) : hitMiss)
+            const snap = snapshotKeys(key)
+            return traceKv('get', snap, () => target.get(snap, ...rest), Array.isArray(snap) ? (r) => bulkHitMiss(snap, r, false) : hitMiss)
           }
         case 'getWithMetadata':
           return (key: string | string[], ...rest: unknown[]) => {
-            const snap = Array.isArray(key) ? [...key] : key
+            const snap = snapshotKeys(key)
             return traceKv(
               'getWithMetadata',
               snap,
-              () => target.getWithMetadata(key, ...rest),
+              () => target.getWithMetadata(snap, ...rest),
               Array.isArray(snap) ? (r) => bulkHitMiss(snap, r, true) : (r) => hitMiss(r?.value)
             )
           }

@@ -159,11 +159,27 @@ export interface CacheResult<T> {
 /**
  * Main cache service with multi-tier support
  */
+/**
+ * How long a freshly written KV key may be missing from `KVNamespace.list()`. Cloudflare documents
+ * KV as eventually consistent (up to ~60s globally); keep a margin on top of that.
+ */
+const KV_LIST_LAG_MS = 90_000
+
 export class CacheService {
   private memoryCache: MemoryCache
   private config: CacheConfig
   private stats: CacheStats
   private kvNamespace?: KVNamespace
+  /**
+   * KV keys this isolate wrote recently (key -> epoch ms of the put).
+   *
+   * `invalidate()` discovers KV keys through `KVNamespace.list()`, which is eventually
+   * consistent: a key `put` a moment ago is routinely absent from the listing, so it escapes
+   * invalidation and keeps serving stale data for the full TTL (and repopulates the memory tier
+   * on the next read). This map lets invalidation also delete the keys we know we just wrote,
+   * without depending on the listing. See KV_LIST_LAG_MS.
+   */
+  private recentKvWrites = new Map<string, number>()
 
   constructor(config: CacheConfig, kvNamespace?: KVNamespace) {
     this.memoryCache = new MemoryCache()
@@ -306,6 +322,7 @@ export class CacheService {
           // Cloudflare KV requires minimum 60s TTL in production; clamp silently.
           expirationTtl: Math.max(config.ttl, 60)
         })
+        this.rememberKvWrite(key)
       } catch (error) {
         console.error('KV cache write error:', error)
       }
@@ -325,6 +342,7 @@ export class CacheService {
     if (this.config.kvEnabled && this.kvNamespace) {
       try {
         await this.kvNamespace.delete(key)
+        this.recentKvWrites.delete(key)
       } catch (error) {
         console.error('KV cache delete error:', error)
       }
@@ -377,9 +395,23 @@ export class CacheService {
         const prefix = this.config.namespace + ':'
         const list = await this.kvNamespace.list({ prefix })
 
+        const deleted = new Set<string>()
         for (const key of list.keys) {
           if (regex.test(key.name)) {
             await this.kvNamespace.delete(key.name)
+            deleted.add(key.name)
+            count++
+          }
+        }
+
+        // `list()` lags behind `put()`, so also delete matching keys this isolate wrote recently
+        // that the listing did not show. Without this, invalidating right after a cache fill
+        // (read list -> write item -> read list) leaves the stale entry in KV for the whole TTL.
+        this.pruneRecentKvWrites()
+        for (const key of this.recentKvWrites.keys()) {
+          if (!deleted.has(key) && regex.test(key)) {
+            await this.kvNamespace.delete(key)
+            this.recentKvWrites.delete(key)
             count++
           }
         }
@@ -389,6 +421,19 @@ export class CacheService {
     }
 
     return count
+  }
+
+  private rememberKvWrite(key: string): void {
+    this.recentKvWrites.set(key, Date.now())
+    // Bound the map between invalidations on a write-heavy, never-invalidated namespace.
+    if (this.recentKvWrites.size > 500) this.pruneRecentKvWrites()
+  }
+
+  private pruneRecentKvWrites(): void {
+    const cutoff = Date.now() - KV_LIST_LAG_MS
+    for (const [key, at] of this.recentKvWrites) {
+      if (at < cutoff) this.recentKvWrites.delete(key)
+    }
   }
 
   /**

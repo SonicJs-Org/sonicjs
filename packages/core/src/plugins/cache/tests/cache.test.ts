@@ -914,3 +914,62 @@ describe('CacheService - invalidatePattern alias', () => {
     expect(other).toBe('value3')
   })
 })
+
+
+describe('CacheService.invalidate with a lagging KV list()', () => {
+  // KV list() is eventually consistent: a key put a moment ago is not in the listing yet.
+  // Regression for the "creating item via public API invalidates list cache" E2E flake.
+  function laggingKv() {
+    const store = new Map<string, string>()
+    const kv = {
+      get: vi.fn(async (key: string, type?: string) => {
+        const v = store.get(key)
+        if (v === undefined) return null
+        return type === 'json' ? JSON.parse(v) : v
+      }),
+      put: vi.fn(async (key: string, value: string) => {
+        store.set(key, value)
+      }),
+      delete: vi.fn(async (key: string) => {
+        store.delete(key)
+      }),
+      // Listing never reflects anything written "recently".
+      list: vi.fn(async () => ({ keys: [], list_complete: true })),
+    }
+    return { kv: kv as unknown as KVNamespace, store }
+  }
+
+  const config: CacheConfig = {
+    ttl: 300,
+    kvEnabled: true,
+    memoryEnabled: false,
+    namespace: 'lagtest',
+    version: 'v1',
+  }
+
+  it('deletes keys this isolate just wrote even though list() does not show them', async () => {
+    const { kv, store } = laggingKv()
+    const cache = new CacheService(config, kv)
+
+    const key = cache.generateKey('collection-content-filtered', 'blog_post:{}')
+    await cache.set(key, { data: ['old'] })
+    expect(store.has(key)).toBe(true)
+
+    const removed = await cache.invalidate('lagtest:collection-content-filtered:blog_post:*')
+
+    expect(removed).toBe(1)
+    expect(store.has(key)).toBe(false)
+    expect(await cache.get(key)).toBeNull()
+  })
+
+  it('leaves non-matching recently written keys alone', async () => {
+    const { kv, store } = laggingKv()
+    const cache = new CacheService(config, kv)
+
+    const keep = cache.generateKey('collection-content-filtered', 'other:{}')
+    await cache.set(keep, { data: [] })
+    await cache.invalidate('lagtest:collection-content-filtered:blog_post:*')
+
+    expect(store.has(keep)).toBe(true)
+  })
+})

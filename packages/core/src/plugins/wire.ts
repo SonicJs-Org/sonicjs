@@ -283,6 +283,23 @@ async function reflectWiredPlugins(plugins: WirablePlugin[], db: D1DatabaseLike)
  * This is the first-request trigger — many concurrent first requests all await
  * one wiring pass.
  *
+ * `wireRegisteredPlugins` does I/O (D1 writes), so the promise it returns is an
+ * I/O object tied to whichever request's execution context happened to create
+ * it. On Workers with the `handle_cross_request_promise_resolution` compat
+ * flag, that context is torn down once ITS triggering request returns a
+ * response — and if that happens before the promise settles while a second,
+ * concurrent first-touch request is also awaiting the same cached promise, the
+ * runtime drops it for that second request with "This promise was created by a
+ * request that has since ended". Under concurrent traffic hitting a cold
+ * isolate this fires routinely (see #1194).
+ *
+ * The fix is for the CREATING call to extend its own request's context past
+ * its response via `ctx.waitUntil()`, so the context (and the promise) survive
+ * long enough for every concurrent awaiter to observe the real result instead
+ * of a dropped promise. Callers pass their `waitUntil` on every invocation;
+ * it is only actually used by the call that creates `started`, since only
+ * that call's request is the one whose context the promise is bound to.
+ *
  * @param plugins     Plugins to wire (evaluated lazily at first call).
  * @param ctxFactory  Builds the boot context at first-call time (so it can read
  *                    per-request env).
@@ -290,12 +307,16 @@ async function reflectWiredPlugins(plugins: WirablePlugin[], db: D1DatabaseLike)
 export function createPluginWirer(
   plugins: Array<WirablePlugin | undefined | null> | (() => Array<WirablePlugin | undefined | null>),
   ctxFactory: () => PluginBootContext
-): () => Promise<WireResult> {
+): (waitUntil?: (promise: Promise<unknown>) => void) => Promise<WireResult> {
   let started: Promise<WireResult> | undefined
-  return () => {
+  return (waitUntil) => {
     if (!started) {
       const list = typeof plugins === 'function' ? plugins() : plugins
       started = wireRegisteredPlugins(list, ctxFactory())
+      // Extend the creating request's I/O context so the promise can settle
+      // even after that request's own response has been sent, and so other
+      // requests racing to await it on a cold isolate don't get it dropped.
+      waitUntil?.(started.catch(() => {}))
     }
     return started
   }

@@ -133,4 +133,33 @@ describe('createPluginWirer (once-guard)', () => {
     await wire()
     expect(evaluated).toBe(1)
   })
+
+  // Regression test for #1194: on a cold isolate, multiple concurrent
+  // "first requests" each pass their own waitUntil. Only the call that
+  // actually creates the cached promise — the first one — owns the request
+  // whose I/O context the promise is bound to, so only its waitUntil may be
+  // used to extend that context. Calling every caller's waitUntil would be
+  // wrong (it doesn't fix cross-request drops, since those are later
+  // requests, not the creating one) and callers without a waitUntil at all
+  // must keep working unchanged.
+  it('extends only the creating call’s waitUntil, not later concurrent callers’', async () => {
+    const wire = createPluginWirer([{ name: 'p' }], ctx)
+    const extended: string[] = []
+
+    const first = wire((p) => { extended.push('first'); void p })
+    const second = wire((p) => { extended.push('second'); void p })
+    const third = wire((p) => { extended.push('third'); void p })
+
+    expect(first).toBe(second)
+    expect(first).toBe(third)
+    expect(extended).toEqual(['first'])
+
+    await first
+  })
+
+  it('works with no waitUntil argument at all (back-compat)', async () => {
+    const wire = createPluginWirer([{ name: 'p' }], ctx)
+    await expect(wire()).resolves.toMatchObject({ booted: [] })
+    await expect(wire(undefined)).resolves.toMatchObject({ booted: [] })
+  })
 })

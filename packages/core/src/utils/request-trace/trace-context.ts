@@ -58,11 +58,15 @@ export class RequestTrace {
   dropped = 0
   closed = false
   /**
-   * Per-request random salt for identity keys AND hashed quoted tokens in fingerprints.
-   * Never rendered or exported (absent from toJSON()): an exported `?q<hash>` is useless for
-   * confirming a guessed literal without it.
+   * Per-request random salt for identity keys. Never rendered or exported (absent from toJSON()).
    */
   readonly salt: string = randomSalt()
+  /**
+   * Lowercased quoted token -> sequential slot, used to render `?q<n>` in fingerprints. Holds raw
+   * token text, so it is private to this trace and excluded from toJSON(). Quoted tokens are
+   * never hashed: the slot number carries no information about content.
+   */
+  readonly quotedTokenSlots = new Map<string, number>()
   /** seq → salted hash of fingerprint + raw bound values. Private: excluded from toJSON(). */
   private readonly identityKeys = new Map<number, string>()
 

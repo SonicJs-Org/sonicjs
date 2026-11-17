@@ -39,7 +39,13 @@ function inTablePosition(whole: string, offset: number): boolean {
   return TABLE_KEYWORD_TAIL_RE.test(whole.slice(Math.max(0, j - 7), j))
 }
 
-function redactSqlFull(sql: string, dqSalt?: string): string {
+/**
+ * Per-trace map: distinct (lowercased) quoted token -> sequential slot (1, 2, 3 ...). Owned by one
+ * RequestTrace, never exported. Slots carry no information about token content.
+ */
+export type QuotedTokenSlots = Map<string, number>
+
+function redactSqlFull(sql: string, slots?: QuotedTokenSlots): string {
   const out = sql.replace(TOKEN_RE, (tok, offset: number, whole: string) => {
     const c = tok[0]!
     if (c === '-' && tok[1] === '-') return ' '
@@ -48,14 +54,16 @@ function redactSqlFull(sql: string, dqSalt?: string): string {
     if (c === '"') {
       if (TERMINATED_DQ_RE.test(tok) && inTablePosition(whole, offset)) return tok
       // Fingerprint only: keep distinct quoted tokens (Drizzle column names) distinct without
-      // storing the raw text, which may be a string literal. Salted per trace so the exported
-      // hash can't be brute-forced / compared across requests; lowercased so identifier case
-      // variants ("email" vs "EMAIL") still group.
-      if (dqSalt !== undefined) {
-        const h = new Hasher()
-        h.str(dqSalt)
-        h.str(tok.toLowerCase())
-        return `?q${h.digest()}`
+      // storing or hashing the raw text, which may be a string literal. Each distinct token
+      // (lowercased, so "email" / "EMAIL" group) gets the next sequential slot within this trace.
+      if (slots) {
+        const key = tok.toLowerCase()
+        let n = slots.get(key)
+        if (n === undefined) {
+          n = slots.size + 1
+          slots.set(key, n)
+        }
+        return `?q${n}`
       }
       return '?'
     }
@@ -76,8 +84,8 @@ export function redactSql(sql: string): string {
 }
 
 /** Redacted SQL, lowercased, with `IN (?, ?, …)` collapsed. Groups duplicates / N+1 patterns. */
-export function fingerprintSql(sql: string, salt = ''): string {
-  const out = redactSqlFull(sql, salt)
+export function fingerprintSql(sql: string, slots: QuotedTokenSlots): string {
+  const out = redactSqlFull(sql, slots)
   return (out.length > MAX_LABEL ? out.slice(0, MAX_LABEL) + '…' : out)
     .toLowerCase()
     .replace(/\bin\s*\(\s*\?(?:\s*,\s*\?)*\s*\)/g, 'in (?…)')

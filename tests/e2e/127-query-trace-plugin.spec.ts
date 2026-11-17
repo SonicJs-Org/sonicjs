@@ -41,6 +41,9 @@ test.describe('Query Trace plugin @plugins @lock-query-trace', () => {
       .poll(
         async () => {
           const res = await page.request.get(url)
+          // an error page / login redirect would also lack the panel; only trust "absent" on a real 200 at the requested path
+          const path = url.split('?')[0]!
+          if (!res.ok() || !new URL(res.url()).pathname.startsWith(path)) return 'bad-navigation'
           return (await res.text()).includes('id="sjs-trace-panel"')
         },
         { timeout: 45_000, intervals: [500, 1000, 2000] }

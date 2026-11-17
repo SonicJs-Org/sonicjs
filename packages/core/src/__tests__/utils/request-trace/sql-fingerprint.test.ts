@@ -6,6 +6,34 @@ import {
   KNOWN_KEY_SEGMENTS, extractTables, fingerprintSql, identityKey, maskParams, redactKey, redactSql, sqlOp,
 } from '../../../utils/request-trace/sql-fingerprint'
 
+describe('redactSql hardening', () => {
+  it.each([
+    ["unterminated single quote", "SELECT * FROM t WHERE e = 'alice@x.com tok123"],
+    ["unterminated double quote", 'SELECT * FROM t WHERE e = "alice@x.com tok123'],
+    ["unterminated blob", "SELECT * FROM t WHERE b = x'deadbeef"],
+    ["unterminated double quote in table position", 'SELECT * FROM "alice@x.com tok123'],
+  ])('%s is fully redacted', (_n, sql) => {
+    const out = redactSql(sql)
+    expect(out).not.toMatch(/alice|tok123|deadbeef/)
+    expect(fingerprintSql(sql)).not.toMatch(/alice|tok123|deadbeef/)
+  })
+  it('keeps a double-quoted table name after arbitrary whitespace', () => {
+    const sql = 'SELECT * FROM            "users" WHERE id = 1'
+    expect(redactSql(sql)).toBe('SELECT * FROM "users" WHERE id = ?')
+    expect(extractTables(sql)).toEqual(['users'])
+  })
+  it('sqlOp ignores inherited object property names in CTEs', () => {
+    expect(sqlOp('WITH x AS (select 1) constructor toString select * from x')).toBe('SELECT')
+    expect(sqlOp('WITH x AS (select 1) constructor')).toBe('OTHER')
+  })
+  it('identityKey distinguishes blobs differing only past 4096 bytes', () => {
+    const a = new Uint8Array(5000)
+    const b = new Uint8Array(5000)
+    b[4999] = 1
+    expect(identityKey('fp', [a])).not.toBe(identityKey('fp', [b]))
+  })
+})
+
 describe('redactSql', () => {
   it('replaces string, numeric and blob literals', () => {
     expect(redactSql("SELECT * FROM t WHERE token = 'abc123' AND n = 5 AND b = X'00ff'"))

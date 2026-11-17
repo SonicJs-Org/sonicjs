@@ -14,9 +14,9 @@ const TOKEN_RE = new RegExp(
   [
     '--[^\\n]*', // line comment
     '/\\*[\\s\\S]*?(?:\\*/|$)', // block comment (unterminated runs to end)
-    "[xX]'[0-9a-fA-F]*'", // blob literal
-    "'(?:[^']|'')*'", // string literal ('' escapes)
-    '"(?:[^"]|"")*"', // double-quoted: identifier, or a string literal in SQLite when unresolved
+    "[xX]'[0-9a-fA-F]*(?:'|$)", // blob literal (unterminated runs to end)
+    "'(?:[^']|'')*(?:'|$)", // string literal ('' escapes; unterminated runs to end)
+    '"(?:[^"]|"")*(?:"|$)', // double-quoted: identifier, or a string literal in SQLite when unresolved
     '`[^`]*`', // backtick identifier
     '\\[[^\\]]*\\]', // bracket identifier
     '[A-Za-z_][A-Za-z0-9_$]*', // identifier / keyword
@@ -28,7 +28,16 @@ const TOKEN_RE = new RegExp(
 
 // A double-quoted token is only kept verbatim where a table name is expected; anywhere else
 // SQLite may treat it as a string literal, so it is redacted like a single-quoted one.
-const TABLE_POSITION_RE = /\b(?:from|join|into|update|table)\s+$/i
+const TABLE_KEYWORD_TAIL_RE = /\b(?:from|join|into|update|table)$/i
+const TERMINATED_DQ_RE = /^"(?:[^"]|"")*"$/
+
+/** True when a table keyword, then >=1 whitespace of any length, directly precedes `offset`. */
+function inTablePosition(whole: string, offset: number): boolean {
+  let j = offset
+  while (j > 0 && /\s/.test(whole[j - 1]!)) j--
+  if (j === offset) return false
+  return TABLE_KEYWORD_TAIL_RE.test(whole.slice(Math.max(0, j - 7), j))
+}
 
 function redactSqlFull(sql: string): string {
   const out = sql.replace(TOKEN_RE, (tok, offset: number, whole: string) => {
@@ -36,7 +45,7 @@ function redactSqlFull(sql: string): string {
     if (c === '-' && tok[1] === '-') return ' '
     if (c === '/' && tok[1] === '*') return ' '
     if (c === "'" || ((c === 'x' || c === 'X') && tok[1] === "'")) return '?'
-    if (c === '"') return TABLE_POSITION_RE.test(whole.slice(Math.max(0, offset - 12), offset)) ? tok : '?'
+    if (c === '"') return TERMINATED_DQ_RE.test(tok) && inTablePosition(whole, offset) ? tok : '?'
     if (c === '`' || c === '[') return tok
     if (/^[A-Za-z_]/.test(c)) return tok
     return '?'
@@ -62,9 +71,9 @@ export function fingerprintSql(sql: string): string {
 
 export type SqlOp = 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'PRAGMA' | 'OTHER'
 
-const CTE_VERBS: Record<string, SqlOp> = {
-  select: 'SELECT', insert: 'INSERT', replace: 'INSERT', update: 'UPDATE', delete: 'DELETE',
-}
+const CTE_VERBS: ReadonlyMap<string, SqlOp> = new Map<string, SqlOp>([
+  ['select', 'SELECT'], ['insert', 'INSERT'], ['replace', 'INSERT'], ['update', 'UPDATE'], ['delete', 'DELETE'],
+])
 
 /** The verb of a `WITH …` statement is the first keyword at paren depth 0 after the CTE list. */
 function cteOp(sql: string): SqlOp {
@@ -74,7 +83,10 @@ function cteOp(sql: string): SqlOp {
     const t = m[0]
     if (t === '(') depth++
     else if (t === ')') depth--
-    else if (depth === 0 && CTE_VERBS[t.toLowerCase()]) return CTE_VERBS[t.toLowerCase()]!
+    else if (depth === 0) {
+      const verb = CTE_VERBS.get(t.toLowerCase())
+      if (verb) return verb
+    }
   }
   return 'OTHER'
 }
@@ -142,8 +154,6 @@ export function maskParams(values: readonly unknown[]): string[] {
   })
 }
 
-const MAX_HASHED_BYTES = 4096
-
 /** Two independent FNV-1a lanes fed incrementally, so large blobs are never stringified. */
 class Hasher {
   private a = 0x811c9dc5
@@ -157,8 +167,7 @@ class Hasher {
     this.sep()
   }
   bytes(u8: Uint8Array): void {
-    const n = Math.min(u8.length, MAX_HASHED_BYTES)
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < u8.length; i++) {
       this.a = Math.imul(this.a ^ u8[i]!, 0x01000193) >>> 0
       this.b = Math.imul(this.b ^ u8[i]!, 0x01000193) >>> 0
     }

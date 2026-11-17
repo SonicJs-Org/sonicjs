@@ -93,6 +93,22 @@ describe('getTracedD1', () => {
     expect(trace.entries[0].error).toBe('boom')
   })
 
+  it.each([
+    "SELECT * FROM t WHERE e = 'alice@x.com tok123",
+    'SELECT * FROM t WHERE e = "alice@x.com tok123',
+    "SELECT * FROM t WHERE b = x'alice",
+  ])('failed unterminated SQL leaks no literal into label/toJSON: %s', async (sql) => {
+    const { db } = mockD1()
+    db.prepare = () => ({ bind() { return this }, all: async () => { throw new Error('syntax error') } })
+    const p = getTracedD1(db)
+    const trace = new RequestTrace('GET', '/x')
+    await runWithTrace(trace, async () => {
+      await expect(p.prepare(sql).all()).rejects.toThrow()
+    })
+    expect(trace.entries[0].label).not.toMatch(/alice|tok123/)
+    expect(JSON.stringify(trace.toJSON())).not.toMatch(/alice|tok123/)
+  })
+
   it('redacts literals echoed in recorded errors but rethrows the original', async () => {
     const { db } = mockD1()
     db.prepare = () => ({ bind() { return this }, all: async () => { throw new Error("syntax error near 'alice@x.com' in SELECT 'tok123'") } })

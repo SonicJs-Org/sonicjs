@@ -8,7 +8,7 @@
   "dependencies": {
     "@flakiness/flakiness-report": "0.36.0",
     "@flakiness/sdk": "3.6.0",
-    "flakiness": "0.327.0",
+    "flakiness": "0.333.0",
     "yauzl": "3.4.0",
     "zod": "4.6.7"
   }

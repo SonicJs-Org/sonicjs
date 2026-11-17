@@ -142,8 +142,9 @@ export default function HomePage() {
               The only headless CMS born on the edge.
             </h1>
             <p className="mt-8 text-pretty text-lg font-medium text-gray-400 sm:text-xl/8">
-              Zero cold starts, anywhere on Earth. 100% MIT open source, every feature free. Built
-              for Cloudflare Workers — and runs on Docker, your VPS, anywhere SQLite runs.
+              We built SonicJS because we wanted a CMS without cold starts and without a pricing
+              page. It&apos;s MIT licensed, every feature is in the free version, and it runs on
+              Workers, Docker, or a plain VPS — whatever you&apos;ve got.
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-4">
               <a
@@ -161,7 +162,7 @@ export default function HomePage() {
                 Start building
               </Link>
               <Link
-                href="https://github.com/lane711/sonicjs"
+                href="https://github.com/SonicJs-Org/sonicjs"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm/6 font-semibold text-white no-underline"
@@ -211,12 +212,12 @@ export default function HomePage() {
                 AI-native
               </div>
               <h2 className="text-pretty text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Your content layer, speaking AI.
+                Claude Code and Cursor can talk to your content.
               </h2>
               <p className="mt-6 text-lg/8 text-gray-300">
-                In 2026 every CMS claims AI. SonicJS ships it: a native Model Context Protocol
-                (MCP) server your agents connect to directly, RAG-powered semantic search, and an
-                AI-friendly API structure your LLM tools already understand.
+                There&apos;s an MCP server built in, so your coding agent can read and publish
+                content directly. There&apos;s also semantic search if you want it. Neither one
+                is behind a paywall — they&apos;re just part of the CMS.
               </p>
               <ul className="mt-8 space-y-4 text-sm/6 text-gray-300">
                 <li className="flex items-start gap-3">
@@ -283,11 +284,11 @@ export default function HomePage() {
         <div className="mx-auto max-w-2xl lg:mx-0 lg:max-w-xl">
           <p className="text-base/7 font-semibold text-cyan-400">Performance by architecture</p>
           <h2 className="mt-2 text-pretty text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-            Numbers a single region can&apos;t match
+            Cold start: 0-5ms. That&apos;s not a typo.
           </h2>
           <p className="mt-6 text-lg/8 text-gray-300">
-            Every request runs in the city closest to your user. These aren&apos;t optimizations —
-            they&apos;re what the architecture does by default.
+            It&apos;s not a tuning trick — it&apos;s just what you get running on Cloudflare&apos;s
+            edge instead of a single server somewhere.
           </p>
         </div>
         <dl className="mx-auto mt-16 grid max-w-2xl grid-cols-1 gap-x-8 gap-y-10 text-white sm:grid-cols-2 lg:mx-0 lg:max-w-none lg:grid-cols-4">
@@ -313,12 +314,12 @@ export default function HomePage() {
       {/* ── Why developers switch (the wedge) ── */}
       <div className="mx-auto mt-24 max-w-7xl px-6 sm:mt-40 lg:px-8">
         <SectionHeader
-          eyebrow="The escape hatch"
-          title="Why developers switch to SonicJS"
+          eyebrow="Why people switch"
+          title="Reasons devs have told us they left Strapi, Payload, or Directus"
           lede={
             <>
-              Migration hell. $99/mo paywalls. Single-region latency. Cold-start lag. You&apos;ve
-              felt these. Here&apos;s the escape.
+              Not because those are bad tools — usually it&apos;s one specific thing that finally
+              got annoying enough.
             </>
           }
         />
@@ -336,7 +337,7 @@ export default function HomePage() {
                 </>
               ),
               footer:
-                'SonicJS: semantic versioning with automatic, versioned migrations — upgrades stay boring.',
+                'We use semantic versioning. Self-hosted schema changes apply automatically on boot; D1 deployments run migrations with Wrangler.',
             },
             {
               icon: ICONS.lockOpen,
@@ -352,7 +353,7 @@ export default function HomePage() {
                 </>
               ),
               footer:
-                'SonicJS: every feature in the MIT core. No Growth tier. No Enterprise gate. Ever.',
+                "We didn't want to build that kind of CMS, so everything's in the free MIT version.",
             },
             {
               icon: ICONS.bolt,
@@ -367,7 +368,7 @@ export default function HomePage() {
                 </>
               ),
               footer:
-                'SonicJS: V8 isolates in 300+ edge cities — no boot penalty, responses served near the user.',
+                "SonicJS runs as V8 isolates in 300+ cities, so there's no boot penalty and responses come from somewhere close to the user.",
             },
             {
               icon: ICONS.sparkles,
@@ -381,7 +382,7 @@ export default function HomePage() {
                 </>
               ),
               footer:
-                'SonicJS: AI search + a native MCP server in the free core — Claude Code & Cursor connect directly.',
+                "SonicJS ships AI search and an MCP server in the free core, so Claude Code and Cursor connect directly.",
             },
           ].map((card) => (
             <div
@@ -407,8 +408,8 @@ export default function HomePage() {
       <div className="mx-auto mt-24 max-w-7xl px-6 sm:mt-40 lg:px-8">
         <SectionHeader
           eyebrow="Why SonicJS"
-          title="Fast because it's edge-native. Free because it's truly open."
-          lede="Speed and freedom are the two things every competitor makes you choose between. SonicJS refuses the trade."
+          title="No tiers, no catch"
+          lede="Everything here — RBAC, workflows, version history — is in the MIT core. There's no Enterprise version waiting behind a sales call. If that ever changes we'll say so loudly, but that's not the plan."
         />
         <div className="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-none">
           <dl className="grid max-w-xl grid-cols-1 gap-x-8 gap-y-16 sm:grid-cols-2 lg:max-w-none lg:grid-cols-4">
@@ -453,12 +454,13 @@ export default function HomePage() {
       {/* ── Comparison table ── */}
       <div className="mx-auto mt-24 max-w-7xl px-6 sm:mt-40 lg:px-8">
         <SectionHeader
-          eyebrow="Proof, not promises"
-          title="Honest numbers. No marketing spin."
+          eyebrow="The numbers"
+          title="How we actually compare"
           lede={
             <>
-              Real benchmarks, real pricing. We also publish what SonicJS isn&apos;t great at yet —
-              because devs who read the fine print are the ones worth earning.{' '}
+              These are benchmarks against the default configs of Strapi, Payload, and Directus.
+              We&apos;ve also written up where SonicJS is still behind — check the comparison page
+              before you decide, not after.{' '}
               <Link href="/compare" className="font-semibold text-cyan-400 hover:text-cyan-300">
                 Full comparison →
               </Link>
@@ -531,8 +533,8 @@ export default function HomePage() {
           title="From schema to global API in minutes"
           lede="Define your content model in TypeScript. SonicJS generates the REST API and the admin UI. Deploy with one command."
         />
-        <div className="mx-auto mt-16 grid max-w-2xl grid-cols-1 gap-8 lg:max-w-none lg:grid-cols-2">
-          <div className="overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10">
+        <div className="mx-auto mt-16 grid max-w-2xl grid-cols-1 gap-8 lg:max-w-none lg:grid-cols-5">
+          <div className="overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10 lg:col-span-2">
             <div className="flex items-center gap-3 border-b border-white/10 bg-white/5 px-4 py-3">
               <div className="flex gap-1.5">
                 <span className="size-2.5 rounded-full bg-red-500/60" />
@@ -554,7 +556,7 @@ const schema = {
   }
 }`}</pre>
           </div>
-          <div className="overflow-hidden rounded-2xl bg-white/5 ring-1 ring-emerald-500/30">
+          <div className="overflow-hidden rounded-2xl bg-white/5 ring-1 ring-emerald-500/30 lg:col-span-2">
             <div className="flex items-center gap-3 border-b border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
               <span className="size-2 rounded-full bg-emerald-400" />
               <span className="text-xs font-medium text-emerald-300">
@@ -570,12 +572,17 @@ DELETE /api/products/:id
 // Filtering, sorting, pagination built in
 GET /api/products?category=electronics&sort=-price&limit=20`}</pre>
           </div>
+          <div className="flex flex-col overflow-hidden rounded-2xl bg-white/5 ring-1 ring-cyan-500/30 lg:col-span-1">
+            <div className="flex items-center gap-3 border-b border-cyan-500/20 bg-cyan-500/10 px-4 py-3">
+              <span className="size-2 rounded-full bg-cyan-400" />
+              <span className="text-xs font-medium text-cyan-300">3 · Deploy</span>
+            </div>
+            <div className="flex flex-1 flex-col items-start justify-center gap-3 p-6">
+              <pre className="m-0 overflow-x-auto text-sm leading-relaxed text-gray-300">{`npm run deploy`}</pre>
+              <p className="text-sm/6 text-gray-400">Live in 300+ cities in under a minute.</p>
+            </div>
+          </div>
         </div>
-        <p className="mt-8 text-center text-sm text-gray-400">
-          3 ·{' '}
-          <span className="font-mono text-gray-300">npm run deploy</span> — live in 300+ cities in
-          under a minute.
-        </p>
       </div>
 
       {/* ── Feature grid ── */}
@@ -810,7 +817,7 @@ GET /api/products?category=electronics&sort=-price&limit=20`}</pre>
         />
         <div className="mt-12 flex flex-wrap items-center justify-center gap-4">
           <Link
-            href="https://github.com/lane711/sonicjs"
+            href="https://github.com/SonicJs-Org/sonicjs"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-gray-300 ring-1 ring-white/10 transition hover:bg-white/5 hover:text-white no-underline"
@@ -838,6 +845,90 @@ GET /api/products?category=electronics&sort=-price&limit=20`}</pre>
           <span className="flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-gray-300 ring-1 ring-white/10">
             TypeScript-first
           </span>
+        </div>
+      </div>
+
+      {/* ── Contributors ── */}
+      <div className="mx-auto mt-24 max-w-7xl px-6 sm:mt-40 lg:px-8">
+        <SectionHeader
+          eyebrow="Thank you"
+          title="Built by real people, not a roadmap committee"
+          lede={
+            <>
+              SonicJS exists because people showed up and wrote code, filed issues, and fixed
+              bugs for free. Every one of them.{' '}
+              <Link
+                href="https://github.com/SonicJs-Org/sonicjs/graphs/contributors"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-cyan-400 hover:text-cyan-300"
+              >
+                See the full contributor graph →
+              </Link>
+            </>
+          }
+        />
+        <div className="mx-auto mt-12 flex max-w-4xl flex-wrap justify-center gap-4">
+          {[
+            { login: 'lane711', contributions: 4565 },
+            { login: 'acoreyj', contributions: 111 },
+            { login: 'totto2727', contributions: 16 },
+            { login: 'hughkhan', contributions: 14 },
+            { login: 'mmcintosh', contributions: 11 },
+            { login: 'Toanzzz', contributions: 6 },
+            { login: 'LukeSeers', contributions: 5 },
+            { login: 'PeteJStewart', contributions: 5 },
+            { login: 'rhamses', contributions: 5 },
+            { login: 'lukasbe', contributions: 5 },
+            { login: 'AndrianiP', contributions: 4 },
+            { login: 'proccedure-caze', contributions: 4 },
+            { login: 'drajar', contributions: 3 },
+            { login: 'lassespilling', contributions: 3 },
+            { login: 'bobbwal', contributions: 2 },
+            { login: 'pietru2004', contributions: 1 },
+            { login: 'important-new', contributions: 1 },
+            { login: 'cp-bwg', contributions: 1 },
+            { login: 'tomByrer', contributions: 1 },
+            { login: 'patdx', contributions: 1 },
+            { login: 'miljan-aleksic', contributions: 1 },
+            { login: 'mikelgmh', contributions: 1 },
+            { login: 'mandaputtra', contributions: 1 },
+            { login: 'tipsysquid', contributions: 1 },
+            { login: 'phanect', contributions: 1 },
+            { login: 'josevenceslau', contributions: 1 },
+            { login: 'everscending', contributions: 1 },
+            { login: 'furelid', contributions: 1 },
+            { login: 'JayCarter949', contributions: 1 },
+            { login: 'igorjos', contributions: 1 },
+            { login: 'albnunes', contributions: 1 },
+          ].map((c) => (
+            <a
+              key={c.login}
+              href={`https://github.com/${c.login}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`${c.login} — ${c.contributions} commit${c.contributions === 1 ? '' : 's'}`}
+              className="group relative"
+            >
+              <Image
+                src={`https://github.com/${c.login}.png?size=80`}
+                alt={c.login}
+                width={56}
+                height={56}
+                className="size-14 rounded-full ring-2 ring-white/10 transition group-hover:ring-cyan-400"
+                unoptimized
+              />
+            </a>
+          ))}
+          <a
+            href="https://github.com/SonicJs-Org/sonicjs/graphs/contributors"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="See all contributors on GitHub"
+            className="flex size-14 items-center justify-center rounded-full bg-white/5 text-xl font-semibold text-gray-400 ring-2 ring-white/10 transition hover:bg-white/10 hover:text-white hover:ring-cyan-400"
+          >
+            &hellip;
+          </a>
         </div>
       </div>
 

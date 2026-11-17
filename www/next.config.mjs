@@ -24,6 +24,11 @@ const nextConfig = {
   outputFileTracingIncludes: {
     '/**/*': ['./src/app/**/*.mdx', './content/blog/**/*.mdx'],
   },
+  // worker-mailer statically imports `cloudflare:sockets`, which only
+  // resolves inside workerd. Keeping it out of Next's webpack bundle (as a
+  // real unbundled require/import) lets OpenNext's own ESM bundler hand the
+  // cloudflare: import to wrangler/workerd correctly at the final build step.
+  serverExternalPackages: ['worker-mailer'],
 }
 
 export default withSearch(withMDX(nextConfig))

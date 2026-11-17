@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { requireAuth } from '@sonicjs-cms/core'
 import { renderAdminLayoutCatalyst } from '@sonicjs-cms/core'
 import type { Bindings, Variables } from '@sonicjs-cms/core'
+import { finalAttempts, countByStatus, applyFilter, sortTests } from '../run-details'
 
 const adminRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -532,65 +533,27 @@ adminRoutes.get('/run/:runId', async (c) => {
 
   run = runR as Row
 
-  // Build filter clause for tests
-  let statusClause = ''
-  if (filter === 'passed') {
-    statusClause = `AND json_extract(data, '$.status') = 'passed' AND json_extract(data, '$.is_flaky') != 1`
-  } else if (filter === 'failed') {
-    statusClause = `AND json_extract(data, '$.status') IN ('failed', 'timedOut', 'interrupted')`
-  } else if (filter === 'flaky') {
-    statusClause = `AND json_extract(data, '$.is_flaky') = 1`
-  } else if (filter === 'skipped') {
-    statusClause = `AND json_extract(data, '$.status') = 'skipped'`
-  }
-
-  // Fetch tests for this run (final attempt per test_id/project_name)
-  const testsR = await db.prepare(
-    `SELECT json_extract(t1.data, '$.test_id') AS test_id,
-            json_extract(t1.data, '$.test_title') AS test_title,
-            json_extract(t1.data, '$.test_file') AS test_file,
-            json_extract(t1.data, '$.project_name') AS project_name,
-            json_extract(t1.data, '$.status') AS status,
-            json_extract(t1.data, '$.is_flaky') AS is_flaky,
-            json_extract(t1.data, '$.retry') AS retry,
-            json_extract(t1.data, '$.duration_ms') AS duration_ms,
-            json_extract(t1.data, '$.error_message') AS error_message
-     FROM documents t1
-     WHERE t1.type_id = 'playwright_tests' AND t1.is_published = 1 AND t1.deleted_at IS NULL
-       AND json_extract(t1.data, '$.run_id') = ?
-       ${statusClause}
-       AND NOT EXISTS (
-         SELECT 1 FROM documents t2
-         WHERE t2.type_id = 'playwright_tests' AND t2.is_published = 1 AND t2.deleted_at IS NULL
-           AND json_extract(t2.data, '$.run_id') = json_extract(t1.data, '$.run_id')
-           AND json_extract(t2.data, '$.test_id') = json_extract(t1.data, '$.test_id')
-           AND json_extract(t2.data, '$.project_name') = json_extract(t1.data, '$.project_name')
-           AND CAST(json_extract(t2.data, '$.retry') AS INTEGER) > CAST(json_extract(t1.data, '$.retry') AS INTEGER)
-       )
-     ORDER BY json_extract(t1.data, '$.test_file'), json_extract(t1.data, '$.test_title')`
+  // Fetch every attempt for this run once (index: idx_pw_tests_run_id), then pick the final
+  // attempt per test_id/project_name, count, filter and sort in memory. The previous correlated
+  // NOT EXISTS rescanned all playwright_tests per row and blew D1's CPU limit.
+  const attemptsR = await db.prepare(
+    `SELECT json_extract(data, '$.test_id') AS test_id,
+            json_extract(data, '$.test_title') AS test_title,
+            json_extract(data, '$.test_file') AS test_file,
+            json_extract(data, '$.project_name') AS project_name,
+            json_extract(data, '$.status') AS status,
+            json_extract(data, '$.is_flaky') AS is_flaky,
+            json_extract(data, '$.retry') AS retry,
+            json_extract(data, '$.duration_ms') AS duration_ms,
+            json_extract(data, '$.error_message') AS error_message
+     FROM documents
+     WHERE type_id = 'playwright_tests' AND is_published = 1 AND deleted_at IS NULL
+       AND json_extract(data, '$.run_id') = ?`
   ).bind(runId).all()
 
-  tests = rowsOf(testsR)
-
-  // Count tests by status for filter badges
-  countsR = await db.prepare(
-    `SELECT
-       SUM(CASE WHEN json_extract(t1.data, '$.status') = 'passed' AND json_extract(t1.data, '$.is_flaky') != 1 THEN 1 ELSE 0 END) AS passed_count,
-       SUM(CASE WHEN json_extract(t1.data, '$.status') IN ('failed', 'timedOut', 'interrupted') THEN 1 ELSE 0 END) AS failed_count,
-       SUM(CASE WHEN json_extract(t1.data, '$.is_flaky') = 1 THEN 1 ELSE 0 END) AS flaky_count,
-       SUM(CASE WHEN json_extract(t1.data, '$.status') = 'skipped' THEN 1 ELSE 0 END) AS skipped_count
-     FROM documents t1
-     WHERE t1.type_id = 'playwright_tests' AND t1.is_published = 1 AND t1.deleted_at IS NULL
-       AND json_extract(t1.data, '$.run_id') = ?
-       AND NOT EXISTS (
-         SELECT 1 FROM documents t2
-         WHERE t2.type_id = 'playwright_tests' AND t2.is_published = 1 AND t2.deleted_at IS NULL
-           AND json_extract(t2.data, '$.run_id') = json_extract(t1.data, '$.run_id')
-           AND json_extract(t2.data, '$.test_id') = json_extract(t1.data, '$.test_id')
-           AND json_extract(t2.data, '$.project_name') = json_extract(t1.data, '$.project_name')
-           AND CAST(json_extract(t2.data, '$.retry') AS INTEGER) > CAST(json_extract(t1.data, '$.retry') AS INTEGER)
-       )`
-  ).bind(runId).first() as Row | null
+  const finals = finalAttempts(rowsOf(attemptsR))
+  countsR = countByStatus(finals)
+  tests = sortTests(applyFilter(finals, filter))
   } catch (dbErr) {
     console.error('[playwright-dashboard] /run/:runId DB error:', dbErr)
     return c.html(

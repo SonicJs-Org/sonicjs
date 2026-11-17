@@ -22,12 +22,6 @@ const channels = [
     href: 'https://github.com/SonicJs-Org/sonicjs/issues',
     cta: 'Open an issue',
   },
-  {
-    title: 'Commercial Support',
-    body: 'Need a support SLA for your company? See paid plans.',
-    href: '/commercial-support',
-    cta: 'View plans',
-  },
 ]
 
 export default function ContactPage() {

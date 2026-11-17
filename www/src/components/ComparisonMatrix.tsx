@@ -855,7 +855,7 @@ export function ComparisonMatrix() {
         platforms, so &ldquo;self-hostable&rdquo; rows are No and several
         features are plan-gated. Corrections welcome via{' '}
         <a
-          href="https://github.com/lane711/sonicjs"
+          href="https://github.com/SonicJs-Org/sonicjs"
           className="underline hover:text-gray-700 dark:hover:text-gray-300"
         >
           GitHub

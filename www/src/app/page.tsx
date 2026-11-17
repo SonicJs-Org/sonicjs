@@ -161,7 +161,7 @@ export default function HomePage() {
                 Start building
               </Link>
               <Link
-                href="https://github.com/lane711/sonicjs"
+                href="https://github.com/SonicJs-Org/sonicjs"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm/6 font-semibold text-white no-underline"
@@ -810,7 +810,7 @@ GET /api/products?category=electronics&sort=-price&limit=20`}</pre>
         />
         <div className="mt-12 flex flex-wrap items-center justify-center gap-4">
           <Link
-            href="https://github.com/lane711/sonicjs"
+            href="https://github.com/SonicJs-Org/sonicjs"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-gray-300 ring-1 ring-white/10 transition hover:bg-white/5 hover:text-white no-underline"

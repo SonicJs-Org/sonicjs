@@ -61,6 +61,12 @@ jobs:
       - name: Run unit tests with coverage
         run: npm run test:cov
 
+      - name: Run SDK unit tests
+        run: npm run test --workspace=@sonicjs-cms/sdk
+
+      - name: Run create-app CLI test
+        run: npm run test --workspace=create-sonicjs
+
       - name: Upload coverage to Codecov
         if: env.TRUSTED_PREVIEW == 'true'
         uses: codecov/codecov-action@v4
@@ -70,12 +76,12 @@ jobs:
           flags: unittests
           fail_ci_if_error: false
 
-      - name: Upload Flakiness core-unit report artifact
-        if: always() && env.TRUSTED_PREVIEW == 'true'
+      - name: Upload Flakiness unit report artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: flakiness-core-unit-${{ github.run_id }}-${{ github.run_attempt }}
-          path: flakiness-reports/core-unit/
+          name: flakiness-unit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/
           retention-days: 7
           if-no-files-found: warn
           include-hidden-files: false
@@ -337,7 +343,10 @@ jobs:
   # Runs after e2e-shard; running locked tests concurrently with shards causes
   # registration-disabled failures in unrelated Better Auth signup specs.
   e2e-locked:
+    # needs e2e-shard for ordering only, not as a gate: lock tests must still run
+    # (and reach flakiness.io) when a shard fails.
     needs: [unit-tests, e2e-setup, e2e-shard]
+    if: always() && needs.e2e-setup.result == 'success' && needs.unit-tests.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -489,10 +498,28 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Upload Flakiness CMS E2E local report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flakiness-cms-e2e-local-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/cms-e2e/
+          retention-days: 7
+          if-no-files-found: warn
+          include-hidden-files: false
+
   # Upload data with a trusted CLI; never execute the producer checkout or artifacts.
   flakiness-upload:
-    needs: [unit-tests, e2e-setup, e2e-shard, e2e-locked]
-    if: always() && needs.e2e-setup.result == 'success'
+    needs: [unit-tests, e2e-setup, e2e-shard, e2e-locked, e2e-local]
+    # Upload only main history: pushes to main and PRs targeting main.
+    # Fork/Dependabot reports (e2e-local) are untrusted data and can be forged, but they
+    # are never executed: pull_request_target runs this trusted base workflow, the job
+    # only reads artifact JSON with the pinned CLI from the base checkout, and passes
+    # --project explicitly.
+    if: >
+      always() &&
+      (github.ref == 'refs/heads/main' || github.base_ref == 'main') &&
+      (needs.e2e-setup.result == 'success' || needs.e2e-local.result == 'success' || needs.e2e-local.result == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true

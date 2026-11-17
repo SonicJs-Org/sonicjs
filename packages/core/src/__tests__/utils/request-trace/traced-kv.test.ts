@@ -47,6 +47,27 @@ describe('getTracedKV', () => {
     expect(trace.entries.every((e) => e.kind === 'kv')).toBe(true)
   })
 
+  it('traces bulk reads: per-key redaction, hit/miss from Map contents', async () => {
+    const raw = {
+      get: async (keys: string[]) => new Map(keys.map((k) => [k, k === 'session:missingTok' ? null : 'v'])),
+      getWithMetadata: async (keys: string[]) =>
+        new Map(keys.map((k) => [k, { value: k === 'session:missingTok' ? null : 'v', metadata: null }])),
+    }
+    const p = getTracedKV(raw)
+    const trace = new RequestTrace('GET', '/')
+    await runWithTrace(trace, async () => {
+      await p.get(['content:list:42', 'config:x'])
+      await p.get(['session:missingTok'])
+      await p.getWithMetadata(['content:list:42', 'config:x'])
+      await p.getWithMetadata(['content:list:42', 'session:missingTok'])
+    })
+    expect(trace.entries.map((e) => [e.op, e.cache])).toEqual([
+      ['get (bulk)', 'hit'], ['get (bulk)', 'miss'], ['getWithMetadata (bulk)', 'hit'], ['getWithMetadata (bulk)', 'miss'],
+    ])
+    expect(trace.entries[0].label).toBe('[content:list:<n>, config:<redacted:1>]')
+    expect(JSON.stringify(trace.toJSON())).not.toContain('missingTok')
+  })
+
   it('records nothing without a trace, and errors are recorded + rethrown', async () => {
     const kv = mockKv()
     const p = getTracedKV(kv)

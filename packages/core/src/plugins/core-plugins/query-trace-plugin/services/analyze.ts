@@ -197,7 +197,7 @@ export function findOpportunities(trace: RequestTrace, settings: QueryTraceSetti
       rule: 'latency-bound',
       severity: 'medium',
       impactMs: wall - sql,
-      message: `Network overhead is ${Math.round(((wall - sql) / wall) * 100)}% of DB time across ${latencyBound.length} calls. Batch with \`db.batch()\` or cache.`,
+      message: `Network overhead is ${Math.round(((wall - sql) / wall) * 100)}% of wall time across ${latencyBound.length} calls. Batch with \`db.batch()\` or cache.`,
     })
   }
 

@@ -973,4 +973,37 @@ describe('CacheService.invalidate with a lagging KV list()', () => {
 
     expect(store.has(keep)).toBe(true)
   })
+
+  it('deletes from KV (not just untracks) keys evicted by the recentKvWrites cap', async () => {
+    const { kv, store } = laggingKv()
+    const cache = new CacheService(config, kv)
+
+    const total = 650
+    const keys = Array.from({ length: total }, (_, i) =>
+      cache.generateKey('collection-content-filtered', `blog_post:${i}`)
+    )
+    // Distinct keys all written inside the list() lag window; list() never shows any of them.
+    for (const key of keys) await cache.set(key, { data: ['old'] })
+
+    // Over the 500 cap: evicted markers must have been deleted from KV, not merely forgotten.
+    expect(store.size).toBeLessThanOrEqual(500)
+
+    // Invalidation must leave no stale key behind: tracked ones via markers, evicted ones already gone.
+    await cache.invalidate('lagtest:collection-content-filtered:blog_post:*')
+    for (const key of keys) expect(store.has(key)).toBe(false)
+    expect(store.size).toBe(0)
+  })
+
+  it('does not throw from set() when a cap-eviction KV delete fails', async () => {
+    const { kv } = laggingKv()
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    ;(kv.delete as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('kv down'))
+    const cache = new CacheService(config, kv)
+
+    for (let i = 0; i < 520; i++) {
+      await cache.set(cache.generateKey('collection-content-filtered', `x:${i}`), { i })
+    }
+    expect(errSpy).toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
 })

@@ -325,7 +325,7 @@ export class CacheService {
           // Cloudflare KV requires minimum 60s TTL in production; clamp silently.
           expirationTtl: Math.max(config.ttl, 60)
         })
-        this.rememberKvWrite(key)
+        await this.rememberKvWrite(key)
       } catch (error) {
         console.error('KV cache write error:', error)
       }
@@ -413,7 +413,7 @@ export class CacheService {
         // `list()` lags behind `put()`, so also delete matching keys this isolate wrote recently
         // that the listing did not show. Without this, invalidating right after a cache fill
         // (read list -> write item -> read list) leaves the stale entry in KV for the whole TTL.
-        this.pruneRecentKvWrites()
+        await this.pruneRecentKvWrites()
         for (const [key, writtenAt] of [...this.recentKvWrites]) {
           if (!deleted.has(key) && regex.test(key)) {
             await this.kvNamespace.delete(key)
@@ -429,10 +429,10 @@ export class CacheService {
     return count
   }
 
-  private rememberKvWrite(key: string): void {
+  private async rememberKvWrite(key: string): Promise<void> {
     this.recentKvWrites.set(key, Date.now())
     // Bound the map between invalidations on a write-heavy, never-invalidated namespace.
-    if (this.recentKvWrites.size > MAX_RECENT_KV_WRITES) this.pruneRecentKvWrites()
+    if (this.recentKvWrites.size > MAX_RECENT_KV_WRITES) await this.pruneRecentKvWrites()
   }
 
   /**
@@ -445,16 +445,30 @@ export class CacheService {
     }
   }
 
-  private pruneRecentKvWrites(): void {
+  private async pruneRecentKvWrites(): Promise<void> {
     const cutoff = Date.now() - KV_LIST_LAG_MS
     for (const [key, at] of this.recentKvWrites) {
       if (at < cutoff) this.recentKvWrites.delete(key)
     }
-    // Still over cap (write-heavy, nothing expired): evict oldest by write timestamp.
+    // Still over cap (write-heavy, nothing expired): these markers are still inside the list()
+    // lag window, so forgetting them would leave a possibly-unlisted stale key in KV for the
+    // whole TTL. Delete the KV entry itself before dropping the marker.
     const excess = this.recentKvWrites.size - MAX_RECENT_KV_WRITES
     if (excess > 0) {
       const oldest = [...this.recentKvWrites].sort((a, b) => a[1] - b[1]).slice(0, excess)
       for (const [key] of oldest) this.recentKvWrites.delete(key)
+      if (this.kvNamespace) {
+        const kv = this.kvNamespace
+        await Promise.all(
+          oldest.map(async ([key]) => {
+            try {
+              await kv.delete(key)
+            } catch (error) {
+              console.error('KV cache eviction delete error:', error)
+            }
+          })
+        )
+      }
     }
   }
 

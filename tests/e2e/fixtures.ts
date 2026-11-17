@@ -13,9 +13,15 @@ export { uniqueTestId } from './utils/test-runtime'
 const HARDENED = Symbol('sonicjs.e2e.page')
 const HARDENED_CONTEXT = Symbol('sonicjs.e2e.context')
 
+// A narrow set of transient *network-layer* navigation failures worth one bare retry —
+// e.g. a momentary CF preview Worker connectivity blip. Never matches an application or
+// assertion failure, so it can't mask a real regression.
+const TRANSIENT_NAV_ERROR = /ERR_ABORTED|ERR_CONNECTION_RESET|ERR_CONNECTION_REFUSED|ERR_EMPTY_RESPONSE|ERR_NETWORK_CHANGED|ECONNRESET/
+
 /** Default to parsed document; readiness belongs to locator assertions.
  * Explicit waitUntil/timeout contracts are never downgraded, swallowed, or retried.
- * Reload may resubmit a POST, so must not be replayed automatically. */
+ * Reload may resubmit a POST, so must not be replayed automatically — the transient-error
+ * retry below applies ONLY to goto (always a GET), never to reload. */
 function preparePage(page: Page, headers?: Record<string, string>): Page {
   prepareLocalRequest(page.request, process.env.BASE_URL || 'http://localhost:8787', base.info().file, headers)
   const marked = page as unknown as Record<symbol, boolean>
@@ -23,7 +29,18 @@ function preparePage(page: Page, headers?: Record<string, string>): Page {
   marked[HARDENED] = true
   const goto = page.goto.bind(page)
   const reload = page.reload.bind(page)
-  page.goto = (url, options) => goto(url, { waitUntil: 'domcontentloaded', ...options })
+  page.goto = async (url: string, options?: Parameters<Page['goto']>[1]) => {
+    const navOptions = { waitUntil: 'domcontentloaded' as const, ...(options ?? {}) }
+    try {
+      return await goto(url, navOptions)
+    } catch (err) {
+      if (!(err instanceof Error) || !TRANSIENT_NAV_ERROR.test(err.message)) throw err
+      // One bare retry after a short backoff — cheaper than burning a whole Playwright
+      // test retry (which reruns beforeEach/login too) on a momentary connectivity blip.
+      await new Promise(resolve => setTimeout(resolve, 500))
+      return await goto(url, navOptions)
+    }
+  }
   page.reload = options => reload({ waitUntil: 'domcontentloaded', ...options })
   return page
 }

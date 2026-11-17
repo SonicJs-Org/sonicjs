@@ -23,11 +23,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sonicjs/sonicjs.git",
+    "url": "git+https://github.com/SonicJs-Org/sonicjs.git",
     "directory": "www"
   },
   "bugs": {
-    "url": "https://github.com/sonicjs/sonicjs/issues"
+    "url": "https://github.com/SonicJs-Org/sonicjs/issues"
   },
   "homepage": "https://sonicjs.com",
   "browserslist": "defaults, not ie <= 11",
@@ -52,7 +52,7 @@
     "gray-matter": "^4.0.3",
     "mdast-util-to-string": "^4.0.0",
     "mdx-annotations": "^0.1.4",
-    "next": "^16.3.0",
+    "next": "^16.4.6",
     "next-mdx-remote": "^6.0.0",
     "next-themes": "^0.4.6",
     "prettier-plugin-organize-imports": "^4.2.0",

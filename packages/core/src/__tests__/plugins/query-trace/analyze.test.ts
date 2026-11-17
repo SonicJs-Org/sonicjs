@@ -83,7 +83,8 @@ describe('analyze', () => {
     t = new RequestTrace('GET', '/')
     const cache = (cacheOutcome: 'miss' | 'hit', label: string) =>
       t.record({ kind: 'cache', op: 'get', label, fingerprint: 'get', tables: [], params: [], startMs: 0, durationMs: 1, cache: cacheOutcome })
-    cache('miss', 'k1'); q({ durationMs: 4 }); q({ durationMs: 6, fingerprint: 'x' })
+    cache('miss', 'k1'); q({ startMs: 2, durationMs: 4 }); q({ startMs: 2, durationMs: 6, fingerprint: 'x' })
+    q({ startMs: 0.5, durationMs: 50, fingerprint: 'early' }) // started before miss resolved: not attributed
     cache('miss', 'k2') // no queries before next cache op
     cache('hit', 'k3'); q({ fingerprint: 'y' }) // after a hit: not attributed
     cache('miss', 'k4'); t.spanStack.push('other'); q({ fingerprint: 'z' }) // span changed: not attributed
@@ -93,15 +94,29 @@ describe('analyze', () => {
     expect(found[0]!.impactMs).toBe(10)
   })
 
-  it('cache-miss-db analysis is linear (5000 misses)', () => {
-    t = new RequestTrace('GET', '/', 5000)
-    for (let i = 0; i < 2500; i++) {
-      t.record({ kind: 'cache', op: 'get', label: `k${i}`, fingerprint: 'get', tables: [], params: [], startMs: i, durationMs: 1, cache: 'miss' })
-      q({ startMs: i, fingerprint: `f${i}` })
+  it('cache-miss-db analysis scales linearly (2N within ~3x of N)', () => {
+    const build = (n: number) => {
+      const tr = new RequestTrace('GET', '/', n * 2 + 10)
+      t = tr
+      for (let i = 0; i < n; i++) {
+        tr.record({ kind: 'cache', op: 'get', label: `k${i}`, fingerprint: 'get', tables: [], params: [], startMs: i * 3, durationMs: 1, cache: 'miss' })
+        q({ startMs: i * 3 + 2, fingerprint: `f${i}` })
+      }
+      return tr
     }
-    const t0 = performance.now()
-    analyze(t, S, 1000)
-    expect(performance.now() - t0).toBeLessThan(500)
+    const time = (tr: RequestTrace) => {
+      let best = Infinity
+      for (let r = 0; r < 5; r++) {
+        const t0 = performance.now()
+        analyze(tr, S, 1000)
+        best = Math.min(best, performance.now() - t0)
+      }
+      return best
+    }
+    const small = build(2500)
+    const large = build(5000)
+    time(small) // warm up JIT
+    expect(time(large)).toBeLessThan(Math.max(time(small) * 3, 5))
   })
 
   it('missing-index heuristic applies to reads only', () => {

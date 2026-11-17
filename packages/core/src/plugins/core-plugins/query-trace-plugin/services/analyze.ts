@@ -245,7 +245,8 @@ export function findOpportunities(trace: RequestTrace, settings: QueryTraceSetti
       if (e.cache === 'miss') miss = { entry: e, n: 0, ms: 0 }
     } else if (miss && e.span !== miss.entry.span) {
       flushMiss()
-    } else if (miss && isTopLevelD1(e)) {
+    } else if (miss && isTopLevelD1(e) && e.startMs >= miss.entry.startMs + miss.entry.durationMs) {
+      // entries are appended in completion order; skip queries that started before the miss resolved
       miss.n++
       miss.ms += e.durationMs
     }

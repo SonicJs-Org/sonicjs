@@ -66,6 +66,16 @@ describe('fingerprintSql', () => {
     expect(fingerprintSql('SELECT * FROM t WHERE id IN (?, ?, ?)')).toBe('select * from t where id in (?…)')
     expect(fingerprintSql("SELECT * FROM t WHERE id IN (1, 2)")).toBe('select * from t where id in (?…)')
   })
+  it('keeps different double-quoted columns distinct without exposing raw text', () => {
+    const a = fingerprintSql('select "email" from "users" where id = ?')
+    const b = fingerprintSql('select "createdAt" from "users" where id = ?')
+    expect(a).not.toBe(b)
+    expect(fingerprintSql('select "email" from "users" where id = ?')).toBe(a)
+    expect(a).not.toContain('email')
+    expect(a).toContain('"users"')
+    expect(redactSql('select "email" from "users"')).toBe('select ? from "users"')
+    expect(fingerprintSql("select 'secret', x'ab' from t")).not.toMatch(/secret|ab/)
+  })
   it('collapses whitespace', () => {
     expect(fingerprintSql('SELECT 1\n  FROM   t')).toBe('select ? from t')
   })
@@ -120,6 +130,10 @@ describe('redactKey', () => {
 })
 
 describe('identityKey', () => {
+  it('does not collide when U+00FF appears inside components', () => {
+    const fp = 'select ? , ?'
+    expect(identityKey(fp, ['p', 'q\u00ffsr'])).not.toBe(identityKey(fp, ['p\u00ffsq', 'r']))
+  })
   it('differs by values, matches for same values, differs by salt', () => {
     const fp = 'select * from t where a = ?'
     expect(identityKey(fp, ['a'])).not.toBe(identityKey(fp, ['b']))

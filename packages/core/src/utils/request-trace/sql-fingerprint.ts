@@ -39,13 +39,23 @@ function inTablePosition(whole: string, offset: number): boolean {
   return TABLE_KEYWORD_TAIL_RE.test(whole.slice(Math.max(0, j - 7), j))
 }
 
-function redactSqlFull(sql: string): string {
+function redactSqlFull(sql: string, dqHash = false): string {
   const out = sql.replace(TOKEN_RE, (tok, offset: number, whole: string) => {
     const c = tok[0]!
     if (c === '-' && tok[1] === '-') return ' '
     if (c === '/' && tok[1] === '*') return ' '
     if (c === "'" || ((c === 'x' || c === 'X') && tok[1] === "'")) return '?'
-    if (c === '"') return TERMINATED_DQ_RE.test(tok) && inTablePosition(whole, offset) ? tok : '?'
+    if (c === '"') {
+      if (TERMINATED_DQ_RE.test(tok) && inTablePosition(whole, offset)) return tok
+      // Fingerprint only: keep distinct quoted tokens (Drizzle column names) distinct without
+      // storing the raw text, which may be a string literal.
+      if (dqHash) {
+        const h = new Hasher()
+        h.str(tok)
+        return `?q${h.digest()}`
+      }
+      return '?'
+    }
     if (c === '`' || c === '[') return tok
     if (/^[A-Za-z_]/.test(c)) return tok
     return '?'
@@ -64,7 +74,8 @@ export function redactSql(sql: string): string {
 
 /** Redacted SQL, lowercased, with `IN (?, ?, …)` collapsed. Groups duplicates / N+1 patterns. */
 export function fingerprintSql(sql: string): string {
-  return redactSql(sql)
+  const out = redactSqlFull(sql, true)
+  return (out.length > MAX_LABEL ? out.slice(0, MAX_LABEL) + '…' : out)
     .toLowerCase()
     .replace(/\bin\s*\(\s*\?(?:\s*,\s*\?)*\s*\)/g, 'in (?…)')
 }
@@ -159,6 +170,8 @@ class Hasher {
   private a = 0x811c9dc5
   private b = 0x9747b28c
   str(v: string): void {
+    // length-prefix so a 0xff / U+00FF inside content can never be mistaken for the separator
+    this.num(v.length)
     for (let i = 0; i < v.length; i++) {
       const c = v.charCodeAt(i)
       this.a = Math.imul(this.a ^ c, 0x01000193) >>> 0
@@ -172,6 +185,13 @@ class Hasher {
       this.b = Math.imul(this.b ^ u8[i]!, 0x01000193) >>> 0
     }
     this.str(`#${u8.length}`)
+  }
+  private num(n: number): void {
+    for (let k = 0; k < 4; k++) {
+      const byte = (n >>> (k * 8)) & 0xff
+      this.a = Math.imul(this.a ^ byte, 0x01000193) >>> 0
+      this.b = Math.imul(this.b ^ byte, 0x01000193) >>> 0
+    }
   }
   private sep(): void {
     this.a = Math.imul(this.a ^ 0xff, 0x01000193) >>> 0

@@ -1101,7 +1101,6 @@ test.describe("Source: 54-hero-cta-style-persistence.spec.ts", () => {
 test.describe("Source: 55-collapsible-state-persistence.spec.ts", () => {
   async function resolvePageBlocksCollectionKey(page: Page): Promise<string> {
     await page.goto('/admin/content/new')
-    await page.waitForLoadState('networkidle', { timeout: 15000 })
 
     const e2eTestLink = page
       .locator('a[href^="/admin/content/new?collection="]')
@@ -1117,7 +1116,11 @@ test.describe("Source: 55-collapsible-state-persistence.spec.ts", () => {
   async function gotoPageBlocksNewForm(page: Page) {
     const collectionKey = await resolvePageBlocksCollectionKey(page)
     await page.goto('/admin/content/new?collection=' + encodeURIComponent(collectionKey))
-    await page.waitForLoadState('networkidle', { timeout: 15000 })
+    // Wait for either the form or the collection picker before `count()` — a bare count() reads
+    // the DOM once and answers 0 for a page that has not rendered yet.
+    await expect(
+      page.locator('input[name="title"], a[href^="/admin/content/new?collection="], form#content-form').first()
+    ).toBeVisible()
     const titleField = page.locator('input[name="title"]').first()
     if (await titleField.count()) {
       await expect(titleField).toBeVisible({ timeout: 10000 })
@@ -1130,7 +1133,6 @@ test.describe("Source: 55-collapsible-state-persistence.spec.ts", () => {
       .first()
     if (await e2eTestLink.count()) {
       await e2eTestLink.click()
-      await page.waitForLoadState('networkidle', { timeout: 15000 })
       await expect(page.locator('input[name="title"]').first()).toBeVisible({ timeout: 10000 })
       return collectionKey
     }
@@ -1170,6 +1172,19 @@ test.describe("Source: 55-collapsible-state-persistence.spec.ts", () => {
       await loginAsAdmin(page)
     })
 
+    // Navigate to an edit URL and wait for the collapse-state scripts to have restored state.
+    // Not `networkidle` — admin pages keep issuing background requests, so it burns its whole
+    // budget. The structured-array initializer marks its container once it has applied the saved
+    // state; that marker (plus the form) is the actual completion signal. Block and field-group
+    // state is restored synchronously on DOMContentLoaded, which `goto` already waits past.
+    async function gotoEditFormReady(page: Page, url: string) {
+      await page.goto(url)
+      await expect(page.locator('form#content-form')).toBeVisible()
+      await expect(
+        page.locator('[data-structured-array][data-field-name="team__members"]').first()
+      ).toHaveAttribute('data-structured-initialized', 'true')
+    }
+
     // Structured arrays and blocks each ship an inert <template> holding a prototype item, and
     // Playwright's selector engine looks inside template content. Every item/control locator below
     // is therefore anchored with `:scope >` (or `.first()` inside an item) so it cannot match the
@@ -1186,7 +1201,9 @@ test.describe("Source: 55-collapsible-state-persistence.spec.ts", () => {
 
       // Create document A with blocks and repeater items.
       await page.goto('/admin/content/new?collection=' + encodeURIComponent(collectionKey))
-      await page.waitForLoadState('networkidle', { timeout: 15000 })
+      await expect(
+        page.locator('input[name="title"], a[href^="/admin/content/new?collection="]').first()
+      ).toBeVisible()
       const formTitle = page.locator('input[name="title"]').first()
       if (!(await formTitle.count())) {
         await gotoPageBlocksNewForm(page)
@@ -1242,9 +1259,7 @@ test.describe("Source: 55-collapsible-state-persistence.spec.ts", () => {
       const docAEditUrl = await saveAndCaptureEditUrl(page, docATitle)
 
       // Set UI collapse state on the saved edit page (same document path/key).
-      await page.goto(docAEditUrl)
-      await page.waitForLoadState('networkidle', { timeout: 15000 })
-      await expect(page.locator('form#content-form')).toBeVisible()
+      await gotoEditFormReady(page, docAEditUrl)
 
       const editTeamGroup = page.locator('[data-structured-object][data-field-name="team"]').first()
       const editTeamContent = editTeamGroup.locator(':scope > .field-group-content')
@@ -1280,7 +1295,9 @@ test.describe("Source: 55-collapsible-state-persistence.spec.ts", () => {
 
       // Create document B without toggling grouped fields so defaults are used.
       await page.goto('/admin/content/new?collection=' + encodeURIComponent(collectionKey))
-      await page.waitForLoadState('networkidle', { timeout: 15000 })
+      await expect(
+        page.locator('input[name="title"], a[href^="/admin/content/new?collection="]').first()
+      ).toBeVisible()
       const formTitleB = page.locator('input[name="title"]').first()
       if (!(await formTitleB.count())) {
         await gotoPageBlocksNewForm(page)
@@ -1290,9 +1307,7 @@ test.describe("Source: 55-collapsible-state-persistence.spec.ts", () => {
       const docBEditUrl = await saveAndCaptureEditUrl(page, docBTitle)
 
       // Return to document A and verify state restoration.
-      await page.goto(docAEditUrl)
-      await page.waitForLoadState('networkidle', { timeout: 15000 })
-      await expect(page.locator('form#content-form')).toBeVisible()
+      await gotoEditFormReady(page, docAEditUrl)
       const restoredTeamGroup = page
         .locator('[data-structured-object][data-field-name="team"]')
         .first()
@@ -1327,9 +1342,7 @@ test.describe("Source: 55-collapsible-state-persistence.spec.ts", () => {
       await expect(restoredBlockContent(1)).toHaveClass(/hidden/)
 
       // Open different document and confirm defaults still apply there.
-      await page.goto(docBEditUrl)
-      await page.waitForLoadState('networkidle', { timeout: 15000 })
-      await expect(page.locator('form#content-form')).toBeVisible()
+      await gotoEditFormReady(page, docBEditUrl)
       const docBTeamGroup = page
         .locator('[data-structured-object][data-field-name="team"]')
         .first()

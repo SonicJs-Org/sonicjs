@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures'
-import { loginAsAdmin } from './utils/test-helpers'
+import { loginAsAdmin, waitForHtmxBound } from './utils/test-helpers'
 
 // Unique per-test sources — use index to avoid collisions between tests
 const BASE_TS = Date.now()
@@ -12,16 +12,13 @@ test.describe('Redirect Management @plugins', () => {
 
   test('admin/redirects page loads', async ({ page }) => {
     await page.goto('/admin/redirects')
-    await page.waitForLoadState('networkidle')
     await expect(page).toHaveURL('/admin/redirects')
     await expect(page.locator('h1')).toContainText('Redirects')
   })
 
   test('can navigate to new redirect form', async ({ page }) => {
     await page.goto('/admin/redirects')
-    await page.waitForLoadState('networkidle')
     await page.click('a[href="/admin/redirects/new"]')
-    await page.waitForLoadState('networkidle')
     await expect(page).toHaveURL('/admin/redirects/new')
     await expect(page.locator('form')).toBeVisible()
   })
@@ -29,7 +26,7 @@ test.describe('Redirect Management @plugins', () => {
   test('can create a redirect and it appears in list', async ({ page }) => {
     const source = src(1)
     await page.goto('/admin/redirects/new')
-    await page.waitForLoadState('networkidle')
+    await waitForHtmxBound(page, 'form')
 
     await page.fill('input[name="source"]', source)
     await page.fill('input[name="destination"]', '/destination-1')
@@ -47,7 +44,7 @@ test.describe('Redirect Management @plugins', () => {
 
     // Create the redirect via admin UI
     await page.goto('/admin/redirects/new')
-    await page.waitForLoadState('networkidle')
+    await waitForHtmxBound(page, 'form')
     await page.fill('input[name="source"]', source)
     await page.fill('input[name="destination"]', destination)
     await page.selectOption('select[name="status_code"]', '301')
@@ -70,7 +67,7 @@ test.describe('Redirect Management @plugins', () => {
 
     // Create
     await page.goto('/admin/redirects/new')
-    await page.waitForLoadState('networkidle')
+    await waitForHtmxBound(page, 'form')
     await page.fill('input[name="source"]', source)
     await page.fill('input[name="destination"]', originalDest)
     await page.selectOption('select[name="status_code"]', '301')
@@ -80,8 +77,8 @@ test.describe('Redirect Management @plugins', () => {
     // Click edit in the row
     const row = page.locator(`[data-source="${source}"]`)
     await row.locator('a[href*="/edit"]').click()
-    await page.waitForLoadState('networkidle')
-    await expect(page.url()).toMatch(/\/admin\/redirects\/.+\/edit/)
+    await expect(page).toHaveURL(/\/admin\/redirects\/.+\/edit/)
+    await waitForHtmxBound(page, 'form')
 
     // Update destination
     await page.fill('input[name="destination"]', updatedDest)
@@ -96,7 +93,7 @@ test.describe('Redirect Management @plugins', () => {
 
     // Create
     await page.goto('/admin/redirects/new')
-    await page.waitForLoadState('networkidle')
+    await waitForHtmxBound(page, 'form')
     await page.fill('input[name="source"]', source)
     await page.fill('input[name="destination"]', '/destination-4')
     await page.selectOption('select[name="status_code"]', '301')
@@ -110,12 +107,16 @@ test.describe('Redirect Management @plugins', () => {
     await row.locator('button', { hasText: 'Delete' }).click()
 
     // Confirm in the <dialog> element
+    // The dialog issues a bare fetch(DELETE). Wait for that response: navigating away while it is
+    // still in flight aborts the request and leaves the row in place.
+    const deleteResponse = page.waitForResponse(
+      (r) => r.request().method() === 'DELETE' && r.url().includes('/admin/redirects/')
+    )
     await page.locator('#confirmDeleteBtn').click()
-    await page.waitForLoadState('networkidle')
+    expect((await deleteResponse).ok()).toBeTruthy()
 
-    // Row should be gone after page refresh or HTMX removal
+    // Row should be gone after page refresh
     await page.goto('/admin/redirects')
-    await page.waitForLoadState('networkidle')
     await expect(page.locator(`[data-source="${source}"]`)).not.toBeVisible()
   })
 
@@ -124,7 +125,7 @@ test.describe('Redirect Management @plugins', () => {
 
     // Create first
     await page.goto('/admin/redirects/new')
-    await page.waitForLoadState('networkidle')
+    await waitForHtmxBound(page, 'form')
     await page.fill('input[name="source"]', source)
     await page.fill('input[name="destination"]', '/destination-5a')
     await page.selectOption('select[name="status_code"]', '301')
@@ -133,7 +134,7 @@ test.describe('Redirect Management @plugins', () => {
 
     // Try creating same source again
     await page.goto('/admin/redirects/new')
-    await page.waitForLoadState('networkidle')
+    await waitForHtmxBound(page, 'form')
     await page.fill('input[name="source"]', source)
     await page.fill('input[name="destination"]', '/destination-5b')
     await page.selectOption('select[name="status_code"]', '301')

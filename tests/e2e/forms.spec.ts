@@ -43,10 +43,13 @@ test.describe("Source: 50-forms.spec.ts", () => {
     });
 
     test('should display forms list page', async ({ page }) => {
-      await navigateToAdminSection(page, 'forms');
+      // Assert on the response, then on rendered content — the Playwright assertions retry until
+      // the page has painted, so no load-state wait is needed.
+      const response = await page.goto('/admin/forms', { waitUntil: 'domcontentloaded' });
+      expect(response?.ok()).toBeTruthy();
 
-      await expect(page.locator('h1')).toContainText('Forms');
-      await expect(page.locator('a[href="/admin/forms/new"]')).toBeVisible();
+      await expect(page.locator('h1').first()).toContainText('Forms');
+      await expect(page.locator('a[href="/admin/forms/new"]').first()).toBeVisible();
     });
 
     test('should create a new form', async ({ page }) => {
@@ -517,22 +520,29 @@ test.describe("Source: 53-forms-as-content.spec.ts", () => {
 
     test('should NOT show form-sourced collections on collections page', async ({ page }) => {
       await loginAsAdmin(page);
-      await page.goto('/admin/collections');
-      await page.waitForLoadState('networkidle');
+      await page.goto('/admin/collections', { waitUntil: 'domcontentloaded' });
 
-      const bodyText = await page.locator('body').textContent();
+      // A negative assertion on a page that has not rendered proves nothing, so anchor on content
+      // that only exists once the collections list is painted (the page is server-rendered; no
+      // `networkidle` — admin pages poll and never go idle).
+      await expect(page.locator('h1').first()).toContainText('Collections');
+      await expect(page.locator('a[href^="/admin/collections/"]').first()).toBeVisible();
+
       // The shadow collection name is "form_{testFormName}" and display name ends with "(Form)"
-      expect(bodyText).not.toContain(`form_${testFormName}`);
-      expect(bodyText).not.toContain(`${testFormDisplayName} (Form)`);
+      const body = page.locator('body');
+      await expect(body).not.toContainText(`form_${testFormName}`);
+      await expect(body).not.toContainText(`${testFormDisplayName} (Form)`);
     });
 
     test('should NOT show form-sourced collections in new-content picker', async ({ page }) => {
       await loginAsAdmin(page);
-      await page.goto('/admin/content/new');
-      await page.waitForLoadState('networkidle');
+      await page.goto('/admin/content/new', { waitUntil: 'domcontentloaded' });
 
-      const bodyText = await page.locator('body').textContent();
-      expect(bodyText).not.toContain(`${testFormDisplayName} (Form)`);
+      // Anchor on the rendered picker before asserting absence (see collections test above).
+      const picker = page.locator('a[href*="/admin/content/new?collection="]');
+      await expect(picker.first()).toBeVisible();
+
+      await expect(page.locator('body')).not.toContainText(`${testFormDisplayName} (Form)`);
     });
 
     test('should NOT show form submissions in the regular content list', async ({ page }) => {

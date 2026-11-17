@@ -1050,6 +1050,30 @@ export async function waitForHTMX(page: Page) {
 }
 
 /**
+ * Wait until htmx has loaded AND bound the element matching `selector` (an `hx-*` form/button).
+ *
+ * htmx is pulled from a CDN (unpkg) by a script near the end of the page, and it only attaches
+ * its handlers to `hx-*` elements once it has loaded and run its DOMContentLoaded pass. Until
+ * then a click on `button[type=submit]` falls through to the browser's native form submit — a
+ * GET back to the same page with the fields in the query string — and the spec then waits for an
+ * `hx-post` response or redirect that is never coming. `networkidle` was standing in for "htmx is
+ * up" and is both too slow (admin pages poll) and not actually a guarantee.
+ *
+ * htmx records its per-element state on `element['htmx-internal-data']` (v1 and v2), which only
+ * exists once the element has been processed. That is the exact signal "a click now is an htmx
+ * request".
+ */
+export async function waitForHtmxBound(page: Page, selector: string) {
+  await page.waitForFunction(
+    (sel) => {
+      const el = document.querySelector(sel) as (Element & Record<string, unknown>) | null;
+      return !!el && !!(window as any).htmx && !!el['htmx-internal-data'];
+    },
+    selector,
+  );
+}
+
+/**
  * Check if user is authenticated by checking for auth cookie
  */
 export async function isAuthenticated(page: Page): Promise<boolean> {

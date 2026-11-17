@@ -40,12 +40,14 @@ function inTablePosition(whole: string, offset: number): boolean {
 }
 
 /**
- * Per-trace map: distinct (lowercased) quoted token -> sequential slot (1, 2, 3 ...). Owned by one
- * RequestTrace, never exported. Slots carry no information about token content.
+ * Narrow capability handed in by a RequestTrace: look up / allocate a sequential slot for a
+ * lowercased quoted token. Returns only the slot number (0 = none, trace closed/full).
  */
-export type QuotedTokenSlots = Map<string, number>
+export interface QuotedTokenSlotAllocator {
+  allocateQuotedTokenSlot(lowercasedToken: string): number
+}
 
-function redactSqlFull(sql: string, slots?: QuotedTokenSlots): string {
+function redactSqlFull(sql: string, slots?: QuotedTokenSlotAllocator): string {
   const out = sql.replace(TOKEN_RE, (tok, offset: number, whole: string) => {
     const c = tok[0]!
     if (c === '-' && tok[1] === '-') return ' '
@@ -53,17 +55,12 @@ function redactSqlFull(sql: string, slots?: QuotedTokenSlots): string {
     if (c === "'" || ((c === 'x' || c === 'X') && tok[1] === "'")) return '?'
     if (c === '"') {
       if (TERMINATED_DQ_RE.test(tok) && inTablePosition(whole, offset)) return tok
-      // Fingerprint only: keep distinct quoted tokens (Drizzle column names) distinct without
-      // storing or hashing the raw text, which may be a string literal. Each distinct token
-      // (lowercased, so "email" / "EMAIL" group) gets the next sequential slot within this trace.
+      // Fingerprint only: keep distinct quoted tokens (Drizzle column names) distinct. Tokens are
+      // lowercased (so "email"/"EMAIL" group) and kept as keys in the trace-private slot map
+      // (never hashed, never exported); each distinct token gets the next sequential slot.
       if (slots) {
-        const key = tok.toLowerCase()
-        let n = slots.get(key)
-        if (n === undefined) {
-          n = slots.size + 1
-          slots.set(key, n)
-        }
-        return `?q${n}`
+        const n = slots.allocateQuotedTokenSlot(tok.toLowerCase())
+        return n > 0 ? `?q${n}` : '?q'
       }
       return '?'
     }
@@ -84,7 +81,7 @@ export function redactSql(sql: string): string {
 }
 
 /** Redacted SQL, lowercased, with `IN (?, ?, …)` collapsed. Groups duplicates / N+1 patterns. */
-export function fingerprintSql(sql: string, slots: QuotedTokenSlots): string {
+export function fingerprintSql(sql: string, slots: QuotedTokenSlotAllocator): string {
   const out = redactSqlFull(sql, slots)
   return (out.length > MAX_LABEL ? out.slice(0, MAX_LABEL) + '…' : out)
     .toLowerCase()

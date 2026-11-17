@@ -44,7 +44,7 @@ function servedBy(meta: Meta | undefined): string | undefined {
 }
 
 function baseEntry(trace: RequestTrace, sql: string, args: readonly unknown[], op: string) {
-  const fingerprint = fingerprintSql(sql, trace.quotedTokenSlots)
+  const fingerprint = fingerprintSql(sql, trace)
   return {
     entry: {
       kind: 'd1' as const,

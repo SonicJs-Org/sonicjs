@@ -63,10 +63,10 @@ export class RequestTrace {
   readonly salt: string = randomSalt()
   /**
    * Lowercased quoted token -> sequential slot, used to render `?q<n>` in fingerprints. Holds raw
-   * token text, so it is private to this trace and excluded from toJSON(). Quoted tokens are
-   * never hashed: the slot number carries no information about content.
+   * token text, so it is a true JS-private field: unreachable from outside the class and excluded
+   * from toJSON(). Reach it only via allocateQuotedTokenSlot(), which returns just the number.
    */
-  readonly quotedTokenSlots = new Map<string, number>()
+  readonly #quotedTokenSlots = new Map<string, number>()
   /** seq → salted hash of fingerprint + raw bound values. Private: excluded from toJSON(). */
   private readonly identityKeys = new Map<number, string>()
 
@@ -83,6 +83,20 @@ export class RequestTrace {
 
   currentSpan(): string {
     return this.spanStack[this.spanStack.length - 1] ?? 'handler'
+  }
+
+  /**
+   * Returns the sequential slot (1, 2, 3 ...) for a lowercased quoted token, allocating the next
+   * one on first sight. Returns 0 (no slot) for a NEW token once the trace is closed or full, so
+   * the map is bounded like `entries`. Never exposes the map or any token text.
+   */
+  allocateQuotedTokenSlot(lowercasedToken: string): number {
+    const existing = this.#quotedTokenSlots.get(lowercasedToken)
+    if (existing !== undefined) return existing
+    if (this.closed || this.entries.length >= this.maxEntries) return 0
+    const n = this.#quotedTokenSlots.size + 1
+    this.#quotedTokenSlots.set(lowercasedToken, n)
+    return n
   }
 
   /** Records an entry. Returns its seq, or 0 if dropped/closed. */

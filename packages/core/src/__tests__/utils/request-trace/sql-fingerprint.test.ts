@@ -16,7 +16,7 @@ describe('redactSql hardening', () => {
   ])('%s is fully redacted', (_n, sql) => {
     const out = redactSql(sql)
     expect(out).not.toMatch(/alice|tok123|deadbeef/)
-    expect(fingerprintSql(sql, new Map())).not.toMatch(/alice|tok123|deadbeef/)
+    expect(fingerprintSql(sql, new RequestTrace('GET', '/'))).not.toMatch(/alice|tok123|deadbeef/)
   })
   it('keeps a double-quoted table name after arbitrary whitespace', () => {
     const sql = 'SELECT * FROM            "users" WHERE id = 1'
@@ -64,11 +64,11 @@ describe('redactSql', () => {
 
 describe('fingerprintSql', () => {
   it('lowercases and collapses IN lists', () => {
-    expect(fingerprintSql('SELECT * FROM t WHERE id IN (?, ?, ?)', new Map())).toBe('select * from t where id in (?…)')
-    expect(fingerprintSql("SELECT * FROM t WHERE id IN (1, 2)", new Map())).toBe('select * from t where id in (?…)')
+    expect(fingerprintSql('SELECT * FROM t WHERE id IN (?, ?, ?)', new RequestTrace('GET', '/'))).toBe('select * from t where id in (?…)')
+    expect(fingerprintSql("SELECT * FROM t WHERE id IN (1, 2)", new RequestTrace('GET', '/'))).toBe('select * from t where id in (?…)')
   })
   it('keeps different double-quoted columns distinct without exposing raw text', () => {
-    const slots = new Map<string, number>()
+    const slots = new RequestTrace('GET', '/')
     const a = fingerprintSql('select "email" from "users" where id = ?', slots)
     const b = fingerprintSql('select "createdAt" from "users" where id = ?', slots)
     expect(a).not.toBe(b)
@@ -76,22 +76,22 @@ describe('fingerprintSql', () => {
     expect(a).not.toContain('email')
     expect(a).toContain('"users"')
     expect(redactSql('select "email" from "users"')).toBe('select ? from "users"')
-    expect(fingerprintSql("select 'secret', x'ab' from t", new Map())).not.toMatch(/secret|ab/)
+    expect(fingerprintSql("select 'secret', x'ab' from t", new RequestTrace('GET', '/'))).not.toMatch(/secret|ab/)
   })
   it('assigns sequential per-trace slots: same token (any case) same slot, distinct tokens distinct', () => {
-    const slots = new Map<string, number>()
+    const slots = new RequestTrace('GET', '/')
     expect(fingerprintSql('select "email", "Name" from t where "EMAIL" = ?', slots)).toBe('select ?q1, ?q2 from t where ?q1 = ?')
     expect(fingerprintSql('select "name", "other" from t', slots)).toBe('select ?q2, ?q3 from t')
     // fresh trace state restarts numbering
-    expect(fingerprintSql('select "other" from t', new Map())).toBe('select ?q1 from t')
+    expect(fingerprintSql('select "other" from t', new RequestTrace('GET', '/'))).toBe('select ?q1 from t')
   })
   it('slots depend only on first-seen order, never on content', () => {
-    expect(fingerprintSql('select "alice@example.com" from t', new Map())).toBe(fingerprintSql('select "bob@example.com" from t', new Map()))
+    expect(fingerprintSql('select "alice@example.com" from t', new RequestTrace('GET', '/'))).toBe(fingerprintSql('select "bob@example.com" from t', new RequestTrace('GET', '/')))
   })
   it('trace export contains slot placeholders but never raw quoted tokens or the map', () => {
     const t = new RequestTrace('GET', '/')
     const sql = 'select "alice@example.com", "TopSecretCol" from "users" where "alice@example.com" = ?'
-    const fingerprint = fingerprintSql(sql, t.quotedTokenSlots)
+    const fingerprint = fingerprintSql(sql, t)
     t.record({
       kind: 'd1', op: 'all', label: redactSql(sql), fingerprint, tables: extractTables(sql),
       params: [], startMs: 0, durationMs: 1, cache: null,
@@ -102,9 +102,19 @@ describe('fingerprintSql', () => {
     expect(json).not.toMatch(/alice|example\.com|topsecret/i)
     expect(json).not.toContain(t.salt)
     expect(json).not.toContain('quotedTokenSlots')
+    expect(Object.keys(t)).not.toContain('quotedTokenSlots')
+    expect(JSON.stringify(Object.getOwnPropertyNames(t))).not.toMatch(/quoted/i)
+  })
+  it('stops allocating new slots once the trace is full or closed; known tokens keep theirs', () => {
+    const t = new RequestTrace('GET', '/', 1)
+    expect(t.allocateQuotedTokenSlot('"a"')).toBe(1)
+    t.record({ kind: 'd1', op: 'all', label: '', fingerprint: '', tables: [], params: [], startMs: 0, durationMs: 1, cache: null })
+    expect(t.allocateQuotedTokenSlot('"b"')).toBe(0)
+    expect(t.allocateQuotedTokenSlot('"a"')).toBe(1)
+    expect(fingerprintSql('select "c" from t', t)).toBe('select ?q from t')
   })
   it('collapses whitespace', () => {
-    expect(fingerprintSql('SELECT 1\n  FROM   t', new Map())).toBe('select ? from t')
+    expect(fingerprintSql('SELECT 1\n  FROM   t', new RequestTrace('GET', '/'))).toBe('select ? from t')
   })
 })
 
@@ -170,9 +180,9 @@ describe('identityKey', () => {
   it('distinguishes inline literals via raw sql even though the fingerprint is identical', () => {
     const a = 'SELECT * FROM t WHERE id = 1'
     const b = 'SELECT * FROM t WHERE id = 2'
-    expect(fingerprintSql(a, new Map())).toBe(fingerprintSql(b, new Map()))
-    expect(identityKey(fingerprintSql(a, new Map()), [], 's', a)).not.toBe(identityKey(fingerprintSql(b, new Map()), [], 's', b))
-    expect(identityKey(fingerprintSql(a, new Map()), [], 's', a)).toBe(identityKey(fingerprintSql(a, new Map()), [], 's', a))
+    expect(fingerprintSql(a, new RequestTrace('GET', '/'))).toBe(fingerprintSql(b, new RequestTrace('GET', '/')))
+    expect(identityKey(fingerprintSql(a, new RequestTrace('GET', '/')), [], 's', a)).not.toBe(identityKey(fingerprintSql(b, new RequestTrace('GET', '/')), [], 's', b))
+    expect(identityKey(fingerprintSql(a, new RequestTrace('GET', '/')), [], 's', a)).toBe(identityKey(fingerprintSql(a, new RequestTrace('GET', '/')), [], 's', a))
   })
   it('hashes ArrayBuffer / typed-array blobs by bytes', () => {
     const fp = 'x'

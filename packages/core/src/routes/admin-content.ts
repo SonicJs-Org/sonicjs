@@ -25,6 +25,8 @@ import { loadCollectionConfigs, getVisibleCollections } from '../services/collec
 const ALL_VIEW_COUNT_WINDOW_PAGES = 10
 // Largest page size the list UI offers (pageSizeOptions in admin-content-list.template.ts).
 const MAX_PAGE_SIZE = 100
+// Deepest row offset a list page may request (OFFSET cost is linear in rows skipped).
+const MAX_LIST_OFFSET = 10_000
 
 /** Parse an integer query param, falling back on garbage and clamping to [min, max]. */
 function clampInt(raw: string | null | undefined, fallback: number, min: number, max: number): number {
@@ -484,9 +486,9 @@ adminContentRoutes.get('/', async (c) => {
 
     // Get query parameters
     // Clamp paging input: a non-positive or huge `limit`/`page` would otherwise produce a negative
-    // offset / count cap (an unbounded count) or an arbitrarily large page.
-    const page = clampInt(url.searchParams.get('page'), 1, 1, 100_000)
+    // offset / count cap (an unbounded count). The All view additionally caps its depth below.
     const limit = clampInt(url.searchParams.get('limit'), 20, 1, MAX_PAGE_SIZE)
+    const page = clampInt(url.searchParams.get('page'), 1, 1, 100_000)
     // The filter dropdown posts `model`, but the content form's cancel link and the
     // post-save redirects below send `collection` instead. Accept both, or saving an item
     // drops the user on an unfiltered list rather than the collection they were editing.
@@ -612,15 +614,26 @@ adminContentRoutes.get('/', async (c) => {
       // count is capped to a window ahead of the current page: an exact COUNT(*) scans every
       // document on each load, which on telemetry-heavy installs tripped D1's per-10s resource limit.
       // When the cap is hit the UI shows "N+" and the window grows as the user pages forward.
+      // Depth cap: OFFSET cost is linear in rows skipped, so the All view serves at most
+      // MAX_LIST_OFFSET rows deep. Deeper requests land on the last reachable page, and the count
+      // stops at that page's end so the pager never links beyond it (no "Next" that reloads itself).
+      const allMaxPage = Math.floor(MAX_LIST_OFFSET / limit) + 1
+      const allPage = Math.min(page, allMaxPage)
+      const allOffset = (allPage - 1) * limit
       const repo = new DocumentRepository(db, reqTenant(c))
       const indexOpts = {
         typeIds: docTypes.map(dt => dt.id),
         status: (['published', 'draft', 'deleted'].includes(status) ? status : 'all') as 'all' | 'published' | 'draft' | 'deleted',
         search: search || undefined,
       }
-      const indexRows = await repo.listAdminIndex({ ...indexOpts, limit, offset })
-      const { count: totalItems, capped: totalItemsCapped } =
-        await repo.countAdminIndex(indexOpts, offset + limit * ALL_VIEW_COUNT_WINDOW_PAGES)
+      // docTypes is already filtered to visible (non-internal, non-auth) types. The repository treats
+      // an empty typeIds list as "no type filter", so with nothing visible we must not query at all —
+      // otherwise internal/auth-owned documents would be listed.
+      const hasVisibleTypes = indexOpts.typeIds.length > 0
+      const indexRows = hasVisibleTypes ? await repo.listAdminIndex({ ...indexOpts, limit, offset: allOffset }) : []
+      const { count: totalItems, capped: totalItemsCapped } = hasVisibleTypes
+        ? await repo.countAdminIndex(indexOpts, Math.min(allOffset + limit * ALL_VIEW_COUNT_WINDOW_PAGES, allMaxPage * limit))
+        : { count: 0, capped: false }
 
       const badge: Record<string, string> = {
         published: 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/20',
@@ -642,7 +655,7 @@ adminContentRoutes.get('/', async (c) => {
       })
 
       return c.html(renderContentListPage({
-        modelName, status, page, search, models, newContentCollections, contentItems,
+        modelName, status, page: allPage, search, models, newContentCollections, contentItems,
         totalItems,
         totalItemsCapped,
         itemsPerPage: limit,

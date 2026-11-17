@@ -209,7 +209,7 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
       const html = await list('&limit=100') // cap = 1000
       const total = footerTotal(html)
       expect(total).toMatch(/^\d+$/)
-      expect(Number(total)).toBeGreaterThanOrEqual(25)
+      expect(Number(total)).toBe(25)
       expect(badgeTotal(html)).toBe(total)
     })
 
@@ -239,6 +239,54 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
       expect(footerTotal(await list('&limit=2&page=-5'))).toBe('20+')
       expect(footerTotal(await list('&limit=2&page=0'))).toBe('20+')
     })
+
+    it('clamps very deep pages to the max offset instead of skipping millions of rows', async () => {
+      // limit=100 → last allowed page = 10_000 / 100 + 1 = 101; page=100000 clamps there.
+      const html = await list('&limit=100&page=100000')
+      expect(html).toContain('No content found') // offset 10_000 > 25 posts → empty page, not an error
+      // Footer "Showing 10001 to …": page clamped to 101 (offset 10_000), not 100000 (offset 9,999,900).
+      expect(html).toMatch(/Showing <span[^>]*>10001<\/span>/)
+    })
+
+    it('at the depth cap the pager offers no pages beyond the last reachable one; per-type lists are not capped', async () => {
+      // 10,150 more blog posts, inserted directly (the form path is too slow at this scale).
+      const ins = db.raw.prepare(
+        `INSERT INTO documents (id, root_id, type_id, type_version, version_number, is_current_draft, is_published, status,
+           parent_root_id, title, slug, tenant_id, locale, translation_group_id, data, metadata, created_at, updated_at)
+         VALUES (?, ?, 'blog_post', 1, 1, 1, 1, 'published', '', ?, ?, 'default', 'en', ?, '{}', '{}', ?, ?)`,
+      )
+      db.raw.transaction(() => {
+        for (let i = 0; i < 10_150; i++) {
+          const id = `bulk-${i}`
+          ins.run(id, id, `Bulk ${i}`, id, id, 1_000 + i, 1_000 + i)
+        }
+      })()
+
+      // limit=100 → last reachable All-view page = 10_000/100 + 1 = 101.
+      const html = await list('&limit=100&page=100000')
+      expect(html).toMatch(/Showing <span[^>]*>10001<\/span>/)
+      expect(footerTotal(html)).toBe('10100+') // count stops at the last reachable row
+      expect(html).not.toMatch(/[?&]page=10[2-9]\b/) // no Next / numbered links past page 101
+      expect(html).not.toMatch(/[?&]page=1[1-9]\d\b/)
+      expect(html).toMatch(/[?&]page=100\b/) // Previous still works
+
+      // The depth cap is All-view only: a per-type list still serves offset 10,100.
+      const typed = await (await app.request('/admin/content?model=blog_post&limit=100&page=102')).text()
+      expect(typed).toMatch(/Showing <span[^>]*>10101<\/span>/)
+      expect(typed).toContain('Bulk ')
+    })
+
+    it('all-view lists nothing when no visible document types remain (never internal ones)', async () => {
+    await createPost('hidden-when-internal')
+    // Mark every type internal: the registry then yields no visible types. An empty type filter used
+    // to mean "unrestricted" and listed every document, internal/auth-owned ones included.
+    db.raw.prepare(`UPDATE document_types SET settings = json_set(COALESCE(settings,'{}'), '$.internal', json('true'))`).run()
+    const res = await app.request('/admin/content?model=all')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).not.toContain('Post hidden-when-internal')
+    expect(html).toContain('No content found')
+  })
   })
 
   it('does NOT offer internal/auth-owned types as content models in the filter dropdown', async () => {

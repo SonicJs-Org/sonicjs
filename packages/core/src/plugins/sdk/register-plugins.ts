@@ -11,7 +11,7 @@
  * Hosts call:
  *   const reg = registerPlugins(app, [pluginA, pluginB], { hookSystem, env, ... })
  *   // ...
- *   await reg.boot(env)   // first-request lazy wire
+ *   await reg.boot(env, c.executionCtx)   // first-request lazy wire
  *
  * What this fn does, in order:
  *   1. Validate each plugin (id, semver, dep references) — throws on hard errors
@@ -128,8 +128,15 @@ export interface PluginsRegistry {
   /**
    * Lazy wire pass — call from the first-request middleware. Idempotent
    * (subsequent calls return the cached result of the first run).
+   *
+   * Pass `executionCtx` (the Cloudflare `ExecutionContext` for the calling
+   * request) so the underlying wiring promise's I/O context can be extended
+   * via `waitUntil()` past that request's own response. Without it, concurrent
+   * first-touch requests on a cold isolate awaiting this same cached promise
+   * can hit "This promise was created by a request that has since ended" —
+   * see sonicjs core issue #1194.
    */
-  boot(env?: Record<string, unknown>): Promise<WireResult>
+  boot(env?: Record<string, unknown>, executionCtx?: { waitUntil?(promise: Promise<unknown>): void }): Promise<WireResult>
 }
 
 // ── Main entry ───────────────────────────────────────────────────────────────
@@ -210,10 +217,20 @@ export function registerPlugins(
 
   // ── 6. Lazy boot (wire) — one-shot
   let wirePromise: Promise<WireResult> | undefined
-  const boot = (envOverride?: Record<string, unknown>): Promise<WireResult> => {
+  const boot = (
+    envOverride?: Record<string, unknown>,
+    executionCtx?: { waitUntil?(promise: Promise<unknown>): void }
+  ): Promise<WireResult> => {
     if (!wirePromise) {
       const env = envOverride ?? host.env ?? {}
       wirePromise = wireRegisteredPlugins(list, { hooks: host.hookSystem, env }, { strict: host.strict })
+      // Extend the creating request's I/O context so the wiring promise can
+      // settle even after that request's own response has been sent (#1194).
+      // Also extend `background` (the fire-and-forget DB reflection/pruning
+      // work inside wireRegisteredPlugins) — it settles after wirePromise
+      // does, so it needs its own waitUntil registration too.
+      executionCtx?.waitUntil?.(wirePromise.catch(() => {}))
+      executionCtx?.waitUntil?.(wirePromise.then((r) => r.background).catch(() => {}))
     }
     return wirePromise
   }

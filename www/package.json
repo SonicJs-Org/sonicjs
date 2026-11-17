@@ -23,11 +23,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sonicjs/sonicjs.git",
+    "url": "git+https://github.com/SonicJs-Org/sonicjs.git",
     "directory": "www"
   },
   "bugs": {
-    "url": "https://github.com/sonicjs/sonicjs/issues"
+    "url": "https://github.com/SonicJs-Org/sonicjs/issues"
   },
   "homepage": "https://sonicjs.com",
   "browserslist": "defaults, not ie <= 11",

@@ -110,7 +110,7 @@ export default function RootLayout({
                     url: 'https://sonicjs.com/sonicjs-favicon.png',
                   },
                   sameAs: [
-                    'https://github.com/lane711/sonicjs',
+                    'https://github.com/SonicJs-Org/sonicjs',
                     'https://twitter.com/nicholasbarger',
                     'https://discord.gg/SV4Mqsss8f',
                   ],

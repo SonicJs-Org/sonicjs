@@ -108,7 +108,7 @@ export default async function BlogPage() {
           </p>
           <div className="mt-6 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <a
-              href="https://github.com/lane711/sonicjs"
+              href="https://github.com/SonicJs-Org/sonicjs"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 rounded-lg bg-white px-6 py-3 font-semibold text-emerald-600 transition-colors hover:bg-emerald-50"

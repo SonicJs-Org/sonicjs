@@ -400,4 +400,4 @@ MIT - See [LICENSE](../LICENSE) for details.
 
 ---
 
-**Note**: This changelog represents a comprehensive history derived from 3,683+ commits across 7 years of development (2018-2025). For detailed commit history, see the [GitHub repository](https://github.com/lane711/sonicjs).
+**Note**: This changelog represents a comprehensive history derived from 3,683+ commits across 7 years of development (2018-2025). For detailed commit history, see the [GitHub repository](https://github.com/SonicJs-Org/sonicjs).

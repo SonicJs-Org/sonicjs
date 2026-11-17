@@ -39,7 +39,7 @@ function inTablePosition(whole: string, offset: number): boolean {
   return TABLE_KEYWORD_TAIL_RE.test(whole.slice(Math.max(0, j - 7), j))
 }
 
-function redactSqlFull(sql: string, dqHash = false): string {
+function redactSqlFull(sql: string, dqSalt?: string): string {
   const out = sql.replace(TOKEN_RE, (tok, offset: number, whole: string) => {
     const c = tok[0]!
     if (c === '-' && tok[1] === '-') return ' '
@@ -48,10 +48,13 @@ function redactSqlFull(sql: string, dqHash = false): string {
     if (c === '"') {
       if (TERMINATED_DQ_RE.test(tok) && inTablePosition(whole, offset)) return tok
       // Fingerprint only: keep distinct quoted tokens (Drizzle column names) distinct without
-      // storing the raw text, which may be a string literal.
-      if (dqHash) {
+      // storing the raw text, which may be a string literal. Salted per trace so the exported
+      // hash can't be brute-forced / compared across requests; lowercased so identifier case
+      // variants ("email" vs "EMAIL") still group.
+      if (dqSalt !== undefined) {
         const h = new Hasher()
-        h.str(tok)
+        h.str(dqSalt)
+        h.str(tok.toLowerCase())
         return `?q${h.digest()}`
       }
       return '?'
@@ -73,8 +76,8 @@ export function redactSql(sql: string): string {
 }
 
 /** Redacted SQL, lowercased, with `IN (?, ?, …)` collapsed. Groups duplicates / N+1 patterns. */
-export function fingerprintSql(sql: string): string {
-  const out = redactSqlFull(sql, true)
+export function fingerprintSql(sql: string, salt = ''): string {
+  const out = redactSqlFull(sql, salt)
   return (out.length > MAX_LABEL ? out.slice(0, MAX_LABEL) + '…' : out)
     .toLowerCase()
     .replace(/\bin\s*\(\s*\?(?:\s*,\s*\?)*\s*\)/g, 'in (?…)')

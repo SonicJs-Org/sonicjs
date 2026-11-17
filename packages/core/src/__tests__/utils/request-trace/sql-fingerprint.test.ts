@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import {
   KNOWN_KEY_SEGMENTS, extractTables, fingerprintSql, identityKey, maskParams, redactKey, redactSql, sqlOp,
 } from '../../../utils/request-trace/sql-fingerprint'
+import { RequestTrace } from '../../../utils/request-trace/trace-context'
 
 describe('redactSql hardening', () => {
   it.each([
@@ -75,6 +76,25 @@ describe('fingerprintSql', () => {
     expect(a).toContain('"users"')
     expect(redactSql('select "email" from "users"')).toBe('select ? from "users"')
     expect(fingerprintSql("select 'secret', x'ab' from t")).not.toMatch(/secret|ab/)
+  })
+  it('salts quoted-token hashes per trace: stable within a salt, unlinkable across salts', () => {
+    const sql = 'select "alice@example.com" from "users"'
+    expect(fingerprintSql(sql, 'salt-a')).toBe(fingerprintSql(sql, 'salt-a'))
+    expect(fingerprintSql(sql, 'salt-a')).not.toBe(fingerprintSql(sql, 'salt-b'))
+    expect(fingerprintSql(sql, 'salt-a')).not.toContain('alice')
+  })
+  it('exported fingerprint differs across RequestTrace instances and salt is never exported', () => {
+    const t1 = new RequestTrace('GET', '/')
+    const t2 = new RequestTrace('GET', '/')
+    expect(t1.salt).not.toBe(t2.salt)
+    const sql = 'select "alice@example.com" from "users"'
+    expect(fingerprintSql(sql, t1.salt)).toBe(fingerprintSql(sql, t1.salt))
+    expect(fingerprintSql(sql, t1.salt)).not.toBe(fingerprintSql(sql, t2.salt))
+    expect(JSON.stringify(t1.toJSON())).not.toContain(t1.salt)
+  })
+  it('quoted tokens differing only by case share a fingerprint hash', () => {
+    expect(fingerprintSql('select "email" from t', 's')).toBe(fingerprintSql('select "EMAIL" from t', 's'))
+    expect(fingerprintSql('select 1 from "email" where "email" = ?', 's')).toBe(fingerprintSql('select 1 from "EMAIL" where "EMAIL" = ?', 's'))
   })
   it('collapses whitespace', () => {
     expect(fingerprintSql('SELECT 1\n  FROM   t')).toBe('select ? from t')

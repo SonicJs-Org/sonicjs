@@ -44,6 +44,12 @@ export interface SpanRecord {
 
 export type TraceEntryInput = Omit<TraceEntry, 'seq' | 'span' | 'costMs'> & { costMs?: number }
 
+function randomSalt(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 export class RequestTrace {
   readonly t0 = performance.now()
   entries: TraceEntry[] = []
@@ -51,8 +57,12 @@ export class RequestTrace {
   spanStack: string[] = []
   dropped = 0
   closed = false
-  /** Per-request random salt for identity keys. Never rendered or exported. */
-  readonly salt: string = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+  /**
+   * Per-request random salt for identity keys AND hashed quoted tokens in fingerprints.
+   * Never rendered or exported (absent from toJSON()): an exported `?q<hash>` is useless for
+   * confirming a guessed literal without it.
+   */
+  readonly salt: string = randomSalt()
   /** seq → salted hash of fingerprint + raw bound values. Private: excluded from toJSON(). */
   private readonly identityKeys = new Map<number, string>()
 

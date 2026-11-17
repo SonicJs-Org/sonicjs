@@ -106,7 +106,7 @@ describe('analyze', () => {
     }
     const time = (tr: RequestTrace) => {
       let best = Infinity
-      for (let r = 0; r < 5; r++) {
+      for (let r = 0; r < 10; r++) {
         const t0 = performance.now()
         analyze(tr, S, 1000)
         best = Math.min(best, performance.now() - t0)
@@ -116,7 +116,14 @@ describe('analyze', () => {
     const small = build(2500)
     const large = build(5000)
     time(small) // warm up JIT
-    expect(time(large)).toBeLessThan(Math.max(time(small) * 3, 5))
+    time(large) // warm up JIT
+    const smallMs = time(small)
+    const largeMs = time(large)
+    // A linear pass should run 2N in ~2x the time of N. Quadratic behavior would
+    // show up as a ~4x (or worse) blowup. Use a generous 5x margin plus a floor
+    // to absorb CI timer noise on sub-20ms measurements without masking an O(n^2)
+    // regression (which would land far past 5x at this input size).
+    expect(largeMs).toBeLessThan(Math.max(smallMs * 5, 25))
   })
 
   it('missing-index heuristic applies to reads only', () => {

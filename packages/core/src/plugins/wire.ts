@@ -92,6 +92,16 @@ export interface WireResult {
   booted: string[]
   /** Per-plugin errors (wiring never throws; one bad plugin can't break boot). */
   errors: Array<{ plugin: string; phase: 'subscribe' | 'onBoot'; error: unknown }>
+  /**
+   * The best-effort DB reflection/pruning work (Phase C/D below), kept
+   * separate from the main result so callers that only need subscribed hooks
+   * and booted plugins aren't forced to wait on it. Always resolves (never
+   * rejects — internal errors are already caught and logged). Callers that
+   * extend the wiring promise's lifetime via `waitUntil` (see
+   * `createPluginWirer`) should extend THIS too, or the D1 writes can still
+   * get dropped even though the main wiring settled first.
+   */
+  background: Promise<unknown>
 }
 
 /**
@@ -107,7 +117,7 @@ export async function wireRegisteredPlugins(
   context: PluginBootContext,
   options: WireOptions = {}
 ): Promise<WireResult> {
-  const result: WireResult = { subscribed: 0, booted: [], errors: [] }
+  const result: WireResult = { subscribed: 0, booted: [], errors: [], background: Promise.resolve() }
 
   // Sort by dependencies (default on). Plugins with no `dependencies` keep their
   // original position; v3 plugins that declare deps are moved after them.
@@ -165,16 +175,21 @@ export async function wireRegisteredPlugins(
   // Phase C (best-effort): reflect wired plugin list into the `plugins` DB table
   // so the admin view stays in sync with what's actually running. Errors are
   // non-fatal — DB unavailable during cron-first boot should not break wiring.
+  // Deliberately NOT awaited here (so `result` resolves without waiting on DB
+  // writes) — tracked via `result.background` instead so a caller extending
+  // the wiring promise's lifetime (see `createPluginWirer`) can extend this
+  // too, rather than it being silently dropped when the creating request ends.
   if (context.env?.DB) {
     const db = context.env.DB as D1DatabaseLike
-    reflectWiredPlugins(valid, db).catch((err) => {
+    const reflectDone = reflectWiredPlugins(valid, db).catch((err) => {
       console.warn('[plugins] DB reflection failed (non-fatal):', err)
     })
     // Phase D (best-effort): deactivate user plugins that were removed from config.
     // Any non-core active plugin document not in the current wired list is stale.
-    pruneStaleUserPlugins(valid, db).catch((err) => {
+    const pruneDone = pruneStaleUserPlugins(valid, db).catch((err) => {
       console.warn('[plugins] Stale plugin pruning failed (non-fatal):', err)
     })
+    result.background = Promise.all([reflectDone, pruneDone])
   }
 
   return result
@@ -316,7 +331,11 @@ export function createPluginWirer(
       // Extend the creating request's I/O context so the promise can settle
       // even after that request's own response has been sent, and so other
       // requests racing to await it on a cold isolate don't get it dropped.
+      // Also extend `background` (the fire-and-forget DB reflection/pruning
+      // work) — it settles after `started` does, so it needs its own
+      // waitUntil registration or it can still get dropped.
       waitUntil?.(started.catch(() => {}))
+      waitUntil?.(started.then((r) => r.background).catch(() => {}))
     }
     return started
   }

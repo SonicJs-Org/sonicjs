@@ -11,7 +11,7 @@
  * Hosts call:
  *   const reg = registerPlugins(app, [pluginA, pluginB], { hookSystem, env, ... })
  *   // ...
- *   await reg.boot(env)   // first-request lazy wire
+ *   await reg.boot(env, c.executionCtx)   // first-request lazy wire
  *
  * What this fn does, in order:
  *   1. Validate each plugin (id, semver, dep references) — throws on hard errors
@@ -226,7 +226,11 @@ export function registerPlugins(
       wirePromise = wireRegisteredPlugins(list, { hooks: host.hookSystem, env }, { strict: host.strict })
       // Extend the creating request's I/O context so the wiring promise can
       // settle even after that request's own response has been sent (#1194).
+      // Also extend `background` (the fire-and-forget DB reflection/pruning
+      // work inside wireRegisteredPlugins) — it settles after wirePromise
+      // does, so it needs its own waitUntil registration too.
       executionCtx?.waitUntil?.(wirePromise.catch(() => {}))
+      executionCtx?.waitUntil?.(wirePromise.then((r) => r.background).catch(() => {}))
     }
     return wirePromise
   }

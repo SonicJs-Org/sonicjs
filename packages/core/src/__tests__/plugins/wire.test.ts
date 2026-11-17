@@ -142,19 +142,39 @@ describe('createPluginWirer (once-guard)', () => {
   // wrong (it doesn't fix cross-request drops, since those are later
   // requests, not the creating one) and callers without a waitUntil at all
   // must keep working unchanged.
-  it('extends only the creating call’s waitUntil, not later concurrent callers’', async () => {
-    const wire = createPluginWirer([{ name: 'p' }], ctx)
-    const extended: string[] = []
+  //
+  // Uses a deferred `onBoot` (rather than a plugin with no onBoot at all) so
+  // the registered promise is observably still pending when waitUntil
+  // receives it — proving the wiring's real I/O lifetime is tracked, not a
+  // promise that's already a no-op by the time anyone could observe it.
+  it('extends only the creating call’s waitUntil, with promises that track the real pending wiring work', async () => {
+    let release: () => void = () => {}
+    const pending = new Promise<void>((resolve) => { release = resolve })
+    const plugin: WirablePlugin = { name: 'p', onBoot: async () => { await pending } }
+    const wire = createPluginWirer([plugin], ctx)
 
-    const first = wire((p) => { extended.push('first'); void p })
-    const second = wire((p) => { extended.push('second'); void p })
-    const third = wire((p) => { extended.push('third'); void p })
+    const callers: string[] = []
+    const registered: Promise<unknown>[] = []
+    const first = wire((p) => { callers.push('first'); registered.push(p) })
+    const second = wire((p) => { callers.push('second'); registered.push(p) })
+    const third = wire((p) => { callers.push('third'); registered.push(p) })
 
     expect(first).toBe(second)
     expect(first).toBe(third)
-    expect(extended).toEqual(['first'])
+    // Only the creator's waitUntil fires — but it fires twice: once for the
+    // main wiring promise, once for the background DB-reflection work.
+    expect(callers).toEqual(['first', 'first'])
+    expect(registered).toHaveLength(2)
 
+    let settled = false
+    void registered[0].then(() => { settled = true })
+    await Promise.resolve()
+    expect(settled).toBe(false) // onBoot hasn't resolved yet — still pending
+
+    release()
     await first
+    await Promise.resolve()
+    expect(settled).toBe(true)
   })
 
   it('works with no waitUntil argument at all (back-compat)', async () => {

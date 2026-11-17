@@ -94,7 +94,7 @@ describe('analyze', () => {
     expect(found[0]!.impactMs).toBe(10)
   })
 
-  it('cache-miss-db analysis scales linearly (2N within ~3x of N)', () => {
+  it('cache-miss-db analysis scales sub-quadratically (4x input < 8x time)', () => {
     const build = (n: number) => {
       const tr = new RequestTrace('GET', '/', n * 2 + 10)
       t = tr
@@ -106,24 +106,23 @@ describe('analyze', () => {
     }
     const time = (tr: RequestTrace) => {
       let best = Infinity
-      for (let r = 0; r < 10; r++) {
+      for (let r = 0; r < 15; r++) {
         const t0 = performance.now()
         analyze(tr, S, 1000)
         best = Math.min(best, performance.now() - t0)
       }
       return best
     }
-    const small = build(2500)
-    const large = build(5000)
+    const small = build(1500)
+    const large = build(6000)
     time(small) // warm up JIT
-    time(large) // warm up JIT
-    const smallMs = time(small)
+    time(large)
+    // Best-of-15 filters scheduler noise. O(n) gives ~4x for 4x input, O(n^2) ~16x.
+    // 8x sits midway (log-scale) so noise has headroom but a quadratic loop fails reliably.
+    // Floor of 1ms on the base avoids a divide-by-timer-resolution false failure.
+    const smallMs = Math.max(time(small), 1)
     const largeMs = time(large)
-    // A linear pass should run 2N in ~2x the time of N. Quadratic behavior would
-    // show up as a ~4x (or worse) blowup. Use a generous 5x margin plus a floor
-    // to absorb CI timer noise on sub-20ms measurements without masking an O(n^2)
-    // regression (which would land far past 5x at this input size).
-    expect(largeMs).toBeLessThan(Math.max(smallMs * 5, 25))
+    expect(largeMs).toBeLessThan(smallMs * 8)
   })
 
   it('missing-index heuristic applies to reads only', () => {

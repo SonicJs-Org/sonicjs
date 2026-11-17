@@ -945,6 +945,7 @@ describe('CacheService.invalidate with a lagging KV list()', () => {
     memoryEnabled: false,
     namespace: 'lagtest',
     version: 'v1',
+    invalidateOn: [],
   }
 
   it('deletes keys this isolate just wrote even though list() does not show them', async () => {

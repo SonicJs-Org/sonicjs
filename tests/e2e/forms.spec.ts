@@ -526,7 +526,7 @@ test.describe("Source: 53-forms-as-content.spec.ts", () => {
       // that only exists once the collections list is painted (the page is server-rendered; no
       // `networkidle` — admin pages poll and never go idle).
       await expect(page.locator('h1').first()).toContainText('Collections');
-      await expect(page.locator('a[href^="/admin/collections/"]').first()).toBeVisible();
+      await expect(page.locator('tbody tr').first()).toBeVisible();
 
       // The shadow collection name is "form_{testFormName}" and display name ends with "(Form)"
       const body = page.locator('body');

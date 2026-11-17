@@ -106,18 +106,20 @@ test.describe('Redirect Management @plugins', () => {
     const row = page.locator(`[data-source="${source}"]`)
     await row.locator('button', { hasText: 'Delete' }).click()
 
-    // Confirm in the <dialog> element
-    // The dialog issues a bare fetch(DELETE). Wait for that response: navigating away while it is
-    // still in flight aborts the request and leaves the row in place.
+    // Confirm in the <dialog> element.
+    // The dialog issues a bare fetch(DELETE) and, on success, calls window.location.reload(). Wait
+    // for the DELETE response, then for that reload's `load` event; issuing our own goto() would
+    // race the page's reload and can cancel it (or be cancelled by it).
     const deleteResponse = page.waitForResponse(
       (r) => r.request().method() === 'DELETE' && r.url().includes('/admin/redirects/')
     )
+    const reloaded = page.waitForEvent('load')
     await page.locator('#confirmDeleteBtn').click()
     expect((await deleteResponse).ok()).toBeTruthy()
+    await reloaded
 
-    // Row should be gone after page refresh
-    await page.goto('/admin/redirects')
-    await expect(page.locator(`[data-source="${source}"]`)).not.toBeVisible()
+    // Row should be gone from the reloaded page
+    await expect(page.locator(`[data-source="${source}"]`)).toHaveCount(0)
   })
 
   test('shows error for duplicate source URL', async ({ page }) => {

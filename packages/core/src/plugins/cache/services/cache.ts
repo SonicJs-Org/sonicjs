@@ -157,14 +157,17 @@ export interface CacheResult<T> {
 }
 
 /**
- * Main cache service with multi-tier support
- */
-/**
  * How long a freshly written KV key may be missing from `KVNamespace.list()`. Cloudflare documents
  * KV as eventually consistent (up to ~60s globally); keep a margin on top of that.
  */
 const KV_LIST_LAG_MS = 90_000
 
+/** Hard cap on tracked recent KV writes per isolate. */
+const MAX_RECENT_KV_WRITES = 500
+
+/**
+ * Main cache service with multi-tier support
+ */
 export class CacheService {
   private memoryCache: MemoryCache
   private config: CacheConfig
@@ -341,8 +344,9 @@ export class CacheService {
     // Delete from KV (Tier 2)
     if (this.config.kvEnabled && this.kvNamespace) {
       try {
+        const writtenAt = this.recentKvWrites.get(key)
         await this.kvNamespace.delete(key)
-        this.recentKvWrites.delete(key)
+        this.forgetKvWrite(key, writtenAt)
       } catch (error) {
         console.error('KV cache delete error:', error)
       }
@@ -398,7 +402,9 @@ export class CacheService {
         const deleted = new Set<string>()
         for (const key of list.keys) {
           if (regex.test(key.name)) {
+            const writtenAt = this.recentKvWrites.get(key.name)
             await this.kvNamespace.delete(key.name)
+            this.forgetKvWrite(key.name, writtenAt)
             deleted.add(key.name)
             count++
           }
@@ -408,10 +414,10 @@ export class CacheService {
         // that the listing did not show. Without this, invalidating right after a cache fill
         // (read list -> write item -> read list) leaves the stale entry in KV for the whole TTL.
         this.pruneRecentKvWrites()
-        for (const key of this.recentKvWrites.keys()) {
+        for (const [key, writtenAt] of [...this.recentKvWrites]) {
           if (!deleted.has(key) && regex.test(key)) {
             await this.kvNamespace.delete(key)
-            this.recentKvWrites.delete(key)
+            this.forgetKvWrite(key, writtenAt)
             count++
           }
         }
@@ -426,13 +432,29 @@ export class CacheService {
   private rememberKvWrite(key: string): void {
     this.recentKvWrites.set(key, Date.now())
     // Bound the map between invalidations on a write-heavy, never-invalidated namespace.
-    if (this.recentKvWrites.size > 500) this.pruneRecentKvWrites()
+    if (this.recentKvWrites.size > MAX_RECENT_KV_WRITES) this.pruneRecentKvWrites()
+  }
+
+  /**
+   * Drop a write marker only if it is unchanged since `writtenAt` was read, so a newer `set()`
+   * that raced with an in-flight delete keeps its marker.
+   */
+  private forgetKvWrite(key: string, writtenAt: number | undefined): void {
+    if (writtenAt !== undefined && this.recentKvWrites.get(key) === writtenAt) {
+      this.recentKvWrites.delete(key)
+    }
   }
 
   private pruneRecentKvWrites(): void {
     const cutoff = Date.now() - KV_LIST_LAG_MS
     for (const [key, at] of this.recentKvWrites) {
       if (at < cutoff) this.recentKvWrites.delete(key)
+    }
+    // Still over cap (write-heavy, nothing expired): evict oldest by write timestamp.
+    const excess = this.recentKvWrites.size - MAX_RECENT_KV_WRITES
+    if (excess > 0) {
+      const oldest = [...this.recentKvWrites].sort((a, b) => a[1] - b[1]).slice(0, excess)
+      for (const [key] of oldest) this.recentKvWrites.delete(key)
     }
   }
 

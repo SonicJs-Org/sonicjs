@@ -337,7 +337,7 @@ export default function HomePage() {
                 </>
               ),
               footer:
-                'We use semantic versioning. The schema applies automatically on first boot.',
+                'We use semantic versioning. Self-hosted schema changes apply automatically on boot; D1 deployments run migrations with Wrangler.',
             },
             {
               icon: ICONS.lockOpen,

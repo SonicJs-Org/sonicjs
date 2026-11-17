@@ -321,11 +321,11 @@ export function Navigation(props: React.ComponentPropsWithoutRef<'nav'>) {
     <nav {...props}>
       <ul role="list">
         <TopLevelNavItem href="/">Documentation</TopLevelNavItem>
-        <TopLevelNavItem href="https://github.com/lane711/sonicjs">GitHub</TopLevelNavItem>
-        <TopLevelNavItem href="https://github.com/lane711/sonicjs/discussions">Community</TopLevelNavItem>
+        <TopLevelNavItem href="https://github.com/SonicJs-Org/sonicjs">GitHub</TopLevelNavItem>
+        <TopLevelNavItem href="https://github.com/SonicJs-Org/sonicjs/discussions">Community</TopLevelNavItem>
         <li className="relative mb-3">
           <a
-            href="https://github.com/lane711/sonicjs"
+            href="https://github.com/SonicJs-Org/sonicjs"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-zinc-900 to-zinc-800 dark:from-zinc-800 dark:to-zinc-700 px-4 py-3 text-sm font-semibold text-white shadow-lg hover:shadow-xl transition-all hover:scale-105"

@@ -18,7 +18,7 @@
   // and in www/.dev.vars (gitignored) for local dev — never put them here.
   "vars": {
     "SMTP_HOST": "mail.privateemail.com",
-    "SMTP_PORT": "587",
+    "SMTP_PORT": "465",
     // Recipient + sender live here (not in the page) so the address is never published.
     "SUPPORT_INBOX": "hello@sonicjs.com",
     "SUPPORT_FROM": "hello@sonicjs.com"

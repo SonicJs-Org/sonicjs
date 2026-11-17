@@ -55,6 +55,7 @@ var p=document.getElementById('sjs-trace-panel');if(!p)return;
 function num(t){t=t.replace(/^\\s*×/,'').trim();if(t===''||t==='–')return NaN;return parseFloat(t)}
 function sortBy(th){
 var tb=th.closest('table').tBodies[0],i=th.cellIndex,d=th.dataset.dir==='asc'?-1:1;
+th.closest('table').querySelectorAll('th[data-col]').forEach(function(o){if(o!==th){o.removeAttribute('aria-sort');delete o.dataset.dir}});
 th.dataset.dir=d===1?'asc':'desc';th.setAttribute('aria-sort',d===1?'ascending':'descending');
 var groups=[],cur=null;
 Array.prototype.slice.call(tb.rows).forEach(function(r){

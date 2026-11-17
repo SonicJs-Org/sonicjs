@@ -58,12 +58,15 @@ describe('renderTracePanel', () => {
 function runSortScript(rows: Array<{ cells: string[]; parent?: string }>) {
   const tbody: any = { rows: [] as any[], appendChild(r: any) { this.rows = this.rows.filter((x: any) => x !== r); this.rows.push(r) } }
   tbody.rows = rows.map((r) => ({ cells: r.cells.map((t) => ({ textContent: t })), dataset: r.parent ? { parent: r.parent } : {}, label: r.cells[0] }))
-  const table = { tBodies: [tbody] }
+  const other: any = { dataset: { dir: 'asc' }, attrs: { 'aria-sort': 'ascending' }, removeAttribute(k: string) { delete this.attrs[k] } }
+  const headers: any[] = []
+  const table = { tBodies: [tbody], querySelectorAll: () => headers }
   const handlers: Array<() => void> = []
-  const th: any = { cellIndex: 0, dataset: {}, attrs: {}, closest: () => table, setAttribute(k: string, v: string) { this.attrs[k] = v }, addEventListener: (_e: string, h: () => void) => handlers.push(h) }
+  const th: any = { cellIndex: 0, dataset: {}, attrs: {}, closest: () => table, setAttribute(k: string, v: string) { this.attrs[k] = v }, removeAttribute(k: string) { delete this.attrs[k] }, addEventListener: (_e: string, h: () => void) => handlers.push(h) }
+  headers.push(th, other)
   const panel = { querySelectorAll: () => [th], querySelector: () => null }
   new Function('document', TRACE_SORT_SCRIPT)({ getElementById: () => panel })
-  return { click: (col = 0) => { th.cellIndex = col; handlers[0]!() }, order: () => tbody.rows.map((r: any) => r.label), th }
+  return { click: (col = 0) => { th.cellIndex = col; handlers[0]!() }, order: () => tbody.rows.map((r: any) => r.label), th, other }
 }
 
 describe('sort script', () => {
@@ -79,6 +82,13 @@ describe('sort script', () => {
     d.click()
     expect(d.th.dataset.dir).toBe('desc')
     expect(d.order()).toEqual(['20', '5', '1'])
+  })
+  it('clears aria-sort/dir from other headers when a new column is sorted', () => {
+    const d = runSortScript([{ cells: ['5'] }, { cells: ['1'] }])
+    d.click()
+    expect(d.th.attrs['aria-sort']).toBe('ascending')
+    expect(d.other.attrs['aria-sort']).toBeUndefined()
+    expect(d.other.dataset.dir).toBeUndefined()
   })
   it('keeps batch members attached to their parent, in original order', () => {
     const d = runSortScript(rows)

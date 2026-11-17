@@ -122,7 +122,7 @@ function SmallPrint() {
         &copy; SonicJs {new Date().getFullYear()}. All rights reserved.
       </p>
       <div className="flex gap-4">
-        <SocialLink href="https://github.com/lane711/sonicjs" icon={GitHubIcon}>
+        <SocialLink href="https://github.com/SonicJs-Org/sonicjs" icon={GitHubIcon}>
           Follow us on GitHub
         </SocialLink>
         <SocialLink href="https://discord.gg/8bMy6bv3sZ" icon={DiscordIcon}>

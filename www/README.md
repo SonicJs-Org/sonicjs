@@ -114,6 +114,6 @@ This documentation is part of the SonicJS project and is licensed under the MIT 
 
 ## Learn More
 
-- [SonicJS Repository](https://github.com/sonicjs/sonicjs)
+- [SonicJS Repository](https://github.com/SonicJs-Org/sonicjs)
 - [SonicJS Homepage](https://sonicjs.com)
-- [Report Issues](https://github.com/sonicjs/sonicjs/issues)
+- [Report Issues](https://github.com/SonicJs-Org/sonicjs/issues)

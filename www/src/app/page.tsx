@@ -337,7 +337,7 @@ export default function HomePage() {
                 </>
               ),
               footer:
-                'We use semantic versioning with automatic migrations, so upgrades stay boring.',
+                'We use semantic versioning. The schema applies automatically on first boot.',
             },
             {
               icon: ICONS.lockOpen,
@@ -572,7 +572,7 @@ DELETE /api/products/:id
 // Filtering, sorting, pagination built in
 GET /api/products?category=electronics&sort=-price&limit=20`}</pre>
           </div>
-          <div className="overflow-hidden rounded-2xl bg-white/5 ring-1 ring-cyan-500/30 lg:col-span-1">
+          <div className="flex flex-col overflow-hidden rounded-2xl bg-white/5 ring-1 ring-cyan-500/30 lg:col-span-1">
             <div className="flex items-center gap-3 border-b border-cyan-500/20 bg-cyan-500/10 px-4 py-3">
               <span className="size-2 rounded-full bg-cyan-400" />
               <span className="text-xs font-medium text-cyan-300">3 · Deploy</span>

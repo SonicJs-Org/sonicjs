@@ -8,6 +8,20 @@
  */
 
 import { CacheConfig, CacheStats, generateCacheKey } from './cache-config.js'
+import { getCurrentTrace, redactKey } from '../../../utils/request-trace'
+import type { CacheOutcome } from '../../../utils/request-trace'
+
+/** Report a cache lookup/store to the active request trace (no-op when none is active). */
+function traceCacheOp(op: 'get' | 'getWithSource' | 'set', key: string, startMs: number | undefined, cache: CacheOutcome): void {
+  if (startMs === undefined) return
+  const trace = getCurrentTrace()
+  if (!trace) return
+  const label = redactKey(key)
+  trace.record({
+    kind: 'cache', op, label, fingerprint: `${op} ${label}`, tables: [], params: [],
+    startMs, durationMs: trace.now() - startMs, cache,
+  })
+}
 
 /**
  * Cache entry with metadata
@@ -205,6 +219,7 @@ export class CacheService {
    * Get value from cache (tries memory first, then KV)
    */
   async get<T>(key: string): Promise<T | null> {
+    const traceStart = getCurrentTrace()?.now()
     this.stats.totalRequests++
 
     // Try memory cache first (Tier 1)
@@ -213,6 +228,7 @@ export class CacheService {
       if (memoryValue !== null) {
         this.stats.memoryHits++
         this.updateHitRate()
+        traceCacheOp('get', key, traceStart, 'hit:memory')
         return memoryValue
       }
       this.stats.memoryMisses++
@@ -231,6 +247,7 @@ export class CacheService {
           }
 
           this.updateHitRate()
+          traceCacheOp('get', key, traceStart, 'hit:kv')
           return kvValue as T
         }
         this.stats.kvMisses++
@@ -241,6 +258,7 @@ export class CacheService {
     }
 
     this.updateHitRate()
+    traceCacheOp('get', key, traceStart, 'miss')
     return null
   }
 
@@ -248,6 +266,7 @@ export class CacheService {
    * Get value from cache with source information
    */
   async getWithSource<T>(key: string): Promise<CacheResult<T>> {
+    const traceStart = getCurrentTrace()?.now()
     this.stats.totalRequests++
 
     // Try memory cache first (Tier 1)
@@ -256,6 +275,7 @@ export class CacheService {
       if (memoryValue !== null) {
         this.stats.memoryHits++
         this.updateHitRate()
+        traceCacheOp('getWithSource', key, traceStart, 'hit:memory')
 
         const entry = await this.getEntry<T>(key)
         return {
@@ -282,6 +302,7 @@ export class CacheService {
           }
 
           this.updateHitRate()
+          traceCacheOp('getWithSource', key, traceStart, 'hit:kv')
           return {
             data: kvValue as T,
             source: 'kv',
@@ -296,6 +317,7 @@ export class CacheService {
     }
 
     this.updateHitRate()
+    traceCacheOp('getWithSource', key, traceStart, 'miss')
     return {
       data: null,
       source: 'miss',
@@ -311,6 +333,7 @@ export class CacheService {
     value: T,
     customConfig?: Partial<CacheConfig>
   ): Promise<void> {
+    const traceStart = getCurrentTrace()?.now()
     const config = { ...this.config, ...customConfig }
 
     // Store in memory cache (Tier 1)
@@ -330,6 +353,7 @@ export class CacheService {
         console.error('KV cache write error:', error)
       }
     }
+    traceCacheOp('set', key, traceStart, null)
   }
 
   /**

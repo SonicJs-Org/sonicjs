@@ -24,9 +24,12 @@ export default defineConfig({
   maxFailures: ci ? 25 : 0,
   timeout: ci ? 120_000 : 90_000,
   // Playwright workers are I/O-bound on HTTP responses, but CF preview Workers have
-  // limited concurrency headroom. Measured runs show 3 workers causes early timeouts
-  // from Worker overload; keep 2 workers for the remote-preview path.
-  workers: ci ? 2 : 1,
+  // limited concurrency headroom. Measured runs show 3 workers-per-shard causes early
+  // timeouts from Worker overload. With 6 shards now sharing ONE preview deployment
+  // (bumped from 4 in the same change that lowered this), 2 workers/shard would raise
+  // total concurrent load against that single Worker from 4*2=8 to 6*2=12 — the wrong
+  // direction. Drop to 1 worker/shard on remote preview: 6*1=6 total, below the old 8.
+  workers: ci ? (remotePreview ? 1 : 2) : 1,
   outputDir: resolve(here, '../test-results'),
   reporter: [
     ['list'],

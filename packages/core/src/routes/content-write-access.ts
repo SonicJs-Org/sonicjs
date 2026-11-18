@@ -31,7 +31,7 @@ export async function contentWriteRefusal(
 
   const acl = new DocumentPermissionsService(db)
   const rbac = new RbacService(db)
-  const resource = `document_type:${docType.id}`
+  const resource = `document_type:${docType.name}`
   for (const permission of permissions) {
     const overrides = rootId ? await acl.getDocumentPermissions(rootId, principalSet, permission, tenantId) : []
     if (acl.isAllowedSync(principalSet, overrides, permission, docType.settings ?? {})) continue

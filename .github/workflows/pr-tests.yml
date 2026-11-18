@@ -521,6 +521,9 @@ jobs:
           include-hidden-files: false
 
   # Upload data with a trusted CLI; never execute the producer checkout or artifacts.
+  # NOTE: merge_group uploads are handled by flakiness-upload-merge-queue.yml (workflow_run
+  # trigger) to prevent untrusted code from accessing FLAKINESS_ACCESS_TOKEN — merge_group
+  # runs the workflow from the queued commit, which an attacker could modify.
   flakiness-upload:
     needs: [unit-tests, e2e-setup, e2e-shard, e2e-locked, e2e-local]
     # Upload only main history: pushes to main and PRs targeting main.
@@ -528,10 +531,12 @@ jobs:
     # are never executed: pull_request_target runs this trusted base workflow, the job
     # only reads artifact JSON with the pinned CLI from the base checkout, and passes
     # --project explicitly.
+    # merge_group excluded: handled separately via workflow_run trigger (see above).
     if: >
       always() &&
-      (github.ref == 'refs/heads/main' || github.base_ref == 'main' || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) &&
-      ((github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || needs.e2e-setup.result == 'success' || needs.e2e-local.result == 'success' || needs.e2e-local.result == 'failure')
+      github.event_name != 'merge_group' &&
+      (github.ref == 'refs/heads/main' || github.base_ref == 'main') &&
+      (needs.e2e-setup.result == 'success' || needs.e2e-local.result == 'success' || needs.e2e-local.result == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true
@@ -542,9 +547,7 @@ jobs:
       - name: Checkout trusted CLI runtime
         uses: actions/checkout@v4
         with:
-          # merge_group: never take the CLI from the queued commit (it may alter
-          # scripts/testing/flakiness-runtime); pin to the group's base commit instead.
-          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
           fetch-depth: 1
           sparse-checkout: scripts/testing/flakiness-runtime

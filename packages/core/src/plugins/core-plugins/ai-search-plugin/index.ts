@@ -21,6 +21,7 @@ import { definePlugin } from '../../sdk/define-plugin'
 import { AISearchService } from './services/ai-search'
 import { IndexManager } from './services/indexer'
 import adminRoutes from './routes/admin'
+import apiRoutes from './routes/api'
 import manifest from './manifest.json'
 
 export const aiSearchPlugin = definePlugin({

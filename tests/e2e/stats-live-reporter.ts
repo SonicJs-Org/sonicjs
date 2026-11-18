@@ -68,6 +68,8 @@ export default class StatsLiveReporter implements Reporter {
   private apiKey: string | undefined
   private statsUrl: string = ''
   private runId: string = ''
+  /** Whether /start actually created the run (vs returning an existing one) */
+  private runCreated: boolean = false
 
   /** Number of tests still expected per absolute file path. */
   private filePendingCount = new Map<string, number>()
@@ -77,7 +79,7 @@ export default class StatsLiveReporter implements Reporter {
    * All in-flight POST promises. Awaited in onEnd before sending /complete so
    * the run is not sealed before all file batches have landed.
    */
-  private pendingPosts: Promise<void>[] = []
+  private pendingPosts: Promise<unknown>[] = []
 
   onBegin(_config: FullConfig, rootSuite: Suite): void {
     this.apiKey = getApiKey()
@@ -150,6 +152,9 @@ export default class StatsLiveReporter implements Reporter {
       expected_total: expectedTotal,
       pr_number: prNumber,
       base_url: process.env.BASE_URL || null,
+    }).then(res => {
+      // Track whether /start actually created the run
+      this.runCreated = res?.created === true
     }).catch(err => console.warn('[stats-reporter] onBegin POST failed:', err))
     this.pendingPosts.push(startPost)
   }
@@ -209,32 +214,50 @@ export default class StatsLiveReporter implements Reporter {
   async onEnd(result: FullResult): Promise<void> {
     if (!this.apiKey || !this.runId) return
 
-    // Flush any files that never reached zero (e.g. tests skipped at runtime)
+    // FIRST: await all in-flight batches from onTestEnd before touching fileBuffer
+    // This prevents duplicate flushes if a flushFile was in progress when onEnd started
+    await Promise.allSettled(this.pendingPosts)
+    this.pendingPosts = []
+
+    // THEN: flush any files that never reached zero (e.g. tests skipped at runtime)
+    const finalFlushes: Promise<unknown>[] = []
     for (const [file, buf] of this.fileBuffer) {
       if (buf.length > 0) {
         const flushPost = this.flushFile(file).catch(err =>
           console.warn(`[stats-reporter] final flush failed for ${file}:`, err)
         )
-        this.pendingPosts.push(flushPost)
+        finalFlushes.push(flushPost)
       }
     }
 
-    // Await all in-flight batches before sealing the run.
-    await Promise.allSettled(this.pendingPosts)
+    // Await final flushes
+    await Promise.allSettled(finalFlushes)
 
     // Every non-passed outcome (failed, timedout, interrupted) is stored as 'failed'.
     const runStatus = result.status === 'passed' ? 'complete' : 'failed'
 
-    try {
-      await this.postJson(`/v1/playwright-runs/${encodeURIComponent(this.runId)}/complete`, {
-        finished_at: new Date().toISOString(),
-        duration_ms: result.duration ?? 0,
-        run_status: runStatus,
-      })
-      console.log(`✓ Live stats complete (${this.runId})`)
-    } catch (err) {
-      console.warn('[stats-reporter] /complete failed (non-fatal):', err)
+    // Call /complete with bounded retry (3 attempts, exponential backoff)
+    const completePayload = {
+      finished_at: new Date().toISOString(),
+      duration_ms: result.duration ?? 0,
+      run_status: runStatus,
     }
+
+    let lastError: unknown
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await this.postJson(`/v1/playwright-runs/${encodeURIComponent(this.runId)}/complete`, completePayload)
+        console.log(`✓ Live stats complete (${this.runId})${this.runCreated ? '' : ' [rejoined existing run]'}`)
+        return
+      } catch (err) {
+        lastError = err
+        if (attempt < 3) {
+          // Exponential backoff: 1s, 2s
+          await new Promise(r => setTimeout(r, 1000 * attempt))
+        }
+      }
+    }
+    console.warn('[stats-reporter] /complete failed after 3 attempts (non-fatal):', lastError)
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
@@ -250,7 +273,7 @@ export default class StatsLiveReporter implements Reporter {
     this.fileBuffer.delete(file)
   }
 
-  private async postJson(path: string, body: unknown): Promise<void> {
+  private async postJson(path: string, body: unknown): Promise<Record<string, unknown> | undefined> {
     // 10-second abort so an unresponsive stats server never stalls the e2e run.
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 10_000)
@@ -268,6 +291,7 @@ export default class StatsLiveReporter implements Reporter {
         const text = await res.text().catch(() => '')
         throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`)
       }
+      return await res.json().catch(() => ({})) as Record<string, unknown>
     } finally {
       clearTimeout(timer)
     }

@@ -705,13 +705,15 @@ test.describe("Source: 28-plugin-filters-search.spec.ts", () => {
     test('should filter plugins by status', async ({ page }) => {
       // The "Inactive" checkbox renders `disabled` whenever no plugin has that status
       // (admin-plugins-list.template.ts: `isDisabled = count === 0`), so the inactive half
-      // of this test needs a plugin parked there. qr-generator is non-core, inert while
-      // inactive, and untouched by any other E2E spec (including multi-tenant.spec.ts,
-      // which is a separate @lock-plugin-multi-tenant CI group run in parallel with this
-      // one) — multi-tenant was used here previously but that made this test and the
-      // multi-tenant group race on the same plugin's activation state. See issue #1205 /
-      // PR #1207 review.
-      expect(await setPluginStatus(page, 'qr-generator', 'inactive')).toBe(true)
+      // of this test needs a plugin parked there. contact-form is non-core, has NO plugin
+      // dependencies (unlike qr-generator, which declares a dependency on
+      // redirect-management and fails to install/deactivate standalone — caught by this
+      // test itself failing in CI, see PR #1207), is inert while inactive, and untouched
+      // by any other E2E spec (including multi-tenant.spec.ts, which is a separate
+      // @lock-plugin-multi-tenant CI group run in parallel with this one) — multi-tenant
+      // was used here previously but that made this test and the multi-tenant group race
+      // on the same plugin's activation state. See issue #1205 / PR #1207 review.
+      expect(await setPluginStatus(page, 'contact-form', 'inactive')).toBe(true)
       await page.reload()
 
       // Get total plugin count
@@ -742,14 +744,14 @@ test.describe("Source: 28-plugin-filters-search.spec.ts", () => {
 
       const inactivePlugins = await page.locator('.plugin-card:visible').count()
 
-      // This is what the `qr-generator` setup at the top of the test is for. The count was
+      // This is what the `contact-form` setup at the top of the test is for. The count was
       // read and then thrown away -- the only assertion over it was commented out -- so the
       // inactive half of "filter plugins by status" tested nothing.
       expect(inactivePlugins, 'inactive filter hid the plugin parked at inactive').toBeGreaterThan(0)
       for (const card of await page.locator('.plugin-card:visible').all()) {
         expect(await card.getAttribute('data-status')).toBe('inactive')
       }
-      await expect(page.locator('.plugin-card[data-name*="qr-generator" i]')).toBeVisible()
+      await expect(page.locator('.plugin-card[data-name*="contact-form" i]')).toBeVisible()
       expect(visiblePlugins + inactivePlugins).toBeLessThanOrEqual(totalPlugins)
 
       // Reset filter

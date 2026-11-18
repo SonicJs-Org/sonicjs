@@ -57,6 +57,7 @@ jobs:
         run: |
           bash scripts/lint-e2e-no-skip.sh
           bash scripts/lint-e2e-tags.sh
+          bash scripts/lint-e2e-lock-groups.sh
 
       - name: Run unit tests with coverage
         run: npm run test:cov

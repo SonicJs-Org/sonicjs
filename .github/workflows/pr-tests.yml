@@ -27,17 +27,56 @@ jobs:
       - name: Authorize
         run: echo 'Workflow authorized; fork code never receives deployment secrets.'
 
+  # ── merge_group provenance check ─────────────────────────────────────────────
+  # Entering the merge queue does not establish code provenance: a fork PR can be queued.
+  # For merge_group only, resolve the queued PR and report whether its head lives in THIS
+  # repository. Downstream trust conditions require same_repo == 'true' for merge_group.
+  # Fails closed: any parse/API problem yields same_repo=false (untrusted local path).
+  # No checkout, no secrets; push / pull_request_target steps are skipped (output empty).
+  merge-group-trust-check:
+    needs: authorize
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      same_repo: ${{ steps.check.outputs.same_repo }}
+    steps:
+      - name: Resolve queued PR head repository
+        id: check
+        if: github.event_name == 'merge_group'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.event.merge_group.head_ref }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::warning::$1; treating merge group as untrusted"; echo "same_repo=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          RE='^refs/heads/gh-readonly-queue/.+/pr-([0-9]+)-[0-9a-f]{40}$'
+          [[ "$HEAD_REF" =~ $RE ]] || fail "Cannot parse PR number from merge group head_ref"
+          PR="${BASH_REMATCH[1]}"
+          HEAD_REPO=$(gh api "repos/${REPO}/pulls/${PR}" --jq '.head.repo.full_name // ""') || fail "Could not look up PR #${PR}"
+          echo "Queued PR #${PR} head repo: '${HEAD_REPO}' (this repo: '${REPO}')"
+          if [ "$HEAD_REPO" = "$REPO" ]; then
+            echo "same_repo=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Queued PR #${PR} is not from ${REPO}; using secret-free local path"
+            echo "same_repo=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # ── Unit tests ───────────────────────────────────────────────────────────────
   # Runs in parallel with e2e-setup so CF resource allocation and unit tests
   # overlap rather than running serially on the critical path (saves ~2–3 min).
   unit-tests:
-    needs: authorize
+    needs: [authorize, merge-group-trust-check]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       # Approval does not make fork code trusted.
       # Rollout branch pushes, forks and Dependabot run the full suite locally without secrets.
-      TRUSTED_PREVIEW: ${{ github.actor != 'dependabot[bot]' && !(github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') && (github.event_name == 'push' || github.event_name == 'merge_group' || github.event.pull_request.head.repo.full_name == github.repository) }}
+      TRUSTED_PREVIEW: ${{ github.actor != 'dependabot[bot]' && !(github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') && (github.event_name == 'push' || (github.event_name == 'merge_group' && needs.merge-group-trust-check.outputs.same_repo == 'true') || github.event.pull_request.head.repo.full_name == github.repository) }}
       CI: 'true'
     steps:
       - name: Checkout code
@@ -98,11 +137,11 @@ jobs:
   # get the e2e-local path instead (no secrets required).
   # Runs in parallel with unit-tests; e2e-shard waits for both.
   e2e-setup:
-    needs: authorize
+    needs: [authorize, merge-group-trust-check]
     if: >
       github.actor != 'dependabot[bot]' &&
       !(github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') &&
-      (github.event_name == 'push' || github.event_name == 'merge_group' || github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'push' || (github.event_name == 'merge_group' && needs.merge-group-trust-check.outputs.same_repo == 'true') || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -446,9 +485,10 @@ jobs:
   # Runs the full suite locally with wrangler dev (no CF secrets required).
   # Waits for unit-tests to gate on type-check/lint/coverage first.
   e2e-local:
-    needs: unit-tests
+    needs: [unit-tests, merge-group-trust-check]
     if: >
       github.actor == 'dependabot[bot]' ||
+      (github.event_name == 'merge_group' && needs.merge-group-trust-check.outputs.same_repo != 'true') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') ||
       (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ubuntu-latest
@@ -530,7 +570,7 @@ jobs:
     if: >
       always() &&
       (github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.event_name == 'merge_group') &&
-      (needs.e2e-setup.result == 'success' || needs.e2e-local.result == 'success' || needs.e2e-local.result == 'failure')
+      (github.event_name == 'merge_group' || needs.e2e-setup.result == 'success' || needs.e2e-local.result == 'success' || needs.e2e-local.result == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true
@@ -541,6 +581,9 @@ jobs:
       - name: Checkout trusted CLI runtime
         uses: actions/checkout@v4
         with:
+          # merge_group: never take the CLI from the queued commit (it may alter
+          # scripts/testing/flakiness-runtime); pin to the group's base commit instead.
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.sha }}
           persist-credentials: false
           fetch-depth: 1
           sparse-checkout: scripts/testing/flakiness-runtime

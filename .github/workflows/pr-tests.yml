@@ -7,6 +7,13 @@ on:
     # PR1146 rollout: verify the head workflow with the secret-free local full suite.
     # Keep remote previews limited to trusted PRs and main/v3 pushes.
     branches: [main, v3, test/e2e-infrastructure-hardening]
+  merge_group:
+    # Required checks ("authorize", "Flakiness.io") must report on the merge queue's
+    # temporary merge commit, or queued PRs sit at AWAITING_CHECKS until the queue's
+    # check-response timeout and are never merged. merge_group carries no
+    # `event.pull_request`/`base_ref`; the conditions below that reference those
+    # already degrade safely to their push/internal-PR branches for this event.
+    types: [checks_requested]
 
 permissions:
   contents: read
@@ -30,7 +37,7 @@ jobs:
     env:
       # Approval does not make fork code trusted.
       # Rollout branch pushes, forks and Dependabot run the full suite locally without secrets.
-      TRUSTED_PREVIEW: ${{ github.actor != 'dependabot[bot]' && !(github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
+      TRUSTED_PREVIEW: ${{ github.actor != 'dependabot[bot]' && !(github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') && (github.event_name == 'push' || github.event_name == 'merge_group' || github.event.pull_request.head.repo.full_name == github.repository) }}
       CI: 'true'
     steps:
       - name: Checkout code
@@ -95,7 +102,7 @@ jobs:
     if: >
       github.actor != 'dependabot[bot]' &&
       !(github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') &&
-      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'push' || github.event_name == 'merge_group' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -522,7 +529,7 @@ jobs:
     # --project explicitly.
     if: >
       always() &&
-      (github.ref == 'refs/heads/main' || github.base_ref == 'main') &&
+      (github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.event_name == 'merge_group') &&
       (needs.e2e-setup.result == 'success' || needs.e2e-local.result == 'success' || needs.e2e-local.result == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 15

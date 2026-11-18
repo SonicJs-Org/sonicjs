@@ -363,7 +363,7 @@ jobs:
   #     activation state with plugin-core.spec.ts's "should filter plugins by
   #     status" test (no shared tag, just the same mutable global row), which is
   #     the same cross-group race by a different name. Fixed by switching that
-  #     test to toggle the inert, test-untouched `contact-form` plugin instead
+  #     test to toggle the inert, test-untouched `shortcodes` plugin instead
   #     (see plugin-core.spec.ts), which severs the edge and leaves
   #     plugin-multi-tenant genuinely independent.
   #

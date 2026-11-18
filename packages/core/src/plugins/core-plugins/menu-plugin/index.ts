@@ -1,7 +1,7 @@
 import { definePlugin } from '../../sdk'
 import { DocumentTypeRegistry } from '../../../services/document-type-registry'
 import { SYSTEM_MENU_ITEMS } from './services/menu-defaults'
-import { upsertSystemItem, listMenuItems, fetchPluginStatuses } from './services/menu-repository'
+import { seedSystemMenuItems, listMenuItems, fetchPluginStatuses } from './services/menu-repository'
 import { reconcileMenuFromPlugins } from './services/menu-reconcile'
 import { adminMenuRoutes } from './routes/admin-menu'
 import { renderMenuSettingsContent } from './templates/admin-menu-list.template'
@@ -48,22 +48,29 @@ export const menuPlugin = definePlugin({
         },
       })
 
-      // 2. Seed system menu items (insert-only, idempotent)
-      for (const item of SYSTEM_MENU_ITEMS) {
-        await upsertSystemItem(db, item.id, {
-          label: item.label,
-          url: item.url,
-          icon: item.icon,
-          target: item.target,
-          isExternal: item.isExternal,
-          visible: item.visible,
-          parent: item.parent,
-          source: item.source,
-          pluginId: item.pluginId,
-          permissions: [...item.permissions],
-          lockedFields: [...item.lockedFields],
-        }, item.sortOrder)
-      }
+      // 2. Seed system menu items (insert-only, idempotent). Batched: this runs on every cold
+      //    isolate, and one D1 round trip per item was the bulk of a ~10s cold start on a remote
+      //    database.
+      await seedSystemMenuItems(
+        db,
+        SYSTEM_MENU_ITEMS.map((item) => ({
+          slug: item.id,
+          data: {
+            label: item.label,
+            url: item.url,
+            icon: item.icon,
+            target: item.target,
+            isExternal: item.isExternal,
+            visible: item.visible,
+            parent: item.parent,
+            source: item.source,
+            pluginId: item.pluginId,
+            permissions: [...item.permissions],
+            lockedFields: [...item.lockedFields],
+          },
+          sortOrder: item.sortOrder,
+        })),
+      )
 
       // 3. Reconcile plugin-contributed menu items
       await reconcileMenuFromPlugins(db)

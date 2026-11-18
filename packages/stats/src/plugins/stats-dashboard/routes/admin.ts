@@ -2,8 +2,20 @@ import { Hono } from 'hono'
 import { requireAuth } from '@sonicjs-cms/core'
 import { renderAdminLayoutCatalyst } from '@sonicjs-cms/core'
 import type { Bindings, Variables } from '@sonicjs-cms/core'
+import { STATS_ADMIN_MENU } from '../../../admin-menu'
 
 const adminRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+
+/** Merge stats plugin menu items with core plugin items from context */
+function getMergedMenuItems(c: import('hono').Context<{ Bindings: Bindings; Variables: Variables }>): typeof STATS_ADMIN_MENU {
+  const coreItems = c.get('pluginMenuItems') || []
+  return [
+    ...STATS_ADMIN_MENU,
+    ...coreItems.filter((item: { path: string }) => 
+      !STATS_ADMIN_MENU.some(s => s.path === item.path)
+    )
+  ]
+}
 
 adminRoutes.use('*', requireAuth())
 adminRoutes.use('*', async (c, next) => {
@@ -679,8 +691,10 @@ adminRoutes.get('/', async (c) => {
       user: user
         ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role }
         : undefined,
+      // Chart.js is not in the shared layout — this page charts, so it asks for it.
+      scripts: ['https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'],
       content,
-      dynamicMenuItems: c.get('pluginMenuItems'),
+      dynamicMenuItems: getMergedMenuItems(c),
     })
   )
 })

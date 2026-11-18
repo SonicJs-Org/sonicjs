@@ -29,6 +29,8 @@ import {
 } from './routes'
 import { getCoreVersion } from './utils/version'
 import { bootstrapMiddleware } from './middleware/bootstrap'
+import { traceSpan, wrapTraceBindings } from './utils/request-trace'
+import { queryTraceMiddleware } from './plugins/core-plugins/query-trace-plugin/middleware/query-trace-middleware'
 import { metricsMiddleware } from './middleware/metrics'
 import { csrfProtection } from './middleware/csrf'
 import { securityHeadersMiddleware } from './middleware/security-headers'
@@ -38,7 +40,7 @@ import { emailReconciliationPlugin } from './plugins/core-plugins/email-reconcil
 import { otpLoginPlugin } from './plugins/core-plugins/otp-login-plugin'
 import { oauthProvidersPlugin } from './plugins/core-plugins/oauth-providers'
 import { userProfilesPlugin } from './plugins/core-plugins/user-profiles'
-import { aiSearchPlugin } from './plugins/core-plugins/ai-search-plugin'
+import { aiSearchPlugin, aiSearchApiRoutes } from './plugins/core-plugins/ai-search-plugin'
 import { securityAuditPlugin } from './plugins/core-plugins/security-audit-plugin'
 import { securityAuditMiddleware, securityAuditApiRoutes, securityAuditAdminRoutes } from './plugins/core-plugins/security-audit-plugin'
 import {
@@ -58,6 +60,7 @@ import { adminRbacRoutes } from './routes/admin-rbac'
 import { pluginMenuMiddleware } from './middleware/plugin-menu'
 import { menuMiddleware } from './middleware/menu'
 import { menuPlugin } from './plugins/core-plugins/menu-plugin'
+import { queryTracePlugin } from './plugins/core-plugins/query-trace-plugin'
 import { analyticsPlugin } from './plugins/core-plugins/analytics'
 import { eventsApiRoutes } from './plugins/core-plugins/analytics/routes/api'
 import { globalVariablesPlugin } from './plugins/core-plugins/global-variables-plugin'
@@ -131,6 +134,12 @@ export interface Variables {
   appVersion?: string
   csrfToken?: string
   pluginMenuItems?: Array<{ label: string; path: string; icon: string }>
+  /**
+   * Slugs of the plugins pluginMenuMiddleware found active, shared so the rest of the /admin
+   * chain does not re-query for the same answer. Absent off /admin and on any request that ran
+   * before that middleware — treat absence as unknown and fall back to a direct read.
+   */
+  activePluginSlugs?: Set<string>
   /**
    * The plugin hook system attached to the request. Set by bootstrapMiddleware
    * BEFORE any heavy bootstrap work runs, so anything that emits a hook during
@@ -234,8 +243,17 @@ export interface SonicJSConfig {
  * Runs email init + plugin wiring, both promise-memoized so calling it multiple
  * times per isolate is a no-op. Pass it to `createScheduledHandler` as the
  * `boot` option so cron-first cold isolates wire up before dispatching.
+ *
+ * `executionCtx`, when provided, is used to extend the wiring promise's
+ * lifetime via `waitUntil()` past the triggering request's own response —
+ * see `createPluginWirer` for why this matters under concurrent cold-isolate
+ * traffic (#1194). Omitting it (e.g. from a context with no `ExecutionContext`)
+ * degrades to the pre-fix behavior rather than throwing.
  */
-export type BootIsolateFn = (env: Record<string, unknown>) => Promise<void>
+export type BootIsolateFn = (
+  env: Record<string, unknown>,
+  executionCtx?: { waitUntil?(promise: Promise<unknown>): void }
+) => Promise<void>
 
 /**
  * The app returned by {@link createSonicJSApp}. Extends the Hono app with a
@@ -321,6 +339,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     lexicalEditorPlugin,
     versioningPlugin,
     menuPlugin,
+    queryTracePlugin,
   ]
   const corePluginsAfterCatchAll = [emailPlugin, magicLinkPlugin, emailReconciliationPlugin]
 
@@ -395,6 +414,10 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     setEmailService(new EmailService({ provider, defaultFrom, defaultReplyTo, db: env.DB as never }))
   }
 
+  // Query Trace: always installs passthrough D1/KV proxies, traces /admin only when the
+  // plugin is active + opted in. Not mounted at all under plugins.disableAll.
+  if (!config.plugins?.disableAll) app.use('*', queryTraceMiddleware())
+
   // App version middleware
   app.use('*', async (c, next) => {
     c.set('appVersion', appVersion)
@@ -405,14 +428,16 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.use('*', metricsMiddleware())
 
   // Bootstrap middleware - runs migrations, syncs collections, and initializes plugins
-  app.use('*', bootstrapMiddleware(config, [...corePluginsBeforeCatchAll, ...corePluginsAfterCatchAll, ...(config.plugins?.register ?? [])]))
+  app.use('*', traceSpan('bootstrap', bootstrapMiddleware(config, [...corePluginsBeforeCatchAll, ...corePluginsAfterCatchAll, ...(config.plugins?.register ?? [])])))
 
   // bootIsolate — extracted from the wiring middleware so it can be called from
   // both HTTP requests AND cron-first cold isolates (scheduled() handlers) that
   // never receive an HTTP request. Idempotent: initEmailService + wirePlugins are
   // both once-guarded per isolate.
-  const boot: BootIsolateFn = async (env: Record<string, unknown>) => {
+  const boot: BootIsolateFn = async (env: Record<string, unknown>, executionCtx) => {
     if (config.plugins?.disableAll) return
+    // Cron-first isolates reach here without the HTTP middleware; idempotent on the HTTP path.
+    env = wrapTraceBindings(env as any) as Record<string, unknown>
     firstRequestEnv = env
     try {
       await initEmailService(env)
@@ -420,7 +445,9 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       console.error('[email] init failed:', err)
     }
     try {
-      await wirePlugins()
+      await wirePlugins(
+        executionCtx?.waitUntil ? (promise) => executionCtx.waitUntil!(promise) : undefined
+      )
     } catch (err) {
       console.error('[plugins] wiring failed:', err)
     }
@@ -428,10 +455,20 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
 
   // Plugin wiring middleware - calls boot() on the first request so it runs after
   // bootstrap. Subsequent requests return the cached once-guard result instantly.
-  app.use('*', async (c, next) => {
-    await boot(c.env as unknown as Record<string, unknown>)
+  app.use('*', traceSpan('boot', async (c, next) => {
+    // Hono's `c.executionCtx` getter THROWS when no ExecutionContext was passed
+    // to `app.fetch()` (true of most non-Worker test harnesses) — guard the
+    // access itself, not just its use, or every request 500s outside a real
+    // Worker runtime.
+    let executionCtx: { waitUntil?(promise: Promise<unknown>): void } | undefined
+    try {
+      executionCtx = c.executionCtx
+    } catch {
+      executionCtx = undefined
+    }
+    await boot(c.env as unknown as Record<string, unknown>, executionCtx)
     return next()
-  })
+  }))
 
   // Custom middleware - before auth
   if (config.middleware?.beforeAuth) {
@@ -451,6 +488,16 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Supports wildcard prefix: "*.example.com" matches any subdomain of example.com.
   app.use('*', cors({
     origin: (origin, c) => {
+      // The app's own origin is always allowed. A same-origin request is not subject to CORS in
+      // the first place, so echoing the header back grants nothing — but it does mean the app
+      // keeps working wherever it happens to be served from (a dev port, a preview deployment)
+      // without every host having to be enumerated in CORS_ORIGINS.
+      try {
+        if (origin && origin === new URL(c.req.url).origin) return origin
+      } catch {
+        // Non-absolute request URL — fall through to the allowlist.
+      }
+
       const allowed = (c.env as any)?.CORS_ORIGINS as string | undefined
       if (!allowed) return null
       const list = allowed.split(',').map((s: string) => s.trim())
@@ -474,7 +521,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.use('*', securityHeadersMiddleware())
 
   // CSRF protection middleware
-  app.use('*', csrfProtection())
+  app.use('*', traceSpan('csrf', csrfProtection()))
 
   // Better Auth session middleware: populate c.set('user') (and 'session') from
   // the Better Auth session so existing requireAuth/requireRole and every
@@ -519,12 +566,12 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // `x-api-key` / `Authorization: Bearer sk_…`. Provided by the api-keys plugin;
   // gated on that plugin being active. Runs right after the session middleware
   // so it sits ahead of every route guard, like the security-audit middleware.
-  app.use('*', apiKeyAuthMiddleware())
+  app.use('*', traceSpan('apiKeyAuth', apiKeyAuthMiddleware()))
 
   // Custom JWT Bearer auth: if BA session + API-key both failed to resolve a user,
   // fall back to the custom JWT minted by /auth/login (not a BA session token).
   // Accepts `Authorization: Bearer <jwt>` where the token is NOT an `sk_` API key.
-  app.use('*', async (c, next) => {
+  app.use('*', traceSpan('jwtAuth', async (c, next) => {
     if (!c.get('user')) {
       const authHeader = c.req.header('Authorization')
       if (authHeader?.startsWith('Bearer ') && !authHeader.startsWith('Bearer sk_')) {
@@ -547,7 +594,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       }
     }
     await next()
-  })
+  }))
 
   // Custom middleware - after auth
   if (config.middleware?.afterAuth) {
@@ -559,17 +606,17 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // Tenant resolution: sets c.get('tenantId') for every request (API + admin). Short-circuits to
   // 'default' while the multi-tenant plugin is inactive, so single-tenant behavior is unchanged.
   // Runs after auth (admin switcher cookie) and before route handlers read the request context.
-  app.use('*', tenantMiddleware())
+  app.use('*', traceSpan('tenant', tenantMiddleware()))
 
   // Admin panel access control: require authentication and dynamic RBAC portal
   // access. Legacy `users.role` no longer decides who can enter /admin/*.
-  app.use('/admin/*', requireAuth())
-  app.use('/admin/*', requireRbac('portal', 'access'))
+  app.use('/admin/*', traceSpan('requireAuth', requireAuth()))
+  app.use('/admin/*', traceSpan('requireRbac', requireRbac('portal', 'access')))
 
   // Plugin dynamic menu items for admin sidebar
-  app.use('/admin/*', pluginMenuMiddleware())
+  app.use('/admin/*', traceSpan('pluginMenu', pluginMenuMiddleware()))
   // Menu plugin sidebar replacement (DB-driven nav items)
-  app.use('/admin/*', menuMiddleware())
+  app.use('/admin/*', traceSpan('menu', menuMiddleware()))
 
   // RBAC-aware admin shell. Computes the signed-in user's effective permission
   // set once, then (1) redirects the dashboard landing to the first section the
@@ -587,7 +634,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     { path: '/admin/settings', perm: 'settings:manage' },
     { path: '/admin/rbac', perm: 'rbac:manage' },
   ]
-  app.use('/admin/*', async (c, next) => {
+  app.use('/admin/*', traceSpan('rbacPerms+navStrip', async (c, next) => {
     const user = c.get('user') as { userId?: string } | undefined
     if (!user?.userId) return next()
 
@@ -633,7 +680,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     } catch {
       /* leave response as-is on any failure */
     }
-  })
+  }))
 
   // Forced two-factor re-enrolment. Runs last of the /admin/* middleware — after requireAuth
   // (it needs c.get('user')) and after the RBAC shell (a user who owes an enrolment should still
@@ -643,7 +690,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // registration order, and plugin registration is interleaved with the app.route('/admin/...')
   // calls below, so middleware added from a plugin would silently not run for any admin route
   // mounted before it. See recovery.ts.
-  app.use('/admin/*', enforceTwoFactorEnrolment())
+  app.use('/admin/*', traceSpan('enforce2FA', enforceTwoFactorEnrolment()))
 
   // …and on the JSON API, for the same policy. Without it "you must enrol before using the portal"
   // means only the HTML portal: the same session cookie drives /api/*, so a user who owes an
@@ -662,6 +709,11 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   // /api/:collection/:id catch-all must be mounted BEFORE app.route('/api', apiRoutes).
   app.route('/api/security-audit', securityAuditApiRoutes as any)
   app.route('/admin/plugins/security-audit', securityAuditAdminRoutes as any)
+  // Same shadowing problem: the AI Search plugin registers /api/search in its own
+  // register(), but that runs with corePluginsBeforeCatchAll — i.e. after the bare
+  // app.route('/api', apiRoutes) below, whose /:collection wildcard swallowed every
+  // /api/search request ('Collection not found' on GET, 'title is required' on POST).
+  app.route('/api/search', aiSearchApiRoutes as any)
 
   // Core routes
   // Routes are being imported incrementally from routes/*
@@ -735,6 +787,14 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/auth/two-factor', twoFactorChallengeRoutes)
 
   app.route('/auth', authRoutes)
+
+  // Better Auth's organization endpoints stay closed. SonicJS manages tenants through
+  // TenantService (multi-tenant plugin), which owns slug/domain uniqueness and the host routing
+  // in middleware/tenant.ts; the BA plugin is composed only for its schema. On Better Auth 1.6
+  // these endpoints failed on the `tenant_id` field mapping; with that mapping corrected they
+  // would let any signed-in user create a tenant, own it, and set its domain.
+  app.all('/auth/organization/*', (c) => c.json({ error: 'Not Found' }, 404))
+  app.all('/auth/organization', (c) => c.json({ error: 'Not Found' }, 404))
 
   // Better Auth handler — serves /auth/sign-in/*, /auth/sign-up/*, /auth/sign-out,
   // /auth/get-session, /auth/callback/* etc. Registered AFTER authRoutes so the

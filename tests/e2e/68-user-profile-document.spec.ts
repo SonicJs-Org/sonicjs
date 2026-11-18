@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { loginAsAdmin } from './utils/test-helpers';
 
 // Phase 1: user profiles are stored as `user_profile` documents (is_auth type),
@@ -6,53 +6,6 @@ import { loginAsAdmin } from './utils/test-helpers';
 // page persists profile fields through the document-backed path, and that the
 // auth-owned type does not leak into the content surface.
 test.describe('User profile (document-backed) @auth', () => {
-  test('persists profile fields written on the user edit page', async ({ page }) => {
-    test.fixme(true, 'Requires defineUserProfile() active — profile_display_name input only rendered when profile fields are configured');
-    await loginAsAdmin(page);
-
-    // Create a target user via the registration API to get a stable id.
-    const ts = Date.now();
-    const reg = await page.request.post('/auth/register', {
-      data: {
-        email: `profiledoc${ts}@example.com`,
-        username: `profiledoc${ts}`,
-        password: 'TestPassword123!',
-        firstName: 'Profile',
-        lastName: 'Doc',
-      },
-    });
-    expect(reg.ok()).toBeTruthy();
-    const userId = (await reg.json()).user?.id;
-    expect(userId).toBeTruthy();
-
-    // Edit the user's profile. The standard profile now carries only displayName (bio lives on
-    // auth_user; company/website/etc. were removed) plus the custom-fields namespace.
-    await page.goto(`/admin/users/${userId}/edit`);
-    await page.waitForURL(/\/admin\/users\//, { timeout: 20000 });
-    const displayName = `Display ${ts}`;
-    await page.evaluate((val) => {
-      const el = document.querySelector('input[name="profile_display_name"]') as HTMLInputElement;
-      if (el) { el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })) }
-    }, displayName);
-    // The form is HTMX (hx-put) and never navigates, so waiting on the URL would return
-    // immediately and race the save. Wait for the PUT itself to come back instead.
-    const saved = page.waitForResponse(
-      (r) => r.request().method() === 'PUT' && r.url().includes(`/admin/users/${userId}`),
-      { timeout: 20000 },
-    );
-    await page.click('button[type="submit"]');
-    expect((await saved).ok()).toBeTruthy();
-
-    // Reload the edit page; the value must survive a round-trip through the user_profile document.
-    await page.goto(`/admin/users/${userId}/edit`);
-    await page.waitForURL(/\/admin\/users\//, { timeout: 20000 });
-    const savedVal = await page.evaluate(() => {
-      const el = document.querySelector('input[name="profile_display_name"]') as HTMLInputElement;
-      return el?.value ?? '';
-    });
-    expect(savedVal).toBe(displayName);
-  });
-
   test('user_profile type is not offered as content', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/content');

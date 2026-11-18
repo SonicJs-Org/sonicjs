@@ -275,6 +275,11 @@ export function renderPluginsListPage(data: PluginsListPageData): string {
             const statusBadge = card.querySelector('.status-badge');
             const knob = button.querySelector('.toggle-knob');
 
+            // The category/status filter reads data-status off the card, so leaving it at
+            // the server-rendered value meant a plugin you had just switched off still
+            // filtered as active until the next full page load.
+            card.setAttribute('data-status', action === 'activate' ? 'active' : 'inactive');
+
             if (action === 'activate') {
               // Update status badge
               statusBadge.className = 'status-badge inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 ring-emerald-600/20';
@@ -283,7 +288,10 @@ export function renderPluginsListPage(data: PluginsListPageData): string {
               // Update button state to Active
               button.className = 'bg-emerald-600 relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 toggle-button';
               button.setAttribute('aria-checked', 'true');
-              button.onclick = (event) => togglePlugin(pluginId, 'deactivate', event);
+              // Keep stopPropagation(): the markup's inline onclick has it, and without it
+              // here the second click on the switch bubbles to the card, whose own onclick
+              // navigates to the plugin settings page.
+              button.onclick = (event) => { event.stopPropagation(); togglePlugin(pluginId, 'deactivate', event); };
               
               // Update knob position
               if (knob) {
@@ -297,7 +305,7 @@ export function renderPluginsListPage(data: PluginsListPageData): string {
               // Update button state to Inactive
               button.className = 'bg-zinc-200 dark:bg-zinc-700 relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 toggle-button';
               button.setAttribute('aria-checked', 'false');
-              button.onclick = (event) => togglePlugin(pluginId, 'activate', event);
+              button.onclick = (event) => { event.stopPropagation(); togglePlugin(pluginId, 'activate', event); };
               
               // Update knob position
               if (knob) {

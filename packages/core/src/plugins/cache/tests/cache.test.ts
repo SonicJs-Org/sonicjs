@@ -914,3 +914,155 @@ describe('CacheService - invalidatePattern alias', () => {
     expect(other).toBe('value3')
   })
 })
+
+describe('CacheService - request trace instrumentation', () => {
+  const baseConfig: CacheConfig = {
+    ttl: 60, kvEnabled: true, memoryEnabled: true, namespace: 'trace-test', invalidateOn: [], version: 'v1',
+  }
+  const makeKv = (store: Record<string, unknown> = {}) =>
+    ({
+      get: async (k: string) => (k in store ? store[k] : null),
+      put: async (k: string, v: string) => { store[k] = JSON.parse(v) },
+      delete: async () => {},
+      list: async () => ({ keys: [] }),
+    }) as any
+
+  it('records memory hit, KV hit and miss for get()', async () => {
+    const { RequestTrace, loadAsyncLocalStorage, runWithTrace } = await import('../../../utils/request-trace')
+    await loadAsyncLocalStorage()
+    const cache = createCacheService(baseConfig, makeKv({ 'kv-key': { a: 1 } }))
+    await cache.set('mem-key', 'v')
+    const trace = new RequestTrace('GET', '/admin/x')
+    await runWithTrace(trace, async () => {
+      await cache.get('mem-key')
+      await cache.get('kv-key')
+      await cache.get('nope')
+    })
+    const gets = trace.entries.filter((e) => e.op === 'get')
+    expect(gets.map((e) => e.cache)).toEqual(['hit:memory', 'hit:kv', 'miss'])
+    expect(trace.entries.every((e) => e.kind === 'cache')).toBe(true)
+  })
+
+  it('records getWithSource() and set()', async () => {
+    const { RequestTrace, loadAsyncLocalStorage, runWithTrace } = await import('../../../utils/request-trace')
+    await loadAsyncLocalStorage()
+    const cache = createCacheService(baseConfig, makeKv())
+    const trace = new RequestTrace('GET', '/')
+    await runWithTrace(trace, async () => {
+      await cache.set('k', 1)
+      await cache.getWithSource('k')
+      await cache.getWithSource('zzz')
+    })
+    expect(trace.entries.map((e) => [e.op, e.cache])).toEqual([
+      ['set', null], ['getWithSource', 'hit:memory'], ['getWithSource', 'miss'],
+    ])
+  })
+
+  it('getMany records exactly one entry per key (no double counting)', async () => {
+    const { RequestTrace, loadAsyncLocalStorage, runWithTrace } = await import('../../../utils/request-trace')
+    await loadAsyncLocalStorage()
+    const cache = createCacheService({ ...baseConfig, kvEnabled: false })
+    await cache.set('a', 1)
+    const trace = new RequestTrace('GET', '/')
+    await runWithTrace(trace, () => cache.getMany(['a', 'b', 'c']))
+    expect(trace.entries).toHaveLength(3)
+  })
+
+  it('records nothing outside a trace', async () => {
+    const cache = createCacheService({ ...baseConfig, kvEnabled: false })
+    await cache.set('a', 1)
+    expect(await cache.get('a')).toBe(1)
+  })
+})
+
+describe('CacheService.invalidate with a lagging KV list()', () => {
+  // KV list() is eventually consistent: a key put a moment ago is not in the listing yet.
+  // Regression for the "creating item via public API invalidates list cache" E2E flake.
+  function laggingKv() {
+    const store = new Map<string, string>()
+    const kv = {
+      get: vi.fn(async (key: string, type?: string) => {
+        const v = store.get(key)
+        if (v === undefined) return null
+        return type === 'json' ? JSON.parse(v) : v
+      }),
+      put: vi.fn(async (key: string, value: string) => {
+        store.set(key, value)
+      }),
+      delete: vi.fn(async (key: string) => {
+        store.delete(key)
+      }),
+      // Listing never reflects anything written "recently".
+      list: vi.fn(async () => ({ keys: [], list_complete: true })),
+    }
+    return { kv: kv as unknown as KVNamespace, store }
+  }
+
+  const config: CacheConfig = {
+    ttl: 300,
+    kvEnabled: true,
+    memoryEnabled: false,
+    namespace: 'lagtest',
+    version: 'v1',
+    invalidateOn: [],
+  }
+
+  it('deletes keys this isolate just wrote even though list() does not show them', async () => {
+    const { kv, store } = laggingKv()
+    const cache = new CacheService(config, kv)
+
+    const key = cache.generateKey('collection-content-filtered', 'blog_post:{}')
+    await cache.set(key, { data: ['old'] })
+    expect(store.has(key)).toBe(true)
+
+    const removed = await cache.invalidate('lagtest:collection-content-filtered:blog_post:*')
+
+    expect(removed).toBe(1)
+    expect(store.has(key)).toBe(false)
+    expect(await cache.get(key)).toBeNull()
+  })
+
+  it('leaves non-matching recently written keys alone', async () => {
+    const { kv, store } = laggingKv()
+    const cache = new CacheService(config, kv)
+
+    const keep = cache.generateKey('collection-content-filtered', 'other:{}')
+    await cache.set(keep, { data: [] })
+    await cache.invalidate('lagtest:collection-content-filtered:blog_post:*')
+
+    expect(store.has(keep)).toBe(true)
+  })
+
+  it('deletes from KV (not just untracks) keys evicted by the recentKvWrites cap', async () => {
+    const { kv, store } = laggingKv()
+    const cache = new CacheService(config, kv)
+
+    const total = 650
+    const keys = Array.from({ length: total }, (_, i) =>
+      cache.generateKey('collection-content-filtered', `blog_post:${i}`)
+    )
+    // Distinct keys all written inside the list() lag window; list() never shows any of them.
+    for (const key of keys) await cache.set(key, { data: ['old'] })
+
+    // Over the 500 cap: evicted markers must have been deleted from KV, not merely forgotten.
+    expect(store.size).toBeLessThanOrEqual(500)
+
+    // Invalidation must leave no stale key behind: tracked ones via markers, evicted ones already gone.
+    await cache.invalidate('lagtest:collection-content-filtered:blog_post:*')
+    for (const key of keys) expect(store.has(key)).toBe(false)
+    expect(store.size).toBe(0)
+  })
+
+  it('does not throw from set() when a cap-eviction KV delete fails', async () => {
+    const { kv } = laggingKv()
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    ;(kv.delete as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('kv down'))
+    const cache = new CacheService(config, kv)
+
+    for (let i = 0; i < 520; i++) {
+      await cache.set(cache.generateKey('collection-content-filtered', `x:${i}`), { i })
+    }
+    expect(errSpy).toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
+})

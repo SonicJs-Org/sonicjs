@@ -571,6 +571,14 @@ Order the array to match your preferred column order. Omit rich-text and large J
 searchFields: ['title', 'excerpt'],
 ```
 
+### Deleting Content
+
+Clicking **Delete** on a content item (from the list or the edit form) navigates to a confirmation page — not a native browser popup. The page shows the item's title, collection, slug, status, author, and dates before the delete is permanent.
+
+### Saving Content
+
+**Save and close** returns you to the unfiltered content list at `/admin/content`, regardless of which collection you were editing, so the saved item is visible immediately. The list title reflects the most recently submitted data — including a renamed `name`-field value — rather than a stale database title.
+
 ### API Endpoints
 
 Collections automatically get REST API endpoints:
@@ -615,17 +623,21 @@ Collections automatically get REST API endpoints:
 ## Best Practices
 
 <Callout type="tip" title="Collection Design Tips">
-  - Use descriptive field names that reflect your content model
-  - Set appropriate validation rules to maintain data quality
-  - Use references for relationships between collections
-  - Enable search on fields that users will query frequently
-  - Set reasonable defaults for optional fields
+
+- Use descriptive field names that reflect your content model
+- Set appropriate validation rules to maintain data quality
+- Use references for relationships between collections
+- Enable search on fields that users will query frequently
+- Set reasonable defaults for optional fields
+
 </Callout>
 
 <Callout type="warning" title="Performance Considerations">
-  - Limit the number of fields in `listFields` to improve list performance
-  - Use appropriate field types (e.g., `select` instead of `string` for fixed options)
-  - Index frequently queried fields in your database
+
+- Limit the number of fields in `listFields` to improve list performance
+- Use appropriate field types (e.g., `select` instead of `string` for fixed options)
+- Index frequently queried fields in your database
+
 </Callout>
 
 ---

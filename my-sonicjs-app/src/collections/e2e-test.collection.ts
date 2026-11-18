@@ -186,6 +186,72 @@ export default {
           },
         },
       },
+      // Nested-structure fixtures for specs 55-58 (collapsible state, hidden-field
+      // validation, nested-array scoping, flat-object serialization). `team` exercises
+      // array-in-object-in-array with a required leaf; `openingHoursWeek` exercises
+      // objectLayout "flat", where every weekday's inputs render inline under one group.
+      team: {
+        type: "object",
+        title: "Team",
+        properties: {
+          members: {
+            type: "array",
+            title: "Members",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string", title: "Name", required: true },
+                children: {
+                  type: "array",
+                  title: "Children",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string", title: "Name", required: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      openingHoursWeek: {
+        type: "object",
+        title: "Opening Hours",
+        properties: {
+          monday: {
+            type: "object",
+            title: "Monday",
+            objectLayout: "flat",
+            properties: {
+              closed: { type: "boolean", title: "Closed", default: false },
+              opens: { type: "string", title: "Opens" },
+              closes: { type: "string", title: "Closes" },
+            },
+          },
+          tuesday: {
+            type: "object",
+            title: "Tuesday",
+            objectLayout: "flat",
+            properties: {
+              closed: { type: "boolean", title: "Closed", default: false },
+              opens: { type: "string", title: "Opens" },
+              closes: { type: "string", title: "Closes" },
+            },
+          },
+          wednesday: {
+            type: "object",
+            title: "Wednesday",
+            objectLayout: "flat",
+            properties: {
+              closed: { type: "boolean", title: "Closed", default: false },
+              opens: { type: "string", title: "Opens" },
+              closes: { type: "string", title: "Closes" },
+            },
+          },
+        },
+      },
     },
     required: ["title", "slug"],
   },

@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { loginAsAdmin } from './utils/test-helpers'
 
-test.describe('Content edit - Content Info sidebar', () => {
+test.describe('Content edit - Content Info sidebar @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
   })

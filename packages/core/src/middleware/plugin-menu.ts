@@ -84,6 +84,54 @@ function renderMenuItem(item: { label: string; path: string; icon?: string }, cu
     </span>`
 }
 
+/** D1 caps a statement at 100 bound parameters; stay clear of it with room for the literals. */
+const MAX_SLUG_BINDS = 90
+
+/**
+ * Plugins that contribute no sidebar entry of their own but whose active status another `/admin`
+ * middleware needs in the same request.
+ *
+ * `menu` declares `adminMenu: null`, so it is absent from {@link REGISTRY_MENU_PLUGINS} — yet
+ * `menuMiddleware`, which runs immediately after this one, asked the identical question with its
+ * own query. Folding the slug in here costs one extra bind on a statement already being sent and
+ * saves that round trip on every HTML admin response.
+ */
+const STATUS_ONLY_PLUGIN_IDS = ['menu'] as const
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+/**
+ * Which of `slugs` name a plugin whose document row is active.
+ *
+ * Fails open (empty set) rather than throwing: on a fresh install the plugin rows may not exist
+ * yet, and a sidebar missing its plugin entries beats a 500 on every admin page.
+ */
+async function selectActivePluginSlugs(db: Bindings['DB'], slugs: string[]): Promise<Set<string>> {
+  if (slugs.length === 0) return new Set()
+  try {
+    const batches = await Promise.all(
+      chunk(slugs, MAX_SLUG_BINDS).map(ids =>
+        db
+          .prepare(
+            `SELECT slug FROM documents WHERE type_id = 'plugin' AND tenant_id = 'default' AND slug IN (${ids
+              .map(() => '?')
+              .join(',')}) AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
+          )
+          .bind(...ids)
+          .all()
+      )
+    )
+    return new Set(batches.flatMap(r => (r.results || []).map((row: any) => row.slug)))
+  } catch {
+    // DB not ready or the plugin rows don't exist yet.
+    return new Set()
+  }
+}
+
 export function pluginMenuMiddleware() {
   return async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
     const path = new URL(c.req.url).pathname
@@ -91,64 +139,47 @@ export function pluginMenuMiddleware() {
       return next()
     }
 
-    // Collect menu items from active plugins using the registry
     const db = c.env.DB
-    let activeMenuItems: Array<{ label: string; path: string; icon?: string; order: number }> = []
-    try {
-      const pluginIds = REGISTRY_MENU_PLUGINS.map(p => p.id)
-      if (pluginIds.length > 0) {
-        const placeholders = pluginIds.map(() => '?').join(',')
-        const result = await db.prepare(
-          `SELECT slug FROM documents WHERE type_id = 'plugin' AND tenant_id = 'default' AND slug IN (${placeholders}) AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
-        ).bind(...pluginIds).all()
 
-        const activeIds = new Set((result.results || []).map((r: any) => r.slug))
-
-        for (const plugin of REGISTRY_MENU_PLUGINS) {
-          if (activeIds.has(plugin.id)) {
-            activeMenuItems.push({
-              label: plugin.label,
-              path: plugin.path,
-              icon: plugin.icon,
-              order: plugin.order,
-            })
-          }
-        }
-
-        // Sort by order
-        activeMenuItems.sort((a, b) => a.order - b.order)
-      }
-    } catch {
-      // DB not ready or plugin table doesn't exist yet
-    }
-
-    // Append user plugin menu items from the singleton (config.plugins.register entries).
-    // Must DB-check active status — a plugin disabled via the admin UI stays in config
-    // but its document record is set to inactive (issue #971).
+    // Menu items come from two places: the compiled manifest registry, and the singleton that
+    // `config.plugins.register` feeds (issue #971 — a plugin disabled in the admin UI stays in
+    // config, so both sources need their active status checked against the DB).
+    //
+    // `resolvePluginMenuItems` is an in-memory lookup, so both id lists are known up front and the
+    // two active-status checks — same query, same table, same tenant — collapse into one round
+    // trip. This middleware runs on EVERY /admin request, including each of the four dashboard
+    // fragments, so it used to spend two serial D1 queries per request on an answer that is
+    // identical across all of them.
     const user = c.get('user') as { role?: string } | undefined
     const singletonItems = resolvePluginMenuItems(user ? { role: user.role } : undefined)
-
-    // Collect unique pluginIds that have entries, query their active status in one shot.
     const singletonPluginIds = [...new Set(
       singletonItems.map(i => i.pluginId).filter((id): id is string => !!id)
     )]
-    let activeSingletonIds = new Set<string>()
-    try {
-      if (singletonPluginIds.length > 0) {
-        const ph = singletonPluginIds.map(() => '?').join(',')
-        const result = await db.prepare(
-          `SELECT slug FROM documents WHERE type_id = 'plugin' AND tenant_id = 'default' AND slug IN (${ph}) AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
-        ).bind(...singletonPluginIds).all()
-        activeSingletonIds = new Set((result.results || []).map((r: any) => r.slug))
-      }
-    } catch {
-      // DB not ready — fail open so singleton items without pluginId still render
-    }
+    const activeIds = await selectActivePluginSlugs(db, [
+      ...new Set([
+        ...REGISTRY_MENU_PLUGINS.map(p => p.id),
+        ...singletonPluginIds,
+        ...STATUS_ONLY_PLUGIN_IDS,
+      ]),
+    ])
+
+    // Published for the rest of the /admin chain so nobody re-asks the DB which plugins are on.
+    // Consumers must treat an absent value as "unknown" and fall back, since this middleware is
+    // only mounted on /admin.
+    c.set('activePluginSlugs', activeIds)
+
+    const activeMenuItems: Array<{ label: string; path: string; icon?: string; order: number }> =
+      REGISTRY_MENU_PLUGINS.filter(p => activeIds.has(p.id)).map(p => ({
+        label: p.label,
+        path: p.path,
+        icon: p.icon,
+        order: p.order,
+      }))
 
     const existingPaths = new Set(activeMenuItems.map(i => i.path))
     for (const item of singletonItems) {
       // If item has a pluginId, require it to be active; items without pluginId always show.
-      const isActive = !item.pluginId || activeSingletonIds.has(item.pluginId)
+      const isActive = !item.pluginId || activeIds.has(item.pluginId)
       if (isActive && !existingPaths.has(item.path)) {
         activeMenuItems.push({ label: item.label, path: item.path, icon: item.icon, order: item.order })
       }

@@ -44,7 +44,7 @@ Full design + remediation runbook: `docs/ai/plans/document-model-poc-plan.md` (A
 | **R8** | Escape every user-controlled value rendered into HTML with `escapeHtml` from `utils/sanitize`. |
 | **R9** | After editing any `packages/core/migrations/*.sql`: run `cd packages/core && npm run generate:migrations`, re-sync the `my-sonicjs-app/migrations/` copies (byte-identical), commit the regenerated `src/db/migrations-bundle.ts`. |
 | **R10** | Unit tests on the pure-mock DB cannot verify SQL, constraints, batch atomicity, generated columns, or bind counts. Real coverage requires the `better-sqlite3` harness — `documents.sqlite.test.ts` + the `*.integration.test.ts` route harness. |
-| **R11** | New E2E specs are numbered **68+** (highest existing is 67). |
+| **R11** | New E2E specs are numbered **118+** (highest existing is 117). Six files already share the number 68 — do not add a seventh. |
 | **R12** | POC runs **alongside** legacy paths. Do not drop legacy plugin tables in the POC — decommission only after read-flip + backfill + grep-gate (see plan §"Decommissioning"). |
 
 ### Key behaviors to preserve
@@ -143,7 +143,7 @@ Base grants only match `public` + `role`, so the `role` principal is mandatory f
 5. **Public exposure**: set `settings.baseGrants.public = ['read']` only if the data is non-PII.
 6. **PII**: set `settings.pii = true` and ensure the erase path covers it.
 7. **Tests**: add at least one `*.sqlite.test.ts` or `*.integration.test.ts` case. Mock tests prove nothing about SQL (R10).
-8. **E2E**: add a Playwright spec (numbered 68+). Write it; do NOT run it locally — CI validates it.
+8. **E2E**: add a Playwright spec (numbered 118+). Write it; do NOT run it locally — CI validates it.
 
 ### Status snapshot (avoid re-investigating)
 
@@ -170,11 +170,20 @@ Anti-patterns: `grep -r` across repo when codegraph answers; reading 5+ files to
 
 Every feature/fix ships with a Playwright spec in `tests/e2e/`. Write the spec, but **do NOT run E2E tests locally** — they require a running wrangler dev server, consume excessive memory, and are validated by CI on PR. Running them locally is too expensive.
 
-### CI test selection strategy (dynamic)
+### CI runs the full E2E suite on every PR
 
-CI runs **smoke tests + tests tagged to changed areas only** — not the full suite. This keeps PR feedback fast.
+CI runs **every E2E test on every PR** — no changed-area tag selection. `pr-tests.yml` invokes
+`npx playwright test --config=tests/playwright.config.ts` with no `--grep`.
 
-**Tag every test** with `@smoke` (critical path, always runs) or a feature tag (`@media`, `@content`, `@auth`, `@api-keys`, `@database`, `@collections`, etc.):
+This replaced a dynamic tag-selection scheme (`@smoke` plus tags mapped from changed paths). That
+scheme made a defect invisible to CI whenever the specs covering it carried a tag the diff did not
+select: a `templates/pages/*` change selected `@smoke` only, while the `ai-search` specs are
+`@plugins`, so a 500 on `/admin/plugins/ai-search` shipped green. Budget notes live in
+`tests/playwright.config.ts` (workers, retries, per-test timeout) and the job cap is
+`timeout-minutes: 150` — a full run does not fit in 90.
+
+**Still tag every test** with `@smoke` (critical path) or a feature tag (`@media`, `@content`,
+`@auth`, `@api-keys`, `@database`, `@collections`, `@plugins`, `@forms`, `@api`, `@stats`):
 
 ```typescript
 test('does the thing @media', async ({ page }) => { … })
@@ -182,28 +191,20 @@ test('does the thing @media', async ({ page }) => { … })
 test.describe('Media Upload @media', () => { … })
 ```
 
-**Tag mapping** (CI uses `git diff --name-only` → selects tags to run):
+Tags no longer gate what CI runs, but they are how you run a subset locally
+(`npx playwright test --config=tests/playwright.config.ts --grep @media`), and
+`scripts/lint-e2e-tags.sh` still enforces that every test carries one. The tag may sit on the test
+or on any enclosing describe; a file whose first describe is tagged does **not** cover the rest of
+the file.
 
-| Changed path pattern | Tags to run |
-|---|---|
-| `src/routes/admin-content*` or `src/services/documents*` | `@smoke @content` |
-| `src/routes/admin-media*` or `src/services/media*` | `@smoke @media` |
-| `src/routes/api*` | `@smoke @api` |
-| `src/middleware/auth*`, `src/auth/*`, `src/routes/auth*`, `src/routes/admin-settings*`, anything `two-factor` | `@smoke @auth @api-keys` |
-| `src/services/api-keys*` or related | `@smoke @api-keys` |
-| `src/routes/admin-database*` | `@smoke @database` |
-| `packages/core/migrations/*` | `@smoke @content @media @api` |
-| Anything else / multiple areas | `@smoke` only |
-
-CI invocation: `npx playwright test --grep "@smoke|@<detected-tag>"`.
-
-**When writing a new spec**: choose the tightest matching feature tag. If it spans multiple features, use the primary one + `@smoke` if it tests login/nav/core flow.
+Note: `pull_request_target` runs the **base branch's** copy of `pr-tests.yml`, so a workflow edit
+on a feature branch stays inert until it merges to `main`.
 
 Workflow:
 1. Implement
-2. Add `tests/e2e/<NN>-<slug>.spec.ts` (NN = next sequential; current floor 68 — R11)
+2. Add `tests/e2e/<NN>-<slug>.spec.ts` (NN = next sequential; current floor 118 — R11)
 3. Tag tests with `@smoke` and/or appropriate feature tag
-4. Commit implementation + tests together — CI selects and runs relevant tests
+4. Commit implementation + tests together — CI runs the whole suite
 
 Spec skeleton:
 
@@ -223,6 +224,22 @@ test.describe('Feature Name @feature-tag', () => {
 ```
 
 Cover: user interactions, data persistence, UI state, error/validation paths, integration points.
+
+### No skipped tests (non-negotiable)
+
+**Never use `test.skip`, `test.describe.skip`, `test.fixme`, or `test.todo` in E2E specs.** If a test can't pass, **don't write it**. A skipped test is worse than no test — it inflates count, gives false confidence, and never gets unskipped.
+
+| Pattern | Rule |
+|---|---|
+| Feature doesn't exist yet | Don't write the test. Write it when the feature ships. |
+| Test depends on external service (email, Turnstile, AI) | Use `featureAvailable` guard from `test-helpers.ts` — this is the ONLY acceptable conditional skip. |
+| Test is flaky | Fix it or delete it. Don't skip it. |
+| Test was generated alongside code but fails | The code or the test is wrong. Fix whichever is broken. |
+| Aspirational/placeholder test | Delete it. Tests are for working code, not wishlists. |
+
+**The only acceptable `test.skip` is a runtime feature-detection guard** (e.g., `test.skip(!featureAvailable, 'reason')`). Everything else is a bug.
+
+CI will enforce this: a pre-commit lint rejects `describe.skip`, `test.skip('`, bare `test.skip()`, `test.fixme`, and `test.todo` in `tests/e2e/`.
 
 ## Verification commands
 

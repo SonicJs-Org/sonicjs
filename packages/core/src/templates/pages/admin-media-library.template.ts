@@ -3,6 +3,7 @@ import {
   renderConfirmationDialog,
 } from "../components/confirmation-dialog.template";
 import { MediaFile, renderMediaGrid } from "../components/media-grid.template";
+import { escapeHtml } from "../../utils/sanitize";
 import {
   AdminLayoutCatalystData,
   renderAdminLayoutCatalyst,
@@ -91,13 +92,13 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
                   .map(
                     (folder) => `
                   <li>
-                    <a href="/admin/media?folder=${folder.folder}"
+                    <a href="/admin/media?folder=${encodeURIComponent(folder.folder)}"
                        class="block px-3 py-2 text-sm rounded-lg transition-colors ${
                          data.currentFolder === folder.folder
                            ? "bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 font-medium"
                            : "text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                        }">
-                      ${folder.folder} (${folder.count})
+                      ${escapeHtml(folder.folder)} (${folder.count})
                     </a>
                   </li>
                 `
@@ -224,12 +225,12 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
                           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
                         </svg>
                       </button>
-                      <input type="hidden" name="folder" value="${
+                      <input type="hidden" name="folder" value="${escapeHtml(
                         data.currentFolder
-                      }">
-                      <input type="hidden" name="type" value="${
+                      )}">
+                      <input type="hidden" name="type" value="${escapeHtml(
                         data.currentType
-                      }">
+                      )}">
                     </div>
                   </div>
 
@@ -361,7 +362,6 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
           hx-post="/admin/media/upload"
           hx-encoding="multipart/form-data"
           hx-target="#upload-results"
-          hx-on::after-request="if(event.detail.successful) { setTimeout(() => { window.location.href = '/admin/media?t=' + Date.now(); }, 1500); }"
           class="space-y-4"
         >
           <!-- Drag and Drop Zone -->
@@ -460,11 +460,11 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
                   .map(
                     (folder) => `
             <button
-              onclick="performBulkMove('${folder.folder}')"
+              onclick="performBulkMove(${escapeHtml(JSON.stringify(folder.folder))})"
               class="w-full text-left px-4 py-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-950 dark:text-white transition-colors ring-1 ring-inset ring-zinc-200 dark:ring-zinc-700"
             >
               <div class="flex items-center justify-between">
-                <span class="font-medium">${folder.folder}</span>
+                <span class="font-medium">${escapeHtml(folder.folder)}</span>
                 <span class="text-sm text-zinc-500 dark:text-zinc-400">${folder.count} files</span>
               </div>
             </button>
@@ -552,6 +552,40 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
     <script>
       let selectedFiles = new Set();
       let dragDropFiles = [];
+
+      // display:none for the bulk-actions menu is deferred so the close transition can play.
+      // Track the timer so reopening cancels it — otherwise a pending hide from an earlier close
+      // (e.g. the outside-click that lands on a file checkbox) blanks a menu the user just opened.
+      let bulkActionsHideTimer = null;
+
+      function showBulkActionsMenu() {
+        const menu = document.getElementById('bulk-actions-menu');
+        if (!menu) return;
+        clearTimeout(bulkActionsHideTimer);
+        bulkActionsHideTimer = null;
+        menu.classList.remove('hidden');
+        setTimeout(() => {
+          menu.classList.remove('scale-95', 'opacity-0');
+          menu.classList.add('scale-100', 'opacity-100');
+        }, 10);
+      }
+
+      function hideBulkActionsMenu(immediate) {
+        const menu = document.getElementById('bulk-actions-menu');
+        if (!menu) return;
+        menu.classList.remove('scale-100', 'opacity-100');
+        menu.classList.add('scale-95', 'opacity-0');
+        clearTimeout(bulkActionsHideTimer);
+        bulkActionsHideTimer = null;
+        if (immediate) {
+          menu.classList.add('hidden');
+          return;
+        }
+        bulkActionsHideTimer = setTimeout(() => {
+          bulkActionsHideTimer = null;
+          menu.classList.add('hidden');
+        }, 100);
+      }
       
       // File selection handling
       function toggleFileSelection(fileId) {
@@ -598,28 +632,16 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
           btn.innerHTML = \`Bulk Actions <svg viewBox="0 0 20 20" fill="currentColor" class="size-4"><path d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" fill-rule="evenodd" /></svg>\`;
           btn.onclick = null; // Remove handler when disabled
           // Hide menu when no files selected
-          const menu = document.getElementById('bulk-actions-menu');
-          menu.classList.remove('scale-100', 'opacity-100');
-          menu.classList.add('scale-95', 'opacity-0', 'hidden');
+          hideBulkActionsMenu(true);
         }
       }
 
       function toggleBulkActionsDropdown() {
         const menu = document.getElementById('bulk-actions-menu');
-        const isHidden = menu.classList.contains('hidden');
-
-        if (isHidden) {
-          menu.classList.remove('hidden');
-          setTimeout(() => {
-            menu.classList.remove('scale-95', 'opacity-0');
-            menu.classList.add('scale-100', 'opacity-100');
-          }, 10);
+        if (menu.classList.contains('hidden')) {
+          showBulkActionsMenu();
         } else {
-          menu.classList.remove('scale-100', 'opacity-100');
-          menu.classList.add('scale-95', 'opacity-0');
-          setTimeout(() => {
-            menu.classList.add('hidden');
-          }, 100);
+          hideBulkActionsMenu();
         }
       }
       
@@ -639,10 +661,7 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
           btn.disabled = true;
 
           // Hide menu
-          const menu = document.getElementById('bulk-actions-menu');
-          menu.classList.remove('scale-100', 'opacity-100');
-          menu.classList.add('scale-95', 'opacity-0');
-          setTimeout(() => menu.classList.add('hidden'), 100);
+          hideBulkActionsMenu();
           
           const response = await fetch('/api/media/bulk-delete', {
             method: 'POST',
@@ -700,10 +719,7 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
         document.getElementById('move-to-folder-modal').classList.remove('hidden');
 
         // Hide bulk actions menu
-        const menu = document.getElementById('bulk-actions-menu');
-        menu.classList.remove('scale-100', 'opacity-100');
-        menu.classList.add('scale-95', 'opacity-0');
-        setTimeout(() => menu.classList.add('hidden'), 100);
+        hideBulkActionsMenu();
       }
 
       function closeMoveToFolderModal() {
@@ -980,12 +996,8 @@ export function renderMediaLibraryPage(data: MediaLibraryPageData): string {
       document.addEventListener('click', function(e) {
         const dropdown = document.getElementById('bulk-actions-dropdown');
         const menu = document.getElementById('bulk-actions-menu');
-        if (dropdown && menu && !dropdown.contains(e.target)) {
-          menu.classList.remove('scale-100', 'opacity-100');
-          menu.classList.add('scale-95', 'opacity-0');
-          setTimeout(() => {
-            menu.classList.add('hidden');
-          }, 100);
+        if (dropdown && menu && !dropdown.contains(e.target) && !menu.classList.contains('hidden')) {
+          hideBulkActionsMenu();
         }
       });
     </script>

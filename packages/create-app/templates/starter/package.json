@@ -23,7 +23,7 @@
     "@cloudflare/workers-types": "^5.20260724.1",
     "@types/node": "^24.10.1",
     "drizzle-kit": "^0.31.7",
-    "drizzle-orm": "^0.44.7",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.10.7",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",

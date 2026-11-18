@@ -80,10 +80,11 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
   const title = isEdit ? `Edit: ${data.title || 'Content'}` : `New ${data.collection.display_name}`
   const hasValidationErrors = Boolean(data.validationErrors && Object.keys(data.validationErrors).length > 0)
 
-  // Construct back URL with preserved filters
+  // Construct back URL with preserved filters. referrerParams is reflected from
+  // the `?ref=` query param, so escape it before it lands in an href attribute.
   const backUrl = data.referrerParams
-    ? `/admin/content?${data.referrerParams}`
-    : `/admin/content?collection=${data.collection.id}`
+    ? `/admin/content?${escapeHtml(data.referrerParams)}`
+    : '/admin/content'
 
   // Group fields by category
   const coreFields = data.fields.filter(f => ['title', 'slug', 'content'].includes(f.field_name))
@@ -188,13 +189,16 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
             ${isEdit ? `hx-put="/admin/content/${data.id}"` : `hx-post="/admin/content"`}
             hx-target="#form-messages"
             hx-encoding="multipart/form-data"
+            method="post"
+            action="${isEdit ? `/admin/content/${data.id}` : '/admin/content'}"
+            enctype="multipart/form-data"
             data-has-validation-errors="${hasValidationErrors ? 'true' : 'false'}"
             class="space-y-6"
             novalidate
           >
             <input type="hidden" name="collection_id" value="${data.collection.id}">
             ${isEdit ? `<input type="hidden" name="id" value="${data.id}">` : ''}
-            ${data.referrerParams ? `<input type="hidden" name="referrer_params" value="${data.referrerParams}">` : ''}
+            ${data.referrerParams ? `<input type="hidden" name="referrer_params" value="${escapeHtml(data.referrerParams)}">` : ''}
 
             <!-- Core Fields -->
             ${renderFieldGroup('Basic Information', coreFieldsHTML)}
@@ -353,16 +357,15 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
               </button>
 
               ${isEdit ? `
-                <button
-                  type="button"
-                  onclick="deleteContent('${data.id}')"
+                <a
+                  href="/admin/content/${data.id}/delete${data.referrerParams ? `?ref=${encodeURIComponent(data.referrerParams)}` : ''}"
                   class="w-full inline-flex items-center gap-x-2 px-3 py-2 text-sm font-medium text-pink-700 dark:text-pink-300 hover:bg-pink-50 dark:hover:bg-pink-900/20 rounded-lg transition-colors"
                 >
                   <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/>
                   </svg>
                   Delete Content
-                </button>
+                </a>
               ` : ''}
             </div>
           </div>
@@ -434,17 +437,6 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
     iconColor: 'blue',
     confirmClass: 'bg-blue-500 hover:bg-blue-400',
     onConfirm: 'performDuplicateContent()'
-  })}
-
-    ${renderConfirmationDialog({
-    id: 'delete-content-confirm',
-    title: 'Delete Content',
-    message: 'Are you sure you want to delete this content? This action cannot be undone.',
-    confirmText: 'Delete',
-    cancelText: 'Cancel',
-    iconColor: 'red',
-    confirmClass: 'bg-red-500 hover:bg-red-400',
-    onConfirm: `performDeleteContent('${data.id}')`
   })}
 
     ${renderConfirmationDialog({
@@ -1429,23 +1421,6 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
         });
       }
 
-      function deleteContent(contentId) {
-        showConfirmDialog('delete-content-confirm');
-      }
-
-      function performDeleteContent(contentId) {
-        fetch(\`/admin/content/\${contentId}\`, {
-          method: 'DELETE'
-        })
-        .then(response => {
-          if (response.ok) {
-            window.location.href = '/admin/content';
-          } else {
-            alert('Error deleting content');
-          }
-        });
-      }
-
       // Repeater/blocks delete confirmation
       let pendingRepeaterDelete = null;
       function requestRepeaterDelete(callback, type = 'item') {
@@ -1502,34 +1477,21 @@ export function renderContentFormPage(data: ContentFormData, opts?: { partialOnl
         });
       }
 
-      // Auto-save functionality
-      let autoSaveTimeout;
-      function scheduleAutoSave() {
-        clearTimeout(autoSaveTimeout);
-        autoSaveTimeout = setTimeout(() => {
-          const form = document.getElementById('content-form');
-          const formData = new FormData(form);
-          formData.append('action', 'autosave');
-          
-          fetch(form.action, {
-            method: 'POST',
-            body: formData
-          })
-          .then(response => {
-            if (response.ok) {
-              console.log('Auto-saved');
-            }
-          })
-          .catch(error => console.error('Auto-save failed:', error));
-        }, 30000); // Auto-save every 30 seconds
-      }
-
-      // Bind auto-save to form changes
-      document.addEventListener('DOMContentLoaded', function() {
-        const form = document.getElementById('content-form');
-        form.addEventListener('input', scheduleAutoSave);
-        form.addEventListener('change', scheduleAutoSave);
-      });
+      // There was an "auto-save" here. It never saved anything, and it could not have: the
+      // request went to form.action, and HTMLFormElement is [LegacyOverrideBuiltIns], so a
+      // control named "action" -- this form has two, the save_draft and save_and_publish buttons
+      // -- shadows the built-in action property. form.action was the RadioNodeList of those
+      // buttons, not the URL, so every attempt went to /admin/content/[object RadioNodeList]
+      // relative to the current page. One of those turned up in a CI trace, which is how this
+      // was found.
+      //
+      // Repairing the URL would have been worse than leaving it broken: nothing server-side
+      // handles action=autosave (grep says the string exists only here), so the request would
+      // have fallen through to the ordinary create/update path and written a new document every
+      // thirty seconds of typing. The timer was also re-armed on every keystroke and outlived
+      // the page that set it, firing into whatever had navigated there since.
+      //
+      // Removed rather than fixed. Reinstating it means a real server-side endpoint first.
 
       ${data.tinymceEnabled ? getTinyMCEInitScript({
     skin: data.tinymceSettings?.skin,

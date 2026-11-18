@@ -1,3 +1,4 @@
+import { escapeHtml } from '../../utils/sanitize'
 import { renderAdminLayoutCatalyst, AdminLayoutCatalystData } from '../layouts/admin-layout-catalyst.template'
 import { renderPagination, PaginationData } from '../pagination.template'
 import { renderTable, TableData, TableColumn } from '../table.template'
@@ -31,6 +32,8 @@ export interface ContentListPageData {
   }>
   contentItems: ContentItem[]
   totalItems: number
+  /** True when totalItems is a lower bound (capped count) rather than an exact total. */
+  totalItemsCapped?: boolean
   itemsPerPage: number
   user?: {
     name: string
@@ -111,9 +114,9 @@ export function renderContentListPage(data: ContentListPageData): string {
         <div class="flex items-center">
           <div>
             <div class="text-sm font-medium text-zinc-950 dark:text-white">
-              <a href="/admin/content/${row.id}/edit${currentParams ? `?ref=${encodeURIComponent(currentParams)}` : ''}" class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">${row.title}</a>
+              <a href="/admin/content/${row.id}/edit${currentParams ? `?ref=${encodeURIComponent(currentParams)}` : ''}" class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">${escapeHtml(row.title)}</a>
             </div>
-            <div class="text-sm text-zinc-500 dark:text-zinc-400">${row.slug}</div>
+            <div class="text-sm text-zinc-500 dark:text-zinc-400">${escapeHtml(row.slug)}</div>
           </div>
         </div>
       `
@@ -171,18 +174,15 @@ export function renderContentListPage(data: ContentListPageData): string {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
             </svg>
           </button>
-          <button
+          <a
+            href="/admin/content/${row.id}/delete?source=list${currentParams ? `&ref=${encodeURIComponent(currentParams)}` : ''}"
             class="inline-flex items-center justify-center p-1.5 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
-            hx-delete="/admin/content/${row.id}"
-            hx-confirm="Are you sure you want to delete this content item?"
-            hx-target="#content-list"
-            hx-swap="outerHTML"
             title="Delete"
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
             </svg>
-          </button>
+          </a>
         </div>
       `
     }
@@ -207,6 +207,7 @@ export function renderContentListPage(data: ContentListPageData): string {
     currentPage: data.page,
     totalPages,
     totalItems: data.totalItems,
+    totalItemsCapped: data.totalItemsCapped,
     itemsPerPage: data.itemsPerPage,
     startItem,
     endItem,
@@ -408,7 +409,7 @@ export function renderContentListPage(data: ContentListPageData): string {
                 </div>
               </div>
               <div class="flex items-center gap-x-3">
-                <span class="text-sm/6 font-medium text-zinc-700 dark:text-zinc-300 px-3 py-1.5 rounded-full bg-white/60 dark:bg-zinc-800/60 backdrop-blur-sm">${data.totalItems} ${data.totalItems === 1 ? 'item' : 'items'}</span>
+                <span class="text-sm/6 font-medium text-zinc-700 dark:text-zinc-300 px-3 py-1.5 rounded-full bg-white/60 dark:bg-zinc-800/60 backdrop-blur-sm">${data.totalItems}${data.totalItemsCapped ? '+' : ''} ${data.totalItems === 1 && !data.totalItemsCapped ? 'item' : 'items'}</span>
                 ${filterBarData.actions?.map(action => `
                   <button
                     ${action.onclick ? `onclick="${action.onclick}"` : ''}
@@ -520,11 +521,14 @@ export function renderContentListPage(data: ContentListPageData): string {
         }
       }
 
-      // Select all functionality
+      // Select all functionality. renderTable gives the header checkbox the id
+      // 'select-all-' + tableId, so match the prefix — a bare 'select-all' never matches.
+      // This is delegated rather than bound per element because htmx swaps the table in.
       document.addEventListener('change', function(e) {
-        if (e.target.id === 'select-all') {
-          const checkboxes = document.querySelectorAll('.row-checkbox');
-          checkboxes.forEach(cb => cb.checked = e.target.checked);
+        if (e.target.id && e.target.id.indexOf('select-all-') === 0) {
+          const table = document.getElementById(e.target.id.replace('select-all-', ''));
+          const scope = table || document;
+          scope.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = e.target.checked);
           updateBulkActionsButton();
         } else if (e.target.classList.contains('row-checkbox')) {
           updateBulkActionsButton();

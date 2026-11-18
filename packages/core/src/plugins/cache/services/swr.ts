@@ -1,8 +1,13 @@
 /**
  * Stale-While-Revalidate store.
- * Per-isolate, in-memory. When a cache entry is about to be invalidated,
- * callers stash it here so the next request can serve the stale value
- * immediately instead of a cold DB hit.
+ * Per-isolate, in-memory. A reader that finds an entry here serves it immediately instead of
+ * taking a cold DB hit.
+ *
+ * `markStale` currently has no callers. The write paths in `routes/api.ts` used to stash the
+ * values they were about to invalidate, but `getAndConsumeStale` serves the stashed value as-is
+ * and never schedules a revalidation, so the first read after any write returned pre-write data.
+ * Only stash entries that are stale through TTL expiry — never ones an explicit `invalidate`
+ * just retired — and give the serve path a background refresh before wiring this back up.
  */
 
 const STALE_TTL_MS = 30_000 // 30-second stale window

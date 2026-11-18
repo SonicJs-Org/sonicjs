@@ -134,7 +134,7 @@ export interface DefinedPluginContext<Caps extends readonly Capability[] = reado
 export interface DefinePluginInput<Caps extends readonly Capability[] = readonly []> {
   /** Unique, stable plugin id (kebab-case). Becomes the plugin `name`. */
   id: string
-  /** Human-readable display name. Defaults to `id`. */
+  /** Human-readable display name, surfaced as `displayName`. Defaults to `id`. */
   name?: string
   /**
    * Semantic version of this plugin (e.g. `'1.2.3'`). Must be a valid semver
@@ -227,7 +227,14 @@ export interface DefinePluginInput<Caps extends readonly Capability[] = readonly
  */
 export interface DefinedPlugin {
   id: string
+  /**
+   * Internal key, always equal to `id`. Hook namespacing, capability errors and
+   * the plugin registries all address a plugin by this, so it is deliberately
+   * *not* the author's `name` — that lands on `displayName`.
+   */
   name: string
+  /** Human-readable label for the admin UI: the author's `name`, else `id`. */
+  displayName: string
   version: string
   /** The semver range for SonicJS core compatibility declared by the author. */
   sonicjsVersionRange?: string
@@ -332,6 +339,8 @@ export function definePlugin<const Caps extends readonly Capability[] = readonly
     )
   }
 
+  // Deliberately the id, not `input.name` — see DefinedPlugin.name. The author's
+  // label travels as `displayName`.
   const name = input.id
 
   const onBoot = input.onBoot
@@ -360,6 +369,7 @@ export function definePlugin<const Caps extends readonly Capability[] = readonly
   return {
     id: input.id,
     name,
+    displayName: input.name ?? input.id,
     version: input.version,
     sonicjsVersionRange: input.sonicjsVersionRange,
     description: input.description,

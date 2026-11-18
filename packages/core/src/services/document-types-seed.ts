@@ -236,6 +236,39 @@ export async function bootstrapDocumentTypes(db: D1Database): Promise<void> {
     ],
   })
 
+  // AI Search history + index metadata (document-backed; replace the legacy ai_search_history
+  // and ai_search_index_meta tables, which were never added to any migration — every write to
+  // them failed with `no such table` and was swallowed by the plugin's own error handling).
+  // No queryable fields: history is read by json_extract aggregate, and index metadata is keyed
+  // by slug (= collection id), which is already covered by idx_documents_unique_slug.
+  await registry.register({
+    id: 'ai_search_history',
+    name: 'ai_search_history',
+    displayName: 'AI Search History',
+    description: 'Logged search queries, used for autocomplete suggestions and search analytics',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      internal: true,
+      maxVersionsPerRoot: 1,
+      baseGrants: { admin: ['read', 'create', 'manage'] },
+    },
+  })
+
+  await registry.register({
+    id: 'ai_search_index_meta',
+    name: 'ai_search_index_meta',
+    displayName: 'AI Search Index Status',
+    description: 'Per-collection search index state (item counts, last sync, errors)',
+    source: 'system',
+    schema: anyObject,
+    settings: {
+      internal: true,
+      maxVersionsPerRoot: 1,
+      baseGrants: { admin: ['read', 'create', 'manage'] },
+    },
+  })
+
   // ── RBAC (auth-owned). 3 document types replace 4 relational tables: ──────────
   //   rbac_role        slug = roleId,  data.grants[] embedded (replaces role_grants)
   //   rbac_verb        slug = verbId

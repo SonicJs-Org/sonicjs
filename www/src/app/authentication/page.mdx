@@ -756,6 +756,14 @@ SonicJS implements a **signed double-submit cookie pattern** for CSRF protection
 
 **Exempt paths:** Login, registration, public form submissions, and API-key-only requests are exempt from CSRF validation.
 
+### Better Auth Version
+
+SonicJS pins **Better Auth to exactly `1.7.7`** (with `better-auth-cloudflare` `0.4.1`). Versions `>=1.4.0-beta.18 <1.7.7` carry a critical session-forgery advisory ([GHSA-965c-763c-88jm](https://github.com/advisories/GHSA-965c-763c-88jm)) with no 1.6.x backport, so upgrading past it — rather than pinning an older patched line — was the only fix. Verification tokens (magic link, email verification) are consumed from D1 via a single atomic `DELETE ... RETURNING`; rate-limit counters stay in memory; the Cloudflare KV secondary storage adapter is typed against Better Auth's full interface.
+
+### Credential Row Sync
+
+Better Auth authenticates against the `auth_account` table's `password` column (provider `credential`) — not the legacy `auth_user.password_hash` column. Every password-write path (registration, invitation acceptance, password reset, admin create-user, admin edit-user) updates **both** columns atomically, so a password set through any of those paths works for sign-in immediately. (Prior to v3.0.0, some paths only wrote the legacy column, which could lock a user out until their next login re-synced it.)
+
 ### Security Headers
 
 All responses include security headers:

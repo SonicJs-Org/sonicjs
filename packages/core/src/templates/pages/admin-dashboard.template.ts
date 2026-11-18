@@ -114,6 +114,9 @@ export function renderDashboardPage(data: DashboardPageData): string {
     currentPath: "/admin",
     user: data.user,
     version: data.version,
+    // The only page in core that charts anything, so it brings its own Chart.js rather than
+    // making every other admin page pay for the global.
+    scripts: ["https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"],
     content: pageContent,
   };
 
@@ -187,6 +190,8 @@ export function renderDashboardPageWithDynamicMenu(
     user: data.user,
     version: data.version,
     enableExperimentalFeatures: data.enableExperimentalFeatures,
+    // See the note on the sibling renderer above.
+    scripts: ["https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"],
     content: pageContent,
     dynamicMenuItems,
   };
@@ -298,10 +303,16 @@ function renderAnalyticsChart(): string {
         <canvas id="requestsChart" class="w-full" style="height: 300px;"></canvas>
       </div>
 
-      <!-- Hidden div to trigger HTMX polling -->
+      <!-- Hidden div to trigger HTMX polling.
+           hx-sync drops a tick whose predecessor is still in flight. Without it the trigger fires
+           on the wall clock regardless of whether the database answered, so any response slower
+           than the 1s interval starts a queue that only grows: measured against a preview
+           deployment, a browser left on admin pages accumulated dozens of overlapping metrics,
+           stats and storage requests, and new page loads then waited behind them. -->
       <div
         hx-get="/admin/dashboard/api/metrics"
         hx-trigger="every 1s"
+        hx-sync="this:drop"
         hx-swap="none"
         style="display: none;"
       ></div>
@@ -664,6 +675,7 @@ function renderSystemStatus(): string {
         class="p-6"
         hx-get="/admin/dashboard/system-status"
         hx-trigger="load, every 30s"
+        hx-sync="this:drop"
         hx-swap="innerHTML"
       >
         <!-- Loading skeleton with gradient -->

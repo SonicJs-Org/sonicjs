@@ -51,8 +51,9 @@ describe('MigrationService D45 — documents generated columns self-heal (data-d
     const colsBefore = sqlite.prepare("SELECT name FROM pragma_table_xinfo('documents')").all().map((r: any) => r.name)
     expect(colsBefore.some((n: string) => n.startsWith('q_'))).toBe(false)
 
-    // Bootstrap-time status check → ensureSchemaCompatibility → ensureDocumentGeneratedColumns.
-    await new MigrationService(adapter(sqlite) as any).getMigrationStatus()
+    // The bootstrap repair path. Reading migration status no longer triggers it -- a status
+    // read does no DDL -- so these call it the way bootstrap does.
+    await new MigrationService(adapter(sqlite) as any).ensureSchemaCompatibility()
 
     const colsAfter = sqlite.prepare("SELECT name FROM pragma_table_xinfo('documents')").all().map((r: any) => r.name)
     expect(colsAfter).toContain('q_tst_rating')
@@ -75,17 +76,48 @@ describe('MigrationService D45 — documents generated columns self-heal (data-d
       { name: 'rating', kind: 'scalar', type: 'integer', column: 'q_tst_rating' },
     ], '{"rating":5}')
     // First pass creates the column; second must not throw on the duplicate.
-    await new MigrationService(adapter(sqlite) as any).getMigrationStatus()
-    await new MigrationService(adapter(sqlite) as any).getMigrationStatus()
+    await new MigrationService(adapter(sqlite) as any).ensureSchemaCompatibility()
+    await new MigrationService(adapter(sqlite) as any).ensureSchemaCompatibility()
     const cols = sqlite.prepare("SELECT name FROM pragma_table_xinfo('documents')").all().map((r: any) => r.name)
     expect(cols).toContain('q_tst_rating')
+    sqlite.close()
+  })
+
+  it('reading migration status performs no DDL', async () => {
+    // The cost guard behind the CI stalls, not a style preference. This endpoint is called from
+    // the DOMContentLoaded handler of every admin page; when it also repaired the schema it cost
+    // a PRAGMA plus a possible ALTER per active document type, serially, on every one of those
+    // page loads. Counting statements is the only way to pin that, because the repair is
+    // idempotent -- the second call returns the same status whether or not it did the work.
+    const sqlite = new Database(':memory:')
+    seed(sqlite, 'testimonial', [
+      { name: 'rating', kind: 'scalar', type: 'integer', column: 'q_tst_rating' },
+    ], '{"rating":5}')
+
+    const seen: string[] = []
+    const base = adapter(sqlite)
+    const spy = { prepare: (sql: string) => { seen.push(sql); return base.prepare(sql) } }
+
+    const status = await new MigrationService(spy as any).getMigrationStatus()
+    expect(status).toBeTruthy()
+
+    const ddl = seen.filter((sql) => /\b(ALTER|CREATE|DROP)\b/i.test(sql))
+    expect(ddl, `status read issued DDL: ${ddl.join(' | ')}`).toEqual([])
+    // ...and it left the table exactly as it found it.
+    const cols = sqlite
+      .prepare("SELECT name FROM pragma_table_xinfo('documents')")
+      .all()
+      .map((r: any) => r.name)
+    expect(cols.some((n: string) => n.startsWith('q_'))).toBe(false)
     sqlite.close()
   })
 
   it('does not throw when document_types is absent', async () => {
     const sqlite = new Database(':memory:')
     sqlite.exec("CREATE TABLE documents (id TEXT PRIMARY KEY, data TEXT NOT NULL DEFAULT '{}')")
-    await expect(new MigrationService(adapter(sqlite) as any).getMigrationStatus()).resolves.toBeTruthy()
+    await expect(
+      new MigrationService(adapter(sqlite) as any).ensureSchemaCompatibility()
+    ).resolves.toBeUndefined()
     sqlite.close()
   })
 })

@@ -4,6 +4,7 @@ import { requireAuth } from '../../../../middleware'
 import { AISearchService } from '../services/ai-search'
 import { IndexManager } from '../services/indexer'
 import { renderSettingsPage } from '../components/settings-page'
+import { getDocumentRequestContext } from '../../../../services/document-request-context'
 import type { AISearchSettings, SearchQuery } from '../types'
 
 type Variables = {
@@ -30,7 +31,8 @@ adminRoutes.get('/', async (c) => {
     const ai = (c.env as any).AI // Workers AI for embeddings
     const vectorize = (c.env as any).VECTORIZE_INDEX // Vectorize for vector search
 
-    const service = new AISearchService(db, ai, vectorize)
+    const { tenantId } = getDocumentRequestContext(c)
+    const service = new AISearchService(db, ai, vectorize, tenantId)
     const indexer = new IndexManager(db, ai, vectorize)
 
     // Get settings
@@ -90,7 +92,8 @@ adminRoutes.post('/', async (c) => {
     const db = c.env.DB
     const ai = (c.env as any).AI
     const vectorize = (c.env as any).VECTORIZE_INDEX
-    const service = new AISearchService(db, ai, vectorize)
+    const { tenantId } = getDocumentRequestContext(c)
+    const service = new AISearchService(db, ai, vectorize, tenantId)
     const indexer = new IndexManager(db, ai, vectorize)
 
     const body = await c.req.json()
@@ -150,7 +153,8 @@ adminRoutes.get('/api/settings', async (c) => {
     const db = c.env.DB
     const ai = (c.env as any).AI
     const vectorize = (c.env as any).VECTORIZE_INDEX
-    const service = new AISearchService(db, ai, vectorize)
+    const { tenantId } = getDocumentRequestContext(c)
+    const service = new AISearchService(db, ai, vectorize, tenantId)
 
     const settings = await service.getSettings()
     return c.json({ success: true, data: settings })
@@ -169,7 +173,8 @@ adminRoutes.get('/api/new-collections', async (c) => {
     const db = c.env.DB
     const ai = (c.env as any).AI
     const vectorize = (c.env as any).VECTORIZE_INDEX
-    const service = new AISearchService(db, ai, vectorize)
+    const { tenantId } = getDocumentRequestContext(c)
+    const service = new AISearchService(db, ai, vectorize, tenantId)
 
     const notifications = await service.detectNewCollections()
     return c.json({ success: true, data: notifications })

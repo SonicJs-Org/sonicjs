@@ -3,6 +3,7 @@ import { renderPagination, PaginationData } from '../pagination.template'
 import { renderAlert } from '../alert.template'
 import { renderTable, TableColumn, TableData } from '../table.template'
 import { renderConfirmationDialog, getConfirmationDialogScript } from '../components/confirmation-dialog.template'
+import { escapeHtml } from '../../utils/sanitize'
 
 export interface User {
   id: string
@@ -48,7 +49,7 @@ export function renderUsersListPage(data: UsersListPageData): string {
       render: (value: string | null, row: User) => {
         const initials = `${row.firstName.charAt(0)}${row.lastName.charAt(0)}`.toUpperCase()
         if (value) {
-          return `<img src="${value}" alt="${row.firstName} ${row.lastName}" class="w-8 h-8 rounded-full">`
+          return `<img src="${escapeHtml(value)}" alt="${escapeHtml(row.firstName)} ${escapeHtml(row.lastName)}" class="w-8 h-8 rounded-full">`
         }
         return `
           <div class="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-500 dark:from-cyan-300 dark:to-blue-400 rounded-full flex items-center justify-center">
@@ -77,9 +78,13 @@ export function renderUsersListPage(data: UsersListPageData): string {
         const statusBadge = row.isActive ?
           '<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-lime-50 dark:bg-lime-500/10 text-lime-700 dark:text-lime-300 ring-1 ring-inset ring-lime-700/10 dark:ring-lime-400/20 ml-2">Active</span>' :
           '<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-700/10 dark:ring-red-500/20 ml-2">Inactive</span>'
+        // The name is a real link, not just a row the mouse can click: `rowClickable` below
+        // wires an onclick on the <tr>, which no keyboard or screen-reader user can reach.
         return `
           <div>
-            <div class="text-sm font-medium text-zinc-950 dark:text-white">${fullName}${statusBadge}</div>
+            <div class="text-sm font-medium text-zinc-950 dark:text-white">
+              <a href="/admin/users/${escapeHtml(row.id)}/edit" class="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">${fullName}</a>${statusBadge}
+            </div>
           </div>
         `
       }

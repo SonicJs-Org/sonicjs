@@ -11,6 +11,8 @@ import type { Bindings, Variables } from '../app'
 import { getUserProfileConfig, getRegistrationFields, renderCustomProfileSection, getCustomData, saveCustomData, extractCustomFieldsFromForm, sanitizeCustomData, validateCustomData, readProfileData, writeProfileData } from '../plugins/core-plugins/user-profiles'
 import { TenantService, VALID_MEMBER_ROLES } from '../plugins/core-plugins/multi-tenant-plugin/services/tenant-service'
 import { RbacService } from '../services/rbac'
+import { syncCredentialPassword } from '../auth/credential-account'
+import { MAX_PASSWORD_LENGTH } from '../services/auth-validation'
 import { ensureTwoFactorRequiredColumn } from '../services/migrations'
 
 const userRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -383,6 +385,13 @@ userRoutes.post('/profile/password', async (c) => {
         dismissible: true 
       }))
     }
+    if (newPassword.length > MAX_PASSWORD_LENGTH) {
+      return c.html(renderAlert({
+        type: 'error',
+        message: `New password must be at most ${MAX_PASSWORD_LENGTH} characters long.`,
+        dismissible: true
+      }))
+    }
 
     // Get current user data
     const userStmt = db.prepare(`
@@ -423,12 +432,14 @@ userRoutes.post('/profile/password', async (c) => {
       Date.now()
     ).run()
 
-    // Update user password
-    const updateStmt = db.prepare(`
-      UPDATE auth_user SET password_hash = ?, updated_at = ?
-      WHERE id = ?
-    `)
-    await updateStmt.bind(newPasswordHash, Date.now(), user!.userId).run()
+    // Update user password (and the credential row Better Auth signs in with)
+    await db.batch([
+      db.prepare(`
+        UPDATE auth_user SET password_hash = ?, updated_at = ?
+        WHERE id = ?
+      `).bind(newPasswordHash, Date.now(), user!.userId),
+      ...syncCredentialPassword(db, user!.userId, newPasswordHash),
+    ])
 
     // Log the activity
     await logActivity(
@@ -722,6 +733,13 @@ userRoutes.post('/users/new', async (c) => {
         dismissible: true
       }))
     }
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      return c.html(renderAlert({
+        type: 'error',
+        message: `Password must be at most ${MAX_PASSWORD_LENGTH} characters long.`,
+        dismissible: true
+      }))
+    }
 
     if (password !== confirmPassword) {
       return c.html(renderAlert({
@@ -749,20 +767,26 @@ userRoutes.post('/users/new', async (c) => {
     // Hash password
     const passwordHash = await AuthManager.hashPassword(password)
 
-    // Create user
+    // Create user (with auth_account credential row for Better Auth sign-in)
     const userId = crypto.randomUUID()
-    const createStmt = db.prepare(`
-      INSERT INTO auth_user (
-        id, email, first_name, last_name, phone, bio,
-        password_hash, role, is_active, email_verified, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
+    const nowMs = Date.now()
+    const nowSec = Math.floor(nowMs / 1000)
 
-    await createStmt.bind(
-      userId, email, firstName, lastName, phone, bio,
-      passwordHash, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
-      Date.now(), Date.now()
-    ).run()
+    await db.batch([
+      db.prepare(`
+        INSERT INTO auth_user (
+          id, email, first_name, last_name, phone, bio,
+          password_hash, role, is_active, email_verified, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        userId, email, firstName, lastName, phone, bio,
+        passwordHash, role, isActive ? 1 : 0, emailVerified ? 1 : 0,
+        nowMs, nowMs
+      ),
+      db.prepare(`INSERT OR IGNORE INTO auth_account (id, user_id, account_id, provider_id, password, created_at, updated_at)
+        VALUES (?, ?, ?, 'credential', ?, ?, ?)`)
+        .bind(`cred-${userId}`, userId, userId, passwordHash, nowSec, nowSec),
+    ])
 
     // Save registration profile fields if profile plugin is configured
     if (sanitizedRegistrationCustom !== null && Object.keys(sanitizedRegistrationCustom).length > 0) {
@@ -1059,6 +1083,13 @@ userRoutes.put('/users/:id', async (c) => {
           dismissible: true
         }))
       }
+      if (newPassword.length > MAX_PASSWORD_LENGTH) {
+        return c.html(renderAlert({
+          type: 'error',
+          message: `Password must be at most ${MAX_PASSWORD_LENGTH} characters long.`,
+          dismissible: true
+        }))
+      }
       if (newPassword !== confirmPassword) {
         return c.html(renderAlert({
           type: 'error',
@@ -1098,13 +1129,15 @@ userRoutes.put('/users/:id', async (c) => {
       Date.now(), userId
     ).run()
 
-    // Update password if provided
+    // Update password if provided (and the credential row Better Auth signs in with)
     if (newPassword) {
       const passwordHash = await AuthManager.hashPassword(newPassword)
-      const updatePasswordStmt = db.prepare(`
-        UPDATE auth_user SET password_hash = ?, updated_at = ? WHERE id = ?
-      `)
-      await updatePasswordStmt.bind(passwordHash, Date.now(), userId).run()
+      await db.batch([
+        db.prepare(`
+          UPDATE auth_user SET password_hash = ?, updated_at = ? WHERE id = ?
+        `).bind(passwordHash, Date.now(), userId),
+        ...syncCredentialPassword(db, userId, passwordHash),
+      ])
     }
 
     // Check if any profile field has data

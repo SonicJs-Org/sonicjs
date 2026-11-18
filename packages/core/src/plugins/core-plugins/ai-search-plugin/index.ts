@@ -39,6 +39,9 @@ export const aiSearchPlugin = definePlugin({
 })
 
 // Re-exports
+// Exported so app.ts can mount /api/search ahead of the generic /api/:collection
+// catch-all, which would otherwise shadow it (see app.ts).
+export { apiRoutes as aiSearchApiRoutes }
 export { AISearchService }
 export { IndexManager }
 export type {

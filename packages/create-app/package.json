@@ -1,6 +1,6 @@
 {
   "name": "create-sonicjs",
-  "version": "3.0.0-beta.28",
+  "version": "3.0.0",
   "description": "Create a new SonicJS application with zero configuration",
   "type": "module",
   "bin": {
@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "build": "echo 'No build needed for CLI'",
-    "test": "node test-cli.js"
+    "test": "vitest run --config vitest.config.ts"
   },
   "keywords": [
     "sonicjs",

@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { Bindings } from '../../../../app'
 import { AISearchService } from '../services/ai-search'
+import { getDocumentRequestContext } from '../../../../services/document-request-context'
 import type { SearchQuery } from '../types'
 
 type Variables = {
@@ -22,7 +23,10 @@ apiRoutes.post('/', async (c) => {
     const db = c.env.DB
     const ai = (c.env as any).AI
     const vectorize = (c.env as any).VECTORIZE_INDEX
-    const service = new AISearchService(db, ai, vectorize)
+    // Anonymous callers resolve to the `public` principal; a signed-in caller also carries their
+    // role, which is what matches role-keyed base grants (D11).
+    const { tenantId, principalSet } = getDocumentRequestContext(c)
+    const service = new AISearchService(db, ai, vectorize, tenantId)
 
     const body = await c.req.json()
 
@@ -44,7 +48,7 @@ apiRoutes.post('/', async (c) => {
       }
     }
 
-    const results = await service.search(query)
+    const results = await service.search(query, principalSet)
 
     return c.json({
       success: true,
@@ -72,7 +76,8 @@ apiRoutes.get('/suggest', async (c) => {
     const db = c.env.DB
     const ai = (c.env as any).AI
     const vectorize = (c.env as any).VECTORIZE_INDEX
-    const service = new AISearchService(db, ai, vectorize)
+    const { tenantId } = getDocumentRequestContext(c)
+    const service = new AISearchService(db, ai, vectorize, tenantId)
 
     const query = c.req.query('q') || ''
 

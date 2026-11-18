@@ -244,9 +244,12 @@ app.post('/test-seed-defaults', async (c: Context) => {
       return c.json({ success: true, action: 'restored', message: 'Welcome post restored' })
     }
 
-    // Ensure blog_post document type exists
+    // Ensure blog_post document type exists. `document_types` is tenant-global -- it has no
+    // tenant_id column, so the predicate that used to be here threw `no such column: tenant_id`
+    // and the catch turned it into a 500. That only showed on a freshly migrated database,
+    // because the branch is unreachable while the welcome post is still there.
     const typeExists = await db
-      .prepare(`SELECT id FROM document_types WHERE id = ? AND tenant_id = 'default'`)
+      .prepare(`SELECT id FROM document_types WHERE id = ?`)
       .bind(BLOG_POST_TYPE)
       .first()
     if (!typeExists) {

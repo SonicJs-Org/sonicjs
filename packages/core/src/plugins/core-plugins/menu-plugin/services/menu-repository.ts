@@ -1,4 +1,4 @@
-import { D1Database } from '@cloudflare/workers-types'
+import { D1Database, D1PreparedStatement } from '@cloudflare/workers-types'
 import { nanoid } from 'nanoid'
 
 export interface MenuItemData {
@@ -155,28 +155,23 @@ export function buildSidebarTree(items: MenuItem[]): SidebarItem[] {
   return roots
 }
 
-export async function upsertSystemItem(
+/**
+ * Build the INSERT for a system menu item without running it.
+ *
+ * Handed back un-run so several can go into one `db.batch`. Against a remote D1 each statement is
+ * its own round trip, and the whole of this file's seeding runs on every cold isolate.
+ */
+function buildSystemItemInsert(
   db: D1Database,
   slug: string,
   data: MenuItemData,
   sortOrder: number
-): Promise<void> {
+): D1PreparedStatement {
   const now = Math.floor(Date.now() / 1000)
-
-  const existing = await db
-    .prepare(
-      `SELECT id FROM documents WHERE slug = ? AND type_id = 'menu_item' AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL`
-    )
-    .bind(slug)
-    .first<{ id: string }>()
-
-  if (existing) {
-    return
-  }
 
   const id = nanoid()
 
-  await db
+  return db
     .prepare(
       `INSERT INTO documents (
         id, root_id, type_id, type_version, version_of_id, version_number,
@@ -226,7 +221,58 @@ export async function upsertSystemItem(
       now,                      // created_at
       now                       // updated_at
     )
-    .run()
+}
+
+export async function upsertSystemItem(
+  db: D1Database,
+  slug: string,
+  data: MenuItemData,
+  sortOrder: number
+): Promise<void> {
+  const existing = await db
+    .prepare(
+      `SELECT id FROM documents WHERE slug = ? AND type_id = 'menu_item' AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL`
+    )
+    .bind(slug)
+    .first<{ id: string }>()
+
+  if (existing) {
+    return
+  }
+
+  await buildSystemItemInsert(db, slug, data, sortOrder).run()
+}
+
+/**
+ * Seed every system menu item in at most two round trips instead of one per item.
+ *
+ * `upsertSystemItem` is a SELECT followed by a conditional INSERT, and the menu plugin's `onBoot`
+ * called it once per item on every cold isolate — one serial D1 round trip per item to discover,
+ * in the steady state, that there is nothing to do. A single SELECT answers that for all of them,
+ * and whatever inserts remain go out in one batch.
+ */
+export async function seedSystemMenuItems(
+  db: D1Database,
+  items: Array<{ slug: string; data: MenuItemData; sortOrder: number }>
+): Promise<void> {
+  if (items.length === 0) {
+    return
+  }
+
+  const existing = await db
+    .prepare(
+      `SELECT slug FROM documents WHERE type_id = 'menu_item' AND tenant_id = 'default' AND is_current_draft = 1 AND deleted_at IS NULL`
+    )
+    .all<{ slug: string }>()
+
+  const present = new Set((existing.results ?? []).map((row) => row.slug))
+  const missing = items.filter((item) => !present.has(item.slug))
+
+  if (missing.length === 0) {
+    return
+  }
+
+  await db.batch(missing.map((item) => buildSystemItemInsert(db, item.slug, item.data, item.sortOrder)))
 }
 
 export async function upsertPluginItem(

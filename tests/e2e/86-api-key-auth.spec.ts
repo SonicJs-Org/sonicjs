@@ -1,5 +1,6 @@
-import { test, expect } from '@playwright/test'
-import { ADMIN_CREDENTIALS } from './utils/test-helpers'
+import type { APIRequestContext } from '@playwright/test'
+import { test, expect } from './fixtures'
+import { ADMIN_CREDENTIALS, requestLoginToken } from './utils/test-helpers'
 
 /**
  * Programmatic API keys — api-keys plugin (admin manage API at
@@ -18,15 +19,9 @@ import { ADMIN_CREDENTIALS } from './utils/test-helpers'
  */
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8787'
 
-async function loginToken(request: any): Promise<string> {
-  const res = await request.post('/auth/login', {
-    data: { email: ADMIN_CREDENTIALS.email, password: ADMIN_CREDENTIALS.password },
-  })
-  expect(res.ok()).toBe(true)
-  const { token } = await res.json()
-  expect(typeof token).toBe('string')
-  return token
-}
+// /auth/login is rate limited per IP and the whole suite is one IP, so this goes through the
+// shared retrying helper rather than a bare POST — see requestLoginToken.
+const loginToken = (request: APIRequestContext): Promise<string> => requestLoginToken(request)
 
 async function createKey(request: any, token: string, name: string) {
   const res = await request.post('/admin/plugins/api-keys/api/keys', {
@@ -38,7 +33,7 @@ async function createKey(request: any, token: string, name: string) {
   return body.apiKey as { id: string; key: string; prefix: string; name: string }
 }
 
-test.describe('Programmatic API keys @smoke @api-keys', () => {
+test.describe('Programmatic API keys @smoke @api-keys @lock-auth-login', () => {
   test.beforeAll(async ({ request }) => {
     await request.post('/auth/seed-admin').catch(() => {})
   })

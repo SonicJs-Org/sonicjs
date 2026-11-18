@@ -141,6 +141,9 @@ export const account = authAccount;
 export const verification = authVerification;
 
 // ── Better Auth tenant (organization plugin) tables ──────────────────────────
+// Better Auth's organization plugin never writes `updatedAt` on these tables, so the NOT NULL
+// column needs a drizzle-side default or every insert fails (Better Auth 1.7.3+ refuses to start).
+// `$onUpdateFn` keeps it moving on updates, which Better Auth doesn't do either.
 export const authTenant = sqliteTable('auth_tenant', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
@@ -151,7 +154,10 @@ export const authTenant = sqliteTable('auth_tenant', {
   domain: text('domain'),
   notes: text('notes').notNull().default(''),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date()),
 })
 
 export const authTenantMember = sqliteTable('auth_tenant_member', {
@@ -161,7 +167,10 @@ export const authTenantMember = sqliteTable('auth_tenant_member', {
   role: text('role').notNull().default('member'),
   email: text('email'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date()),
 })
 
 export const authTenantInvitation = sqliteTable('auth_tenant_invitation', {
@@ -173,7 +182,10 @@ export const authTenantInvitation = sqliteTable('auth_tenant_invitation', {
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
   inviterId: text('inviter_id').references(() => authUser.id, { onDelete: 'set null' }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date()),
 })
 
 export const authTenantTeam = sqliteTable('auth_tenant_team', {
@@ -181,7 +193,10 @@ export const authTenantTeam = sqliteTable('auth_tenant_team', {
   name: text('name').notNull(),
   tenantId: text('tenant_id').notNull().references(() => authTenant.id, { onDelete: 'cascade' }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .$defaultFn(() => new Date())
+    .$onUpdateFn(() => new Date()),
 })
 
 // Collections are code-only — registered via `registerCollections()`. The

@@ -286,15 +286,39 @@ adminSettingsRoutes.get('/api/database-tools/stats', async (c) => {
 adminSettingsRoutes.get('/api/database-tools/validate', async (c) => {
   try {
     const db = c.env.DB
+    const issues: string[] = []
 
-    // Run PRAGMA integrity_check
-    const integrityResult = await db.prepare('PRAGMA integrity_check').first()
-    const isValid = (integrityResult as any)?.integrity_check === 'ok'
+    // D1 refuses `PRAGMA integrity_check` outright (SQLITE_AUTH), so this used to 500 on
+    // every environment. Validate what the platform does allow instead: each core table
+    // answers a query, and an admin account still exists.
+    const requiredTables = ['auth_user', 'documents', 'document_types']
+    for (const table of requiredTables) {
+      try {
+        await db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).first()
+      } catch {
+        issues.push(`Critical table unavailable: ${table}`)
+      }
+    }
+
+    try {
+      const adminCount = await db
+        .prepare(`SELECT COUNT(*) as count FROM auth_user WHERE role = ?`)
+        .bind('admin')
+        .first<{ count: number }>()
+      if (!adminCount?.count) issues.push('No admin users found')
+    } catch (error) {
+      issues.push(`Could not count admin users: ${error}`)
+    }
+
+    const isValid = issues.length === 0
 
     return c.json({
       success: true,
       data: {
         valid: isValid,
+        // The settings page prints `data.issues.join('\n')` on failure, so this has to be
+        // an array even when empty.
+        issues,
         message: isValid ? 'Database integrity check passed' : 'Database integrity check failed'
       }
     })

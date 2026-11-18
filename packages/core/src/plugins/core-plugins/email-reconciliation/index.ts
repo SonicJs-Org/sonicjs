@@ -49,6 +49,7 @@ export const EMAIL_LOG_DOCUMENT_TYPE = {
 
 export const emailReconciliationPlugin = definePlugin({
   id: 'email-reconciliation',
+  name: 'Email Reconciliation',
   version: '1.0.0',
   description:
     'Hourly cron that backfills email delivery state from provider status APIs. ' +

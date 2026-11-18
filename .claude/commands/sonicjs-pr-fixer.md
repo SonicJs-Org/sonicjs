@@ -73,23 +73,9 @@ git cherry-pick <commit-sha>
 git log --oneline -<N> --format="%h %an <%ae> - %s"
 ```
 
-#### Step 7: Run Tests & Fix Issues
-```bash
-npm run type-check
-npm test
-npm run e2e
-```
+#### Step 7: Run Automated Quality Loop
 
-If tests fail:
-- Report failures
-- Ask if user wants fixes
-- Make fix commits with proper attribution:
-  ```
-  fix: resolve [issue] from PR #<PR_NUMBER>
-
-  Co-Authored-By: <Original Author> <email>
-  Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
-  ```
+After cherry-picking, run the full automated quality loop (see **Automated Quality Loop** section below) before creating the PR.
 
 #### Step 8: Create New PR
 ```bash
@@ -174,10 +160,15 @@ git push origin <branch-name>
 git checkout main
 ```
 
-#### Step 4: Report Status
+#### Step 4: Run Automated Quality Loop
+
+After pushing the empty commit, check out the branch and run the full automated quality loop (see **Automated Quality Loop** section below) to ensure all tests and code review pass before handing off.
+
+#### Step 5: Report Status
 - Which PRs were updated
 - Links to PRs for monitoring
-- Reminder: PRs still need manual review and merge
+- Quality loop results (all stages passed)
+- Reminder: PRs still need manual merge after human review
 
 ---
 
@@ -206,15 +197,9 @@ npm test
 
 Report any failures to user.
 
-#### Step 3: Apply Fixes
-Make necessary fixes following fullstack-dev standards.
+#### Step 3: Run Automated Quality Loop
 
-Commit with:
-```
-fix: <description>
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
-```
+Run the full automated quality loop (see **Automated Quality Loop** section below).
 
 #### Step 4: Push Updates
 ```bash
@@ -228,6 +213,229 @@ git checkout main
 
 ---
 
+## Automated Quality Loop
+
+This loop runs automatically after every cherry-pick or fix operation. **Do not proceed to human review until the loop completes successfully.** Never skip e2e — it is the final gate.
+
+### Loop Overview
+
+```
+[Claude Code Review] → fix all issues →
+[Codex Code Review]  → fix all issues →
+[Full Test Suite]    → fix failures   →
+[E2E Tests]          → fix failures   → ✅ Ready for human review
+```
+
+Each stage auto-retries until it passes. Max **5 fix iterations** per stage before stopping and reporting to the user.
+
+---
+
+### Stage 1: Claude Code Review
+
+Run a full code review of the changed files:
+
+```bash
+# Get list of changed files on current branch vs main
+git diff main --name-only
+```
+
+Review each changed file for:
+- Security vulnerabilities
+- Logic errors and edge cases
+- Type safety issues
+- SonicJS conventions and patterns
+- Performance concerns
+
+**Auto-fix all issues found.** Commit with:
+```
+fix: address Claude code review findings
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+```
+
+Repeat review after fixes until no issues remain.
+
+---
+
+### Stage 2: Codex Code Review
+
+Delegate a code review to Codex on the same changed files:
+
+```bash
+codex "Review the following changed files in this PR for bugs, security issues, type errors, and SonicJS conventions. List every issue found with the file and line number, then fix them all." \
+  --file <changed-file-1> --file <changed-file-2> ...
+```
+
+**Auto-fix all issues Codex identifies.** Commit with:
+```
+fix: address Codex code review findings
+
+Co-Authored-By: Codex <noreply@openai.com>
+```
+
+Repeat until Codex reports no issues.
+
+---
+
+### Stage 3: Full Test Suite
+
+```bash
+npm run type-check
+npm test
+```
+
+**If failures occur:**
+1. Analyze each failure — determine: **code bug** or **test needs updating**?
+   - Code bug → fix the source code
+   - Test outdated/wrong → update the test to match correct new behavior (never delete a test to make it pass)
+2. Commit the fix
+3. Re-run — repeat until all pass
+
+Commit format:
+```
+fix: resolve test failures [brief description]
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+```
+
+---
+
+### Stage 4: E2E Tests (Final Gate)
+
+```bash
+npm run e2e
+```
+
+**Never skip this stage.** E2E is the final gate before human review.
+
+**If failures occur:**
+1. Analyze each failure carefully — **code bug or test needs updating?**
+   - Code bug → fix source code, re-run e2e
+   - Test outdated → update e2e test to reflect new correct behavior
+2. Commit the fix
+3. Re-run e2e — repeat until all pass
+
+Commit format:
+```
+fix: resolve e2e failures [brief description]
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+```
+
+---
+
+### Loop Completion
+
+Once all 4 stages pass cleanly, report to the user:
+- ✅ Claude code review: passed
+- ✅ Codex code review: passed
+- ✅ Unit/type tests: passed
+- ✅ E2E tests: passed
+- 🔎 Ready for human review
+
+Then proceed with the PR creation (Mode 1) or push (Mode 3).
+
+---
+
+### Loop Failure Escalation
+
+If any stage fails to pass after **5 fix attempts**, stop and report:
+- Which stage is stuck
+- The exact errors
+- What was tried
+- Ask the user how to proceed
+
+---
+
+## Mode 4: Process PR Review Comments
+
+Use when: A PR has unresolved review comments from humans or agents that need to be addressed before merge.
+
+### Usage
+```
+/sonicjs-pr-fixer reviews 532       # Process all unresolved review comments on PR #532
+/sonicjs-pr-fixer reviews <url>     # Same, using URL
+```
+
+### Workflow
+
+#### Step 1: Fetch All Review Comments
+```bash
+gh pr view <PR_NUMBER> --json reviews,comments,reviewRequests
+gh api repos/SonicJs-Org/sonicjs/pulls/<PR_NUMBER>/comments
+gh api repos/SonicJs-Org/sonicjs/pulls/<PR_NUMBER>/reviews
+```
+
+#### Step 2: Triage Comments
+
+Categorize each unresolved comment:
+- **Action required** — bug, logic error, security issue, type problem, naming, missing test, style violation → must fix
+- **Suggestion** — "consider X" or "maybe Y" → apply if clearly correct, otherwise note and skip
+- **Question / clarification** → answer in a reply comment, no code change needed
+- **Already addressed** — code already reflects the request → reply confirming it's done and resolve
+
+Skip comments that are:
+- Outdated (on deleted lines)
+- Resolved/dismissed already
+- Pure praise with no ask
+
+#### Step 3: Apply All Required Fixes
+
+For each actionable comment, checkout the PR branch and fix the issue:
+```bash
+gh pr checkout <PR_NUMBER>
+```
+
+Make targeted, minimal changes per comment. Do not refactor beyond what's asked.
+
+Commit after each logical group of fixes:
+```
+fix: address PR review comments
+
+- <brief description of what each comment asked for>
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+```
+
+#### Step 4: Reply to Each Comment
+
+After fixing, reply to each comment via the API to confirm it's addressed:
+
+```bash
+gh api repos/SonicJs-Org/sonicjs/pulls/<PR_NUMBER>/comments/<COMMENT_ID>/replies \
+  -f body="Fixed in <commit-sha> — <one-line description of what was changed>"
+```
+
+For suggestion comments that were skipped:
+```bash
+gh api ... -f body="Noted — kept current approach because <reason>."
+```
+
+For question comments:
+```bash
+gh api ... -f body="<direct answer to the question>"
+```
+
+#### Step 5: Run the Automated Quality Loop
+
+After all comment fixes are committed, run the full **Automated Quality Loop** (Claude review → Codex review → unit tests → e2e) to ensure fixes didn't break anything.
+
+#### Step 6: Push and Report
+
+```bash
+git push
+git checkout main
+```
+
+Report to user:
+- How many comments were found
+- How many were fixed (with commit sha)
+- How many were answered/skipped (with reason)
+- Quality loop result
+- PR link for human review
+
+---
+
 ## Quick Reference
 
 | Command | Purpose |
@@ -236,6 +444,7 @@ git checkout main
 | `/sonicjs-pr-fixer dependabot` | Enable e2e on Dependabot PRs |
 | `/sonicjs-pr-fixer dependabot all` | Enable e2e on all Dependabot PRs |
 | `/sonicjs-pr-fixer fix <PR>` | Checkout and fix any PR |
+| `/sonicjs-pr-fixer reviews <PR>` | Process all unresolved review comments |
 
 ## Important Notes
 
@@ -251,10 +460,12 @@ git checkout main
 - Offer options: resolve, skip, or abort
 
 ### Quality Standards
-- Follow fullstack-dev agent testing standards
+- **Never proceed to human review without completing the full Automated Quality Loop**
+- **Never skip e2e tests** — they are the final gate, non-negotiable
+- Claude code review → Codex code review → unit tests → e2e, in that order
+- When a test fails: fix the code OR update the test — never delete a test to make it pass
 - All fixes must pass type-check
 - Unit test coverage maintained
-- E2E tests should pass
 
 ## Error Handling
 

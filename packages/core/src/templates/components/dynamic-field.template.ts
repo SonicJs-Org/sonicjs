@@ -999,13 +999,21 @@ export function renderDynamicField(field: FieldDefinition, options: FieldRenderO
             hx-swap="innerHTML"
             hx-include="this"
             ${disabled ? 'disabled' : ''}
+            ${required}
           >
+          <!--
+            The required flag belongs on the visible search box, not on the hidden input
+            below:
+            a hidden control that fails validation is not focusable, so Chrome aborts the
+            submit without reporting anything and the Save button looks dead. The submit
+            handler further down copies the display value into the hidden input whenever
+            no user is linked, so validating the visible field is equivalent.
+          -->
           <input
             type="hidden"
             id="${fieldId}"
             name="${fieldName}"
             value="${escapeHtml(idValue)}"
-            ${required}
           >
           <div
             id="${fieldId}-dropdown"
@@ -2170,6 +2178,18 @@ function getStructuredFieldScript(): string {
                 updateOrderLabels();
               };
 
+              // updateHiddenInput re-dispatches a bubbling change event from this container's
+              // own hidden input so ancestor containers re-serialize. A nested array's hidden
+              // input lives inside the PARENT's [data-structured-array-list], so the unscoped
+              // target.closest('[data-structured-array-list]') test below also matched this
+              // container's own synthetic event and re-entered updateHiddenInput until the stack
+              // blew ("Maximum call stack size exceeded" on every nested add/remove/edit).
+              const isOwnListMutation = (target) => {
+                if (target === getLiveHiddenInput()) return false;
+                const liveList = getLiveList();
+                return !!liveList && liveList.contains(target);
+              };
+
               const addArrayItem = () => {
                 const liveList = getLiveList();
                 if (!liveList) return;
@@ -2299,7 +2319,7 @@ function getStructuredFieldScript(): string {
               container.addEventListener('input', (event) => {
               const target = event.target;
               if (!(target instanceof Element)) return;
-              if (target.closest('[data-structured-array-list]')) {
+              if (isOwnListMutation(target)) {
                 updateHiddenInput();
               }
               });
@@ -2307,7 +2327,7 @@ function getStructuredFieldScript(): string {
               container.addEventListener('change', (event) => {
               const target = event.target;
               if (!(target instanceof Element)) return;
-              if (target.closest('[data-structured-array-list]')) {
+              if (isOwnListMutation(target)) {
                 updateHiddenInput();
               }
               });

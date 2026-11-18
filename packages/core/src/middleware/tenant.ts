@@ -14,7 +14,8 @@
  * Every candidate is validated against the tenant registry (must exist AND be active); invalid
  * candidates fall through to the next source. Resolution state (plugin status + settings + tenant
  * map) is cached per isolate with a short TTL and invalidated by tenant/plugin writes in the same
- * isolate.
+ * isolate — so an /admin request naming a tenant this isolate's registry does not hold re-reads the
+ * registry once rather than falling through to 'default' (see tenantMiddleware).
  *
  * `getDocumentRequestContext()` reads the resolved value — the document layer chokepoint stays the
  * single place tenant scope enters queries (R3).
@@ -58,15 +59,13 @@ export function invalidateTenantCache(): void {
   cache = null
 }
 
-async function loadTenantState(db: any): Promise<TenantCacheEntry> {
-  const now = Date.now()
-  if (cache && now - cache.fetchedAt < CACHE_TTL_MS) return cache
-
-  let pluginActive = false
-  let settings = DEFAULT_SETTINGS
-  const tenants = new Map<string, { name: string; status: string }>()
-  const domains = new Map<string, string>()
-
+/**
+ * Reads the plugin's activation flag and resolution settings. `null` means the DB could not be
+ * read at all (first boot, unmigrated) and the caller should fall back to single-tenant.
+ */
+async function loadPluginState(
+  db: any
+): Promise<{ pluginActive: boolean; settings: TenantResolutionSettings } | null> {
   try {
     const pluginRow = await db.prepare(
       `SELECT data FROM documents
@@ -74,19 +73,72 @@ async function loadTenantState(db: any): Promise<TenantCacheEntry> {
          AND q_plugin_status = 'active' AND is_current_draft = 1 AND deleted_at IS NULL`
     ).bind(MULTI_TENANT_PLUGIN_ID).first() as { data?: string } | null
 
-    if (pluginRow) {
-      pluginActive = true
-      try {
-        const data = typeof pluginRow.data === 'string' ? JSON.parse(pluginRow.data) : (pluginRow.data ?? {})
-        const s = data.settings ?? {}
-        settings = {
+    if (!pluginRow) return { pluginActive: false, settings: DEFAULT_SETTINGS }
+
+    try {
+      const data = typeof pluginRow.data === 'string' ? JSON.parse(pluginRow.data) : (pluginRow.data ?? {})
+      const s = data.settings ?? {}
+      return {
+        pluginActive: true,
+        settings: {
           headerName: typeof s.headerName === 'string' && s.headerName.trim() !== '' ? s.headerName.trim() : DEFAULT_SETTINGS.headerName,
           subdomainResolution: s.subdomainResolution === true,
           rootDomain: typeof s.rootDomain === 'string' ? s.rootDomain.trim().toLowerCase() : '',
-        }
-      } catch {
-        settings = DEFAULT_SETTINGS
+        },
       }
+    } catch {
+      return { pluginActive: true, settings: DEFAULT_SETTINGS }
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * @param refreshPluginStatus re-read the plugin row even on a cache hit.
+ *
+ * Both the TTL cache and `invalidateTenantCache()` are per-isolate, but a Worker runs many
+ * isolates — so toggling the plugin only takes effect immediately on whichever isolate served
+ * the toggle. Measured against a preview deployment immediately after activation: the Tenants
+ * nav link (pluginMenuMiddleware, uncached) rendered on 10/10 admin requests while the tenant
+ * switcher rendered on 5/10. The same page disagreed with itself, and the isolates still
+ * reporting the plugin inactive were also ignoring the tenant header, cookie and domain map,
+ * silently serving every request as 'default' for up to the full 30s TTL.
+ *
+ * Admin requests therefore pay one extra indexed single-row lookup to stay coherent — the same
+ * per-request query pluginMenuMiddleware already issues on every /admin page. Public and API
+ * traffic keeps the cached fast path, where nobody is watching a toggle they just clicked and
+ * 30s of eventual consistency is the documented behavior.
+ */
+async function loadTenantState(db: any, refreshPluginStatus = false): Promise<TenantCacheEntry> {
+  const now = Date.now()
+  const cached = cache && now - cache.fetchedAt < CACHE_TTL_MS ? cache : null
+
+  if (cached) {
+    if (!refreshPluginStatus) return cached
+
+    const plugin = await loadPluginState(db)
+    if (!plugin) return cached
+    // Only an activation flip needs the heavier reload; otherwise keep the cached tenant
+    // registry and take the (possibly just-edited) settings from the row we already read.
+    if (plugin.pluginActive === cached.pluginActive) {
+      return plugin.pluginActive ? { ...cached, settings: plugin.settings } : cached
+    }
+    invalidateTenantCache()
+  }
+
+  let pluginActive = false
+  let settings = DEFAULT_SETTINGS
+  const tenants = new Map<string, { name: string; status: string }>()
+  const domains = new Map<string, string>()
+
+  try {
+    const plugin = await loadPluginState(db)
+    if (!plugin) throw new Error('tenant state unreadable')
+
+    if (plugin.pluginActive) {
+      pluginActive = true
+      settings = plugin.settings
 
       const { results } = await db.prepare(
         `SELECT slug, name, status, domain FROM auth_tenant`
@@ -180,7 +232,36 @@ export function tenantMiddleware() {
       return next()
     }
 
-    const state = await loadTenantState(db)
+    // /admin is where someone may have just flipped the plugin toggle and is looking at the
+    // result, so admin requests re-read the activation flag instead of trusting the per-isolate
+    // cache. See loadTenantState().
+    const path = new URL(c.req.url).pathname
+    const isAdmin = path.startsWith('/admin')
+    let state = await loadTenantState(db, isAdmin)
+
+    // A tenant created on another isolate is absent from this isolate's cached registry, and
+    // resolveTenantSlug() rejects any candidate it cannot find there. So for up to the full 30s TTL
+    // the cookie the switcher just set silently resolves to 'default': the admin clicks Switch, the
+    // redirect lands on an isolate that has never heard of the tenant they created a moment ago, and
+    // the row comes back still offering to switch. That is CI run 39582792718's 70-multi-tenant
+    // failure, and it is invisible locally because `wrangler dev` runs one isolate, where the
+    // create's own invalidateTenantCache() is always the cache the next read hits.
+    //
+    // Both candidates are free to read, so when one names a tenant this isolate does not know,
+    // re-read the registry once before giving up on it. Admin-only, for the same reason
+    // loadTenantState() re-reads the activation flag only there: /admin is where someone is watching
+    // the result of a write they just made, and gating on the path keeps public and API traffic from
+    // being able to force a registry reload with a junk header.
+    if (isAdmin && state.pluginActive) {
+      const candidates = [
+        c.req.header(state.settings.headerName)?.trim().toLowerCase(),
+        getCookie(c, TENANT_COOKIE)?.trim().toLowerCase(),
+      ]
+      if (candidates.some((slug) => slug && !state.tenants.has(slug))) {
+        invalidateTenantCache()
+        state = await loadTenantState(db)
+      }
+    }
 
     // Membership gate: for authed requests, resolution is restricted to the user's tenants. Anon
     // requests (public API / content) skip enforcement so public routing is unchanged. Platform
@@ -221,7 +302,6 @@ export function tenantMiddleware() {
     // Inject the admin tenant switcher at the layout marker (same post-response pattern as
     // pluginMenuMiddleware). Inactive plugin → marker collapses to nothing via the else branch
     // only when the marker is present; non-admin/non-HTML responses are untouched.
-    const path = new URL(c.req.url).pathname
     if (!path.startsWith('/admin')) return
     if (!c.res.headers.get('content-type')?.includes('text/html')) return
 

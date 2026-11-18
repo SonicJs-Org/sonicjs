@@ -5,7 +5,7 @@ import type { D1Database, KVNamespace, R2Bucket } from '@cloudflare/workers-type
 import { requireAuth, requireRole } from '../middleware'
 import { renderMediaLibraryPage, MediaLibraryPageData, FolderStats, TypeStats } from '../templates/pages/admin-media-library.template'
 import { renderMediaFileDetails, MediaFileDetailsData } from '../templates/components/media-file-details.template'
-import { MediaFile } from '../templates/components/media-grid.template'
+import { MediaFile, renderMediaGrid } from '../templates/components/media-grid.template'
 import { MediaDocumentService, mediaDocToFile } from '../services/media-documents'
 import { getRequestTenant } from '../services/document-request-context'
 import { PluginService } from '../services/plugin-service'
@@ -191,10 +191,23 @@ adminMediaRoutes.get('/search', async (c) => {
     const mediaSvc = new MediaDocumentService(db, getRequestTenant(c))
     const { files } = await mediaSvc.list({ folder, type, search: search.trim() || undefined, limit: 24 })
     const mediaFiles = files.map(doc => mediaDocToFile(doc))
-    
-    const gridHTML = mediaFiles.map(file => generateMediaItemHTML(file)).join('')
-    
-    return c.html(raw(gridHTML))
+
+    // Render through the same component the page uses, not a second copy of the card markup.
+    // The local copy this replaced interpolated `original_name`, `alt`, `public_url` and `tags`
+    // straight into HTML with no escaping — a filename is user-controlled, so that was stored
+    // XSS on every search (R8) — rendered no empty state, so a search with no hits left a blank
+    // panel with no feedback, and wired its details button to `showFileDetails()`, which is not
+    // defined anywhere in the page, so it threw on click.
+    return c.html(
+      raw(
+        renderMediaGrid({
+          files: mediaFiles,
+          viewMode: searchParams.get('view') === 'list' ? 'list' : 'grid',
+          selectable: true,
+          emptyMessage: 'No media files match your search.',
+        })
+      )
+    )
   } catch (error) {
     console.error('Error searching media:', error)
     return c.html('<div class="text-red-500">Error searching files</div>')
@@ -722,88 +735,6 @@ function getPNGDimensions(uint8Array: Uint8Array): { width: number; height: numb
     width: (uint8Array[16]! << 24) | (uint8Array[17]! << 16) | (uint8Array[18]! << 8) | uint8Array[19]!,
     height: (uint8Array[20]! << 24) | (uint8Array[21]! << 16) | (uint8Array[22]! << 8) | uint8Array[23]!
   }
-}
-
-// Helper function to generate media item HTML
-function generateMediaItemHTML(file: any): string {
-  const isImage = file.isImage
-  const isVideo = file.isVideo
-  
-  return `
-    <div 
-      class="media-item bg-white rounded-lg shadow-sm overflow-hidden cursor-pointer" 
-      data-file-id="${file.id}"
-      onclick="toggleFileSelection('${file.id}')"
-    >
-      <div class="aspect-square relative">
-        ${isImage ? `
-          <img 
-            src="${file.public_url}" 
-            alt="${file.alt || file.filename}"
-            class="w-full h-full object-cover"
-            loading="lazy"
-          >
-        ` : isVideo ? `
-          <video 
-            src="${file.public_url}" 
-            class="w-full h-full object-cover"
-            muted
-          ></video>
-        ` : `
-          <div class="w-full h-full flex items-center justify-center bg-gray-100">
-            <div class="text-center">
-              <svg class="file-icon mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-              </svg>
-              <span class="text-xs text-gray-500 mt-1">${file.filename.split('.').pop()?.toUpperCase()}</span>
-            </div>
-          </div>
-        `}
-        
-        <div class="preview-overlay flex items-center justify-center">
-          <div class="flex space-x-2">
-            <button 
-              onclick="event.stopPropagation(); showFileDetails('${file.id}')"
-              class="p-2 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30"
-            >
-              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-              </svg>
-            </button>
-            <button 
-              onclick="event.stopPropagation(); copyToClipboard('${file.public_url}')"
-              class="p-2 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30"
-            >
-              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      <div class="p-3">
-        <h4 class="text-sm font-medium text-gray-900 truncate" title="${file.original_name}">
-          ${file.original_name}
-        </h4>
-        <div class="flex justify-between items-center mt-1">
-          <span class="text-xs text-gray-500">${file.fileSize}</span>
-          <span class="text-xs text-gray-500">${file.uploadedAt}</span>
-        </div>
-        ${file.tags.length > 0 ? `
-          <div class="flex flex-wrap gap-1 mt-2">
-            ${file.tags.slice(0, 2).map((tag: string) => `
-              <span class="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                ${tag}
-              </span>
-            `).join('')}
-            ${file.tags.length > 2 ? `<span class="text-xs text-gray-400">+${file.tags.length - 2}</span>` : ''}
-          </div>
-        ` : ''}
-      </div>
-    </div>
-  `
 }
 
 // Helper function to format file size

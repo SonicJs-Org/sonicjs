@@ -280,7 +280,7 @@ export function renderAdminLayoutCatalyst(
   <!-- Scripts -->
   <script src="https://unpkg.com/htmx.org@2.0.3"></script>
   <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- No Chart.js here: only the dashboards chart, and they ask for it via the scripts option. -->
 
   <!-- CSRF: Auto-attach token to all HTMX and fetch requests -->
   <script>
@@ -518,10 +518,51 @@ export function renderAdminLayoutCatalyst(
       }
     }
 
-    // Check for pending migrations on page load
+    // How long a pending-migration count stays good for. Migrations only change on deploy, so
+    // this can be generous; it exists to stop the check turning into per-pageview database load.
+    var MIGRATION_STATUS_TTL_MS = 5 * 60 * 1000;
+
+    function showMigrationBanner(count) {
+      if (!(count > 0)) return;
+      const banner = document.getElementById('migration-banner');
+      const countElement = document.getElementById('migration-count');
+      if (banner && countElement) {
+        countElement.textContent = count;
+        banner.classList.remove('hidden');
+      }
+    }
+
+    function cachedMigrationCount() {
+      try {
+        const raw = sessionStorage.getItem('migrationStatus');
+        if (!raw) return null;
+        const cached = JSON.parse(raw);
+        if (typeof cached.count !== 'number') return null;
+        if (Date.now() - cached.at > MIGRATION_STATUS_TTL_MS) return null;
+        return cached.count;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    // Check for pending migrations on page load.
+    //
+    // Cached per session rather than re-fetched on every navigation. /admin/api/migrations/status
+    // reads the migration bundle and the d1_migrations table and measured 1.0-5.7s against a
+    // preview deployment; firing it from the DOMContentLoaded handler of every admin page meant
+    // one slow database round trip per pageview, for a banner that reads "0 pending" on every
+    // healthy install. Under rapid navigation those fetches outlived the documents that issued
+    // them and piled up — a browser moving between admin pages accumulated upwards of ten
+    // concurrent copies, which starved the real page loads behind them.
     async function checkPendingMigrations() {
       // Don't check if user dismissed the banner in this session
       if (sessionStorage.getItem('migrationBannerDismissed') === 'true') {
+        return;
+      }
+
+      const cached = cachedMigrationCount();
+      if (cached !== null) {
+        showMigrationBanner(cached);
         return;
       }
 
@@ -529,13 +570,12 @@ export function renderAdminLayoutCatalyst(
         const response = await fetch('/admin/api/migrations/status');
         if (response.ok) {
           const data = await response.json();
-          if (data.success && data.data && data.data.pendingMigrations > 0) {
-            const banner = document.getElementById('migration-banner');
-            const countElement = document.getElementById('migration-count');
-            if (banner && countElement) {
-              countElement.textContent = data.data.pendingMigrations;
-              banner.classList.remove('hidden');
-            }
+          if (data.success && data.data) {
+            const count = data.data.pendingMigrations;
+            try {
+              sessionStorage.setItem('migrationStatus', JSON.stringify({ count: count, at: Date.now() }));
+            } catch (error) { /* storage full or disabled — just skip the cache */ }
+            showMigrationBanner(count);
           }
         }
       } catch (error) {

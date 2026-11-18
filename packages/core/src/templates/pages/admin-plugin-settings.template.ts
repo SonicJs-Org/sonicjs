@@ -1,18 +1,24 @@
 import { renderAdminLayout, AdminLayoutData } from '../layouts/admin-layout-v2.template'
 import { renderAuthSettingsForm } from '../components/auth-settings-form.template'
+import { escapeHtml } from '../../utils/sanitize'
 import type { AuthSettings } from '../../services/auth-validation'
 import { getPluginDefinition } from '../../services/plugin-definition-registry'
 
 /**
- * Escape HTML attribute values to prevent XSS
+ * Coerce unknown setting values to string then HTML-escape.
+ * Settings are `any` — ai-search ships `selected_collections: []`, oauth-providers a
+ * `providers` object. Coerce before escaping so the page doesn't 500 on non-strings.
  */
-function escapeHtmlAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+function escapeHtmlAttr(value: unknown): string {
+  const str =
+    typeof value === 'string'
+      ? value
+      : value == null
+        ? ''
+        : typeof value === 'object'
+          ? JSON.stringify(value)
+          : String(value)
+  return escapeHtml(str)
 }
 
 export interface PluginSettings {
@@ -558,7 +564,7 @@ function renderSettingsFields(settings: PluginSettings): string {
             type="text" 
             name="${fieldId}" 
             id="${fieldId}" 
-            value="${value}"
+            value="${escapeHtmlAttr(value)}"
             class="backdrop-blur-sm bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white placeholder-gray-300 focus:border-blue-400 focus:outline-none transition-colors w-full"
           >
         </div>
@@ -587,14 +593,14 @@ function renderTurnstileSettingsForm(settings: any): string {
     <!-- Site Key -->
     <div>
       <label for="setting_siteKey" class="block text-sm font-medium text-gray-300 mb-2">Site Key</label>
-      <input type="text" name="setting_siteKey" id="setting_siteKey" value="${escapeHtmlAttr(settings.siteKey || '')}" placeholder="0x4AAAAAAAA..." class="${inputClass}">
+      <input type="text" name="setting_siteKey" id="setting_siteKey" value="${escapeHtml(settings.siteKey || '')}" placeholder="0x4AAAAAAAA..." class="${inputClass}">
       <p class="text-xs text-gray-400 mt-1">Your Cloudflare Turnstile site key (public)</p>
     </div>
 
     <!-- Secret Key -->
     <div>
       <label for="setting_secretKey" class="block text-sm font-medium text-gray-300 mb-2">Secret Key</label>
-      <input type="password" name="setting_secretKey" id="setting_secretKey" value="${escapeHtmlAttr(settings.secretKey || '')}" placeholder="0x4AAAAAAAA..." class="${inputClass}">
+      <input type="password" name="setting_secretKey" id="setting_secretKey" value="${escapeHtml(settings.secretKey || '')}" placeholder="0x4AAAAAAAA..." class="${inputClass}">
       <p class="text-xs text-gray-400 mt-1">Your Cloudflare Turnstile secret key (private)</p>
     </div>
 
@@ -866,7 +872,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
   const loginButtonText = settings.loginButtonText || ''
   const previewButtonText = loginButtonText.trim() || `Sign in to ${siteName}`
   const previewLogoBorder = logoBorderWidth > 0 && logoBorderColor
-    ? `border: ${logoBorderWidth}px solid ${escapeHtmlAttr(logoBorderColor)}; border-radius: 8px;`
+    ? `border: ${logoBorderWidth}px solid ${escapeHtml(logoBorderColor)}; border-radius: 8px;`
     : ''
 
   return `
@@ -967,7 +973,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
               type="url"
               id="setting_logoUrl"
               name="setting_logoUrl"
-              value="${escapeHtmlAttr(logoUrl)}"
+              value="${escapeHtml(logoUrl)}"
               placeholder="https://yourdomain.com/logo.png"
               class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
             />
@@ -1015,7 +1021,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
                 <input
                   type="color"
                   id="setting_logoBorderColor_picker"
-                  value="${escapeHtmlAttr(/^#[0-9a-fA-F]{6}$/.test(logoBorderColor) ? logoBorderColor : '#ffffff')}"
+                  value="${escapeHtml(/^#[0-9a-fA-F]{6}$/.test(logoBorderColor) ? logoBorderColor : '#ffffff')}"
                   oninput="document.getElementById('setting_logoBorderColor').value = this.value"
                   class="w-12 h-10 rounded-lg bg-white/5 border border-white/10 cursor-pointer"
                 />
@@ -1023,7 +1029,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
                   type="text"
                   id="setting_logoBorderColor"
                   name="setting_logoBorderColor"
-                  value="${escapeHtmlAttr(logoBorderColor)}"
+                  value="${escapeHtml(logoBorderColor)}"
                   placeholder="#ffffff"
                   class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
                 />
@@ -1040,7 +1046,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
               type="url"
               id="setting_loginUrl"
               name="setting_loginUrl"
-              value="${escapeHtmlAttr(loginUrl)}"
+              value="${escapeHtml(loginUrl)}"
               placeholder="https://yourdomain.com/login"
               class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
             />
@@ -1055,8 +1061,8 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
               type="text"
               id="setting_loginButtonText"
               name="setting_loginButtonText"
-              value="${escapeHtmlAttr(loginButtonText)}"
-              placeholder="Sign in to ${escapeHtmlAttr(siteName)}"
+              value="${escapeHtml(loginButtonText)}"
+              placeholder="Sign in to ${escapeHtml(siteName)}"
               class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white"
             />
             <p class="text-xs text-gray-500 mt-1">Optional. Defaults to "Sign in to ${siteName}".</p>
@@ -1155,7 +1161,7 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
 
         <div class="bg-white rounded-lg overflow-hidden shadow-lg">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center;">
-            ${logoUrl ? `<img src="${escapeHtmlAttr(logoUrl)}" alt="Logo" style="max-width: ${logoWidth}px; width: 100%; height: auto; margin: 0 auto 16px; ${previewLogoBorder}">` : ''}
+            ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="Logo" style="max-width: ${logoWidth}px; width: 100%; height: auto; margin: 0 auto 16px; ${previewLogoBorder}">` : ''}
             <h3 style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600;">Your Login Code</h3>
             <p style="margin: 0; opacity: 0.95; font-size: 14px;">Enter this code to sign in to ${siteName}</p>
           </div>
@@ -1169,8 +1175,8 @@ function renderOTPLoginSettingsContent(plugin: any, settings: PluginSettings): s
 
             ${loginUrl ? `
             <div style="text-align: center; margin: 0 0 20px 0;">
-              <a href="${escapeHtmlAttr(loginUrl)}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600; font-size: 14px;">
-                ${escapeHtmlAttr(previewButtonText)}
+              <a href="${escapeHtml(loginUrl)}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600; font-size: 14px;">
+                ${escapeHtml(previewButtonText)}
               </a>
             </div>
             ` : ''}
@@ -1350,7 +1356,7 @@ function renderEmailSettingsContent(_plugin: any, settings: PluginSettings): str
                 Resend API Key <span class="text-red-500">*</span>
               </label>
               <input type="password" id="setting_resendApiKey" name="setting_resendApiKey"
-                value="${escapeHtmlAttr(resendApiKey)}" placeholder="re_..." class="${inputClass}" />
+                value="${escapeHtml(resendApiKey)}" placeholder="re_..." class="${inputClass}" />
               ${envNote('RESEND_API_KEY')}
               <p class="${hintClass}">Get your key at resend.com/api-keys</p>
             </div>
@@ -1365,14 +1371,14 @@ function renderEmailSettingsContent(_plugin: any, settings: PluginSettings): str
             <div>
               <label for="setting_cfAccountId" class="block text-sm font-medium text-gray-300 mb-2">CF Account ID</label>
               <input type="text" id="setting_cfAccountId" name="setting_cfAccountId"
-                value="${escapeHtmlAttr(cfAccountId)}" placeholder="f61c658f..." class="${inputClass}" />
+                value="${escapeHtml(cfAccountId)}" placeholder="f61c658f..." class="${inputClass}" />
               ${envNote('CF_ACCOUNT_ID')}
               <p class="${hintClass}">Used by the delivery-sync cron. Found in Cloudflare dashboard sidebar.</p>
             </div>
             <div>
               <label for="setting_cfEmailApiToken" class="block text-sm font-medium text-gray-300 mb-2">CF Email API Token</label>
               <input type="password" id="setting_cfEmailApiToken" name="setting_cfEmailApiToken"
-                value="${escapeHtmlAttr(cfEmailApiToken)}" placeholder="••••••••" class="${inputClass}" />
+                value="${escapeHtml(cfEmailApiToken)}" placeholder="••••••••" class="${inputClass}" />
               ${envNote('EMAIL_API_TOKEN')}
               <p class="${hintClass}">API token with Email Routing read permission.</p>
             </div>
@@ -1384,7 +1390,7 @@ function renderEmailSettingsContent(_plugin: any, settings: PluginSettings): str
               From Email <span class="text-red-500">*</span>
             </label>
             <input type="email" id="setting_fromEmail" name="setting_fromEmail"
-              value="${escapeHtmlAttr(fromEmail)}" placeholder="noreply@yourdomain.com" class="${inputClass}" required />
+              value="${escapeHtml(fromEmail)}" placeholder="noreply@yourdomain.com" class="${inputClass}" required />
           </div>
 
           <div>
@@ -1392,19 +1398,19 @@ function renderEmailSettingsContent(_plugin: any, settings: PluginSettings): str
               From Name <span class="text-red-500">*</span>
             </label>
             <input type="text" id="setting_fromName" name="setting_fromName"
-              value="${escapeHtmlAttr(fromName)}" placeholder="Your App Name" class="${inputClass}" required />
+              value="${escapeHtml(fromName)}" placeholder="Your App Name" class="${inputClass}" required />
           </div>
 
           <div>
             <label for="setting_replyTo" class="block text-sm font-medium text-gray-300 mb-2">Reply-To Email</label>
             <input type="email" id="setting_replyTo" name="setting_replyTo"
-              value="${escapeHtmlAttr(replyTo)}" placeholder="support@yourdomain.com" class="${inputClass}" />
+              value="${escapeHtml(replyTo)}" placeholder="support@yourdomain.com" class="${inputClass}" />
           </div>
 
           <div>
             <label for="setting_logoUrl" class="block text-sm font-medium text-gray-300 mb-2">Logo URL</label>
             <input type="url" id="setting_logoUrl" name="setting_logoUrl"
-              value="${escapeHtmlAttr(logoUrl)}" placeholder="https://yourdomain.com/logo.png" class="${inputClass}" />
+              value="${escapeHtml(logoUrl)}" placeholder="https://yourdomain.com/logo.png" class="${inputClass}" />
             <p class="${hintClass}">Logo shown in email templates.</p>
           </div>
 
@@ -1553,9 +1559,9 @@ defineUserProfile({
             <tbody>
               ${fields.map(f => `
                 <tr class="border-b border-white/5 text-gray-200">
-                  <td class="py-2 pr-4 font-mono text-xs">${escapeHtmlAttr(f.name)}</td>
-                  <td class="py-2 pr-4">${escapeHtmlAttr(f.label)}</td>
-                  <td class="py-2 pr-4 font-mono text-xs">${escapeHtmlAttr(f.type)}</td>
+                  <td class="py-2 pr-4 font-mono text-xs">${escapeHtml(f.name)}</td>
+                  <td class="py-2 pr-4">${escapeHtml(f.label)}</td>
+                  <td class="py-2 pr-4 font-mono text-xs">${escapeHtml(f.type)}</td>
                   <td class="py-2 pr-4">${f.required ? 'Yes' : 'No'}</td>
                   <td class="py-2">${registrationFields.includes(f.name) ? 'Yes' : 'No'}</td>
                 </tr>
@@ -1585,7 +1591,7 @@ defineUserProfile({
           <code class="text-sm text-blue-300 font-mono">my-sonicjs-app/src/index.ts</code>
         </div>
         <p class="text-xs text-gray-400 mb-2">Example — add this near your <code>registerCollections([...])</code> call:</p>
-        <pre class="bg-black/60 border border-white/10 rounded-lg p-4 overflow-x-auto"><code class="text-sm text-gray-200 font-mono whitespace-pre">${escapeHtmlAttr(codeExample)}</code></pre>
+        <pre class="bg-black/60 border border-white/10 rounded-lg p-4 overflow-x-auto"><code class="text-sm text-gray-200 font-mono whitespace-pre">${escapeHtml(codeExample)}</code></pre>
         <p class="text-xs text-gray-400 mt-4">
           Supported field types: <code>text</code>, <code>textarea</code>, <code>number</code>, <code>boolean</code>,
           <code>select</code>, <code>date</code>. Use <code>options</code> for <code>select</code> and
@@ -1617,13 +1623,13 @@ function renderOAuthProvidersSettingsContent(plugin: any, settings: PluginSettin
           <div>
             <label for="oauth_github_clientId" class="block text-sm font-medium text-gray-300 mb-2">Client ID</label>
             <input type="text" id="oauth_github_clientId" name="oauth_github_clientId"
-              value="${escapeHtmlAttr(gh.clientId || '')}"
+              value="${escapeHtml(gh.clientId || '')}"
               placeholder="GitHub OAuth App Client ID" class="${inputClass}" />
           </div>
           <div>
             <label for="oauth_github_clientSecret" class="block text-sm font-medium text-gray-300 mb-2">Client Secret</label>
             <input type="password" id="oauth_github_clientSecret" name="oauth_github_clientSecret"
-              value="${escapeHtmlAttr(gh.clientSecret || '')}"
+              value="${escapeHtml(gh.clientSecret || '')}"
               placeholder="GitHub OAuth App Client Secret" class="${inputClass}" />
           </div>
           <div class="flex items-center gap-3">
@@ -1638,13 +1644,13 @@ function renderOAuthProvidersSettingsContent(plugin: any, settings: PluginSettin
           <div>
             <label for="oauth_google_clientId" class="block text-sm font-medium text-gray-300 mb-2">Client ID</label>
             <input type="text" id="oauth_google_clientId" name="oauth_google_clientId"
-              value="${escapeHtmlAttr(gg.clientId || '')}"
+              value="${escapeHtml(gg.clientId || '')}"
               placeholder="Google OAuth Client ID" class="${inputClass}" />
           </div>
           <div>
             <label for="oauth_google_clientSecret" class="block text-sm font-medium text-gray-300 mb-2">Client Secret</label>
             <input type="password" id="oauth_google_clientSecret" name="oauth_google_clientSecret"
-              value="${escapeHtmlAttr(gg.clientSecret || '')}"
+              value="${escapeHtml(gg.clientSecret || '')}"
               placeholder="Google OAuth Client Secret" class="${inputClass}" />
           </div>
           <div class="flex items-center gap-3">

@@ -200,10 +200,19 @@ describe('renderAdminLayoutCatalyst', () => {
     expect(html).toContain('alpinejs');
   });
 
-  it('should include Chart.js script', () => {
+  it('should NOT ship Chart.js to pages that do not chart', () => {
+    // It used to be unconditional, which cost every admin page a 200KB download and parse for a
+    // global nothing on the page touched. Only the dashboards chart, and they ask for it below.
     const html = renderAdminLayoutCatalyst(baseData);
 
-    expect(html).toContain('chart.js');
+    expect(html).not.toContain('chart.js');
+  });
+
+  it('should include Chart.js when a page asks for it', () => {
+    const chartJs = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    const html = renderAdminLayoutCatalyst({ ...baseData, scripts: [chartJs] });
+
+    expect(html).toContain(`<script src="${chartJs}"></script>`);
   });
 
   it('should render with version', () => {

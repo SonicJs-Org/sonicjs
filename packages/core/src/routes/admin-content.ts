@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { html } from 'hono/html'
 import type { Bindings, Variables } from '../app'
 import { requireAuth, requireRole } from '../middleware'
@@ -8,17 +9,35 @@ import { CACHE_CONFIGS, getCacheService } from '../services/cache'
 import { PluginService } from '../services/plugin-service'
 import { ContentFormData, renderContentFormPage } from '../templates/pages/admin-content-form.template'
 import { ContentListPageData, renderContentListPage } from '../templates/pages/admin-content-list.template'
+import { ContentDeleteConfirmData, renderContentDeleteConfirmPage } from '../templates/pages/admin-content-delete-confirm.template'
 import { getBlocksFieldConfig, parseBlocksValue } from '../utils/blocks'
 import { escapeHtml, sanitizeRichText } from '../utils/sanitize'
 import { buildSchemaFieldOptions, resolveSchemaFieldType } from './admin-content-field-types'
 import { DocumentTypeRegistry } from '../services/document-type-registry'
-import { DocumentsService } from '../services/documents'
+import { DocumentsService, documentSecondsToMs } from '../services/documents'
+import { DocumentRepository } from '../services/document-repository'
 import { renderDocumentFormPage } from '../templates/pages/admin-documents-form.template'
 import { createDocumentSchema } from '../schemas/document'
 import type { QueryableField } from '../schemas/document'
 import { loadCollectionConfigs, getVisibleCollections } from '../services/collection-loader'
 
+// All-view count cap: count at most this many pages beyond the current offset (see the All-view branch).
+const ALL_VIEW_COUNT_WINDOW_PAGES = 10
+// Largest page size the list UI offers (pageSizeOptions in admin-content-list.template.ts).
+const MAX_PAGE_SIZE = 100
+// Deepest row offset a list page may request (OFFSET cost is linear in rows skipped).
+const MAX_LIST_OFFSET = 10_000
+
+/** Parse an integer query param, falling back on garbage and clamping to [min, max]. */
+function clampInt(raw: string | null | undefined, fallback: number, min: number, max: number): number {
+  const n = Number.parseInt(raw ?? '', 10)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(max, Math.max(min, n))
+}
+
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+
+type ContentRouteContext<P extends string = string> = Context<{ Bindings: Bindings; Variables: Variables }, P>
 
 // Field definition type for form processing
 interface FieldDefinition {
@@ -360,6 +379,31 @@ async function getDocBackingType(db: D1Database, collectionName?: string | null)
   return dt && dt.isActive ? dt : null
 }
 
+// Soft-delete every version row of a document root (Option B). Shared by the HTMX DELETE
+// endpoint and the POST-from-confirmation-page endpoint so the two stay in sync.
+// Returns the root's type_id on success, or null if the root isn't a recognized document.
+async function softDeleteDocumentRoot(db: D1Database, tenantId: string, rootId: string): Promise<string | null> {
+  const docDel = await db
+    .prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1")
+    .bind(rootId, tenantId).first() as any
+
+  const docDelType = docDel ? await getDocBackingType(db, docDel.type_id) : null
+  // Internal/auth-backed types aren't user-manageable collections — block them here so neither
+  // the HTMX DELETE nor the POST-from-confirmation-page caller can delete them by root_id alone.
+  if (!docDel || !docDelType || docDelType.settings.internal || docDelType.isAuth) {
+    return null
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, rootId, tenantId).run()
+  await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
+  const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
+  await apiCacheDel.invalidate('api:content-filtered:*')
+  await apiCacheDel.invalidate(`api:collection-content-filtered:${docDel.type_id}:*`)
+
+  return docDel.type_id
+}
+
 async function getCollectionByName(db: D1Database, name: string) {
   console.log(`[getCollectionByName] Loading collection by name: ${name}`)
   const row = await db.prepare('SELECT * FROM document_types WHERE name = ? AND is_active = 1').bind(name).first() as any
@@ -441,9 +485,14 @@ adminContentRoutes.get('/', async (c) => {
     const db = c.env.DB
 
     // Get query parameters
-    const page = parseInt(url.searchParams.get('page') || '1')
-    const limit = parseInt(url.searchParams.get('limit') || '20')
-    const modelName = url.searchParams.get('model') || 'all'
+    // Clamp paging input: a non-positive or huge `limit`/`page` would otherwise produce a negative
+    // offset / count cap (an unbounded count). The All view additionally caps its depth below.
+    const limit = clampInt(url.searchParams.get('limit'), 20, 1, MAX_PAGE_SIZE)
+    const page = clampInt(url.searchParams.get('page'), 1, 1, 100_000)
+    // The filter dropdown posts `model`, but the content form's cancel link and the
+    // post-save redirects below send `collection` instead. Accept both, or saving an item
+    // drops the user on an unfiltered list rather than the collection they were editing.
+    const modelName = url.searchParams.get('model') || url.searchParams.get('collection') || 'all'
     const status = url.searchParams.get('status') || 'all'
     const search = url.searchParams.get('search') || ''
     const offset = (page - 1) * limit
@@ -561,56 +610,54 @@ adminContentRoutes.get('/', async (c) => {
     // The document-model POC keeps legacy `content` paths available, but the All view is
     // a documents-only list over every active document type.
     if (modelName === 'all') {
-      const allTypeIds = docTypes.map(dt => dt.id)
-      const like = search ? `%${search}%` : null
-      const docConds = ['d.is_current_draft = 1', 'd.tenant_id = ?']
-      const docParams: any[] = [reqTenant(c)]
-      if (allTypeIds.length > 0) {
-        const ph = allTypeIds.map(() => '?').join(',')
-        docConds.push(`d.type_id IN (${ph})`)
-        docParams.push(...allTypeIds)
+      // Reads go through DocumentRepository (R4). The list is index-backed (migration 0008) and the
+      // count is capped to a window ahead of the current page: an exact COUNT(*) scans every
+      // document on each load, which on telemetry-heavy installs tripped D1's per-10s resource limit.
+      // When the cap is hit the UI shows "N+" and the window grows as the user pages forward.
+      // Depth cap: OFFSET cost is linear in rows skipped, so the All view serves at most
+      // MAX_LIST_OFFSET rows deep. Deeper requests land on the last reachable page, and the count
+      // stops at that page's end so the pager never links beyond it (no "Next" that reloads itself).
+      const allMaxPage = Math.floor(MAX_LIST_OFFSET / limit) + 1
+      const allPage = Math.min(page, allMaxPage)
+      const allOffset = (allPage - 1) * limit
+      const repo = new DocumentRepository(db, reqTenant(c))
+      const indexOpts = {
+        typeIds: docTypes.map(dt => dt.id),
+        status: (['published', 'draft', 'deleted'].includes(status) ? status : 'all') as 'all' | 'published' | 'draft' | 'deleted',
+        search: search || undefined,
       }
-      if (status === 'deleted') docConds.push('d.deleted_at IS NOT NULL')
-      else {
-        docConds.push('d.deleted_at IS NULL')
-        if (status === 'published') docConds.push('d.is_published = 1')
-        else if (status === 'draft') docConds.push('d.is_published = 0')
-      }
-      if (like) { docConds.push("(d.title LIKE ? OR json_extract(d.data,'$.author') LIKE ?)"); docParams.push(like, like) }
-
-      const unionSql = `
-        SELECT d.root_id AS id, d.title AS title, d.slug AS slug,
-               CASE WHEN d.is_published = 1 THEN 'published' ELSE 'draft' END AS status,
-               d.updated_at * 1000 AS updated_at,
-               dt.display_name AS cdisplay, COALESCE(u.email, d.created_by, 'System') AS author_label
-        FROM documents d JOIN document_types dt ON dt.id = d.type_id LEFT JOIN auth_user u ON u.id = d.created_by
-        WHERE ${docConds.join(' AND ')}
-        ORDER BY updated_at DESC LIMIT ? OFFSET ?`
-      const { results: unionRows } = await db.prepare(unionSql).bind(...docParams, limit, offset).all()
-
-      const countRow = await db.prepare(
-        `SELECT COUNT(*) AS count FROM documents d WHERE ${docConds.join(' AND ')}`,
-      ).bind(...docParams).first() as any
+      // docTypes is already filtered to visible (non-internal, non-auth) types. The repository treats
+      // an empty typeIds list as "no type filter", so with nothing visible we must not query at all —
+      // otherwise internal/auth-owned documents would be listed.
+      const hasVisibleTypes = indexOpts.typeIds.length > 0
+      const indexRows = hasVisibleTypes ? await repo.listAdminIndex({ ...indexOpts, limit, offset: allOffset }) : []
+      const { count: totalItems, capped: totalItemsCapped } = hasVisibleTypes
+        ? await repo.countAdminIndex(indexOpts, Math.min(allOffset + limit * ALL_VIEW_COUNT_WINDOW_PAGES, allMaxPage * limit))
+        : { count: 0, capped: false }
 
       const badge: Record<string, string> = {
         published: 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/20',
         draft: 'bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20',
         deleted: 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20',
       }
-      const contentItems = (unionRows || []).map((row: any) => ({
-        id: row.id,
-        title: row.title || row.slug || row.id,
-        slug: row.slug || '',
-        modelName: row.cdisplay,
-        statusBadge: `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${badge[row.status] ?? badge.draft}">${row.status}</span>`,
-        authorName: row.author_label,
-        formattedDate: new Date(row.updated_at ?? 0).toLocaleDateString(),
-        availableActions: [],
-      }))
+      const contentItems = indexRows.map(row => {
+        const rowStatus = row.is_published === 1 ? 'published' : 'draft'
+        return {
+          id: row.root_id,
+          title: row.title || row.slug || row.root_id,
+          slug: row.slug || '',
+          modelName: row.type_display_name,
+          statusBadge: `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${badge[rowStatus]}">${rowStatus}</span>`,
+          authorName: row.author_label,
+          formattedDate: new Date(documentSecondsToMs(row.updated_at) ?? 0).toLocaleDateString(),
+          availableActions: [],
+        }
+      })
 
       return c.html(renderContentListPage({
-        modelName, status, page, search, models, newContentCollections, contentItems,
-        totalItems: countRow?.count ?? 0,
+        modelName, status, page: allPage, search, models, newContentCollections, contentItems,
+        totalItems,
+        totalItemsCapped,
         itemsPerPage: limit,
         user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
         version: c.get('appVersion'),
@@ -1360,12 +1407,12 @@ adminContentRoutes.post('/', async (c) => {
     ).run()
 
     // Handle different actions
-    const referrerParams = formData.get('referrer_params') as string
+    const referrerParams = (formData.get('referrer_params') as string || '').replace(/[\r\n]/g, '')
     const redirectUrl = action === 'save_and_continue'
       ? `/admin/content/${contentId}/edit?success=Content saved successfully!${referrerParams ? `&ref=${encodeURIComponent(referrerParams)}` : ''}`
       : referrerParams
         ? `/admin/content?${referrerParams}&success=Content created successfully!`
-        : `/admin/content?collection=${collectionId}&success=Content created successfully!`
+        : `/admin/content?success=Content created successfully!`
 
     // Check if this is an HTMX request
     const isHTMX = c.req.header('HX-Request') === 'true'
@@ -1390,8 +1437,13 @@ adminContentRoutes.post('/', async (c) => {
   }
 })
 
-// Update content
-adminContentRoutes.put('/:id', async (c) => {
+// Update content.
+//
+// Registered for PUT here and for POST at the bottom of this file (after the static POST
+// paths, so /preview, /duplicate and /bulk-action still win): a plain <form> can only GET
+// or POST, so without the POST alias an edit submitted before htmx has booted falls back to
+// a native GET and the user's changes are silently dropped.
+const handleContentUpdate = async (c: ContentRouteContext<'/:id'>) => {
   try {
     const id = c.req.param('id')
     const user = c.get('user')
@@ -1411,11 +1463,12 @@ adminContentRoutes.put('/:id', async (c) => {
       if (docType && dcoll) {
         const fields = await getCollectionFields(db, dcoll.id)
         const { data, errors } = extractFieldData(fields, formData)
-        // Title/slug may live outside schema fields — read from formData, then fall back to existing DB values,
-        // then derive from common data fields (e.g. collections with 'name' but no 'title' property)
+        // Title/slug may live outside schema fields — read from formData, then fall back to
+        // data.name (current form value), then to existing DB title. data.name must take
+        // priority over docRowU.title so renaming a 'name' field updates the list title.
         if (data.title === undefined) {
           const formTitle = (formData.get('title') as string || '').trim()
-          data.title = formTitle || docRowU.title || data.name || undefined
+          data.title = formTitle || data.name || docRowU.title || undefined
         }
         if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || docRowU.slug || undefined
         if (Object.keys(errors).length > 0) {
@@ -1450,10 +1503,10 @@ adminContentRoutes.put('/:id', async (c) => {
         await apiCacheEdit.invalidate(`api:collection-content-filtered:${docRowU.type_id}:*`)
 
         const isHTMX = c.req.header('HX-Request') === 'true'
-        const referrerParams = formData.get('referrer_params') as string | null
+        const referrerParams = ((formData.get('referrer_params') as string | null) || '').replace(/[\r\n]/g, '') || null
         const listUrl = referrerParams
           ? `/admin/content?${referrerParams}`
-          : `/admin/content?collection=${dcoll.id}`
+          : '/admin/content'
 
         if (action === 'save_and_close') {
           return isHTMX
@@ -1509,10 +1562,11 @@ adminContentRoutes.put('/:id', async (c) => {
 
     // Extract and validate field data
     const { data, errors } = extractFieldData(fields, formData)
-    // Title/slug may live outside schema fields — read from formData, then fall back to existing DB values
+    // Title/slug may live outside schema fields — read from formData, then fall back to
+    // data.name (current form value), then to existing DB title.
     if (data.title === undefined) {
       const formTitle = (formData.get('title') as string || '').trim()
-      data.title = formTitle || existingContent.title || data.name || undefined
+      data.title = formTitle || data.name || existingContent.title || undefined
     }
     if (data.slug === undefined) data.slug = (formData.get('slug') as string || '').trim() || existingContent.slug || undefined
 
@@ -1650,7 +1704,9 @@ adminContentRoutes.put('/:id', async (c) => {
       </div>
     `)
   }
-})
+}
+
+adminContentRoutes.put('/:id', handleContentUpdate)
 
 // Content preview
 adminContentRoutes.post('/preview', requireRole(['admin', 'editor', 'author']), async (c) => {
@@ -1980,7 +2036,100 @@ adminContentRoutes.post('/bulk-action', async (c) => {
   }
 })
 
-// Delete content
+// Delete confirmation page
+adminContentRoutes.get('/:id/delete', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const user = c.get('user')
+    const db = c.env.DB
+    const url = new URL(c.req.url)
+    const referrerParams = url.searchParams.get('ref') || ''
+    // 'list' when the delete link came from a content-list row, so Cancel returns to that list
+    // (with its filters) instead of the edit page the user never visited.
+    const source = url.searchParams.get('source') || 'edit'
+
+    const tenantId = reqTenant(c)
+    const docRow = await db
+      .prepare("SELECT * FROM documents WHERE root_id = ? AND is_current_draft = 1 AND tenant_id = ? AND deleted_at IS NULL")
+      .bind(id, tenantId).first() as any
+
+    if (!docRow) {
+      return c.redirect('/admin/content')
+    }
+
+    const docType = await getDocBackingType(db, docRow.type_id)
+    const dcoll = docType ? await getCollectionByName(db, docRow.type_id) : null
+
+    if (!dcoll) {
+      return c.redirect('/admin/content')
+    }
+
+    const cancelUrl = source === 'list'
+      ? (referrerParams ? `/admin/content?${referrerParams}` : '/admin/content')
+      : (referrerParams ? `/admin/content/${id}/edit?ref=${encodeURIComponent(referrerParams)}` : `/admin/content/${id}/edit`)
+
+    let authorName: string | undefined
+    if (docRow.created_by) {
+      const authorRow = await db
+        .prepare("SELECT name, first_name, last_name, email FROM auth_user WHERE id = ?")
+        .bind(docRow.created_by).first() as any
+      if (authorRow) {
+        authorName = authorRow.name ||
+          [authorRow.first_name, authorRow.last_name].filter(Boolean).join(' ') ||
+          authorRow.email
+      }
+    }
+
+    const confirmData: ContentDeleteConfirmData = {
+      id: docRow.root_id,
+      title: docRow.title,
+      slug: docRow.slug,
+      collectionName: dcoll.name,
+      collectionDisplayName: dcoll.display_name,
+      status: docRow.is_published ? 'published' : (docRow.status ?? 'draft'),
+      createdAt: docRow.created_at,
+      updatedAt: docRow.updated_at,
+      publishedAt: docRow.published_at,
+      authorName,
+      referrerParams,
+      cancelUrl,
+      user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
+      version: c.get('appVersion'),
+    }
+
+    return c.html(renderContentDeleteConfirmPage(confirmData))
+  } catch (error) {
+    console.error('Delete confirmation page error:', error)
+    return c.redirect('/admin/content')
+  }
+})
+
+// Delete content (POST from confirmation page)
+adminContentRoutes.post('/:id/delete', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const db = c.env.DB
+    const formData = await c.req.formData()
+    // Strip CR/LF before these ever reach a redirect Location header — same guard used for
+    // referrer_params elsewhere in this file (header-injection / response-splitting defense).
+    const collection = ((formData.get('collection') as string) || '').replace(/[\r\n]/g, '')
+    const referrer = ((formData.get('referrer') as string) || '').replace(/[\r\n]/g, '')
+
+    const tenantId = reqTenant(c)
+    const deletedTypeId = await softDeleteDocumentRoot(db, tenantId, id)
+    if (!deletedTypeId) {
+      return c.redirect('/admin/content')
+    }
+
+    const redirectUrl = referrer ? `/admin/content?${referrer}` : `/admin/content?collection=${collection}`
+    return c.redirect(redirectUrl)
+  } catch (error) {
+    console.error('Delete content error:', error)
+    return c.redirect('/admin/content')
+  }
+})
+
+// Delete content (HTMX DELETE)
 adminContentRoutes.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id')
@@ -1989,18 +2138,10 @@ adminContentRoutes.delete('/:id', async (c) => {
 
     // ── Option B: if :id is a document-backed root, soft-delete every version row of the root ──
     const tenantId = reqTenant(c)
-    const docDel = await db
-      .prepare("SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1")
-      .bind(id, tenantId).first() as any
-    if (docDel && (await getDocBackingType(db, docDel.type_id))) {
-      const now = Math.floor(Date.now() / 1000)
-      await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, id, tenantId).run()
-      await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
-      const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
-      await apiCacheDel.invalidate('api:content-filtered:*')
-      await apiCacheDel.invalidate(`api:collection-content-filtered:${docDel.type_id}:*`)
+    const deletedTypeId = await softDeleteDocumentRoot(db, tenantId, id)
+    if (deletedTypeId) {
       return c.html(`
-        <div id="content-list" hx-get="/admin/content?model=${docDel.type_id}" hx-trigger="load" hx-swap="outerHTML">
+        <div id="content-list" hx-get="/admin/content?model=${deletedTypeId}" hx-trigger="load" hx-swap="outerHTML">
           <div class="flex items-center justify-center p-8"><span class="text-zinc-500">Deleting…</span></div>
         </div>
       `)
@@ -2300,20 +2441,109 @@ adminContentRoutes.post('/documents/:typeId/:documentId/unpublish', async (c) =>
   }
 })
 
-// ─── Delete (soft) ────────────────────────────────────────────────────────────
-adminContentRoutes.post('/documents/:typeId/:documentId/delete', async (c) => {
-  const { typeId, documentId } = c.req.param()
+// ─── Delete confirmation page (doc-backed, no collection) ────────────────────
+adminContentRoutes.get('/documents/:typeId/:rootId/delete', async (c) => {
+  const { typeId, rootId } = c.req.param()
   const db = c.env.DB
   try {
     const tenantId = reqTenant(c)
-    const { svc, docType } = await getDocService(db, typeId, tenantId)
-    if (docType?.settings?.pii) {
-      const row = await db.prepare('SELECT root_id FROM documents WHERE id = ? AND tenant_id = ?').bind(documentId, tenantId).first() as any
-      if (row) await svc.erase(row.root_id, tenantId)
-    } else {
-      await svc.softDelete(documentId)
+    const registry = new DocumentTypeRegistry(db)
+    const docType = await registry.findById(typeId)
+    if (!docType) return c.redirect('/admin/content')
+
+    const draftRow = await db
+      .prepare('SELECT * FROM documents WHERE root_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL')
+      .bind(rootId, tenantId).first() as any
+    if (!draftRow) return c.redirect('/admin/content')
+
+    let authorName: string | undefined
+    if (draftRow.created_by) {
+      const authorRow = await db
+        .prepare('SELECT name, first_name, last_name, email FROM auth_user WHERE id = ?')
+        .bind(draftRow.created_by).first() as any
+      if (authorRow) {
+        authorName = authorRow.name ||
+          [authorRow.first_name, authorRow.last_name].filter(Boolean).join(' ') ||
+          authorRow.email
+      }
     }
-    return c.redirect(`/admin/content?model=doc:${typeId}&message=Deleted`)
+
+    const url = new URL(c.req.url)
+    const referrerParams = url.searchParams.get('ref') || ''
+    const source = url.searchParams.get('source') || 'edit'
+    const id = `documents/${typeId}/${rootId}`
+    const cancelUrl = source === 'list'
+      ? (referrerParams ? `/admin/content?${referrerParams}` : '/admin/content')
+      : (referrerParams ? `/admin/content/${id}/edit?ref=${encodeURIComponent(referrerParams)}` : `/admin/content/${id}/edit`)
+
+    // id = "documents/:typeId/:rootId" so the template's default form action and Cancel link
+    // (which append /delete and /edit to data.id) resolve to this file's own doc-backed routes.
+    const confirmData: ContentDeleteConfirmData = {
+      id,
+      title: draftRow.title,
+      slug: draftRow.slug,
+      collectionName: typeId,
+      collectionDisplayName: docType.displayName ?? typeId,
+      status: draftRow.is_published ? 'published' : (draftRow.status ?? 'draft'),
+      createdAt: draftRow.created_at,
+      updatedAt: draftRow.updated_at,
+      publishedAt: draftRow.published_at,
+      authorName,
+      referrerParams: referrerParams || undefined,
+      cancelUrl,
+      user: userCtx(c),
+      version: c.get('appVersion'),
+    }
+
+    return c.html(renderContentDeleteConfirmPage(confirmData))
+  } catch (error) {
+    console.error('Document delete confirmation page error:', error)
+    return c.redirect('/admin/content')
+  }
+})
+
+// ─── Delete (soft) ────────────────────────────────────────────────────────────
+// :rootId here (not a specific version's :documentId) — deletes every version row of the root,
+// matching softDeleteDocumentRoot's semantics for collection-backed content (R7). No prior
+// caller passed a documentId into this route, so retargeting it to root_id breaks nothing.
+adminContentRoutes.post('/documents/:typeId/:rootId/delete', async (c) => {
+  const { typeId, rootId } = c.req.param()
+  const db = c.env.DB
+  try {
+    const tenantId = reqTenant(c)
+
+    const rootRow = await db
+      .prepare('SELECT type_id FROM documents WHERE root_id = ? AND tenant_id = ? LIMIT 1')
+      .bind(rootId, tenantId).first() as any
+    // The URL's :typeId picks which DocumentsService/eligibility rules apply below — so verify it
+    // actually matches the root being deleted, or a caller could delete an unrelated root (e.g. an
+    // internal/auth-backed one) by pairing its rootId with a harmless typeId.
+    if (!rootRow || rootRow.type_id !== typeId) {
+      return c.redirect('/admin/content')
+    }
+
+    const { svc, docType } = await getDocService(db, typeId, tenantId)
+    if (!docType || docType.settings.internal || docType.isAuth) {
+      return c.redirect('/admin/content')
+    }
+
+    if (docType.settings.pii) {
+      await svc.erase(rootId, tenantId)
+    } else {
+      const now = Math.floor(Date.now() / 1000)
+      await db
+        .prepare('UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?')
+        .bind(now, now, rootId, tenantId).run()
+    }
+    await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
+    const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
+    await apiCacheDel.invalidate('api:content-filtered:*')
+    await apiCacheDel.invalidate(`api:collection-content-filtered:${typeId}:*`)
+
+    const formData = await c.req.formData()
+    const referrer = ((formData.get('referrer') as string) || '').replace(/[\r\n]/g, '')
+    const redirectUrl = referrer ? `/admin/content?${referrer}` : `/admin/content?model=doc:${typeId}`
+    return c.redirect(`${redirectUrl}&message=Deleted`)
   } catch (err: any) {
     return c.redirect(`/admin/content?model=doc:${typeId}&message=${encodeURIComponent(err?.message ?? 'Delete failed')}`)
   }
@@ -2340,5 +2570,10 @@ adminContentRoutes.get('/documents/:typeId/:rootId/versions', async (c) => {
 // The content list sets item.id = "documents/:typeId/:rootId", so the rendered edit link is
 // /admin/content/documents/:typeId/:rootId/edit — served by the GET handler above. No catch-all is
 // needed here (removed a stale comment that promised one but defined nothing — D14).
+
+// POST alias for the update handler. It has to sit below every static POST path above,
+// because the router runs matching handlers in registration order and '/:id' would
+// otherwise swallow /preview, /duplicate and /bulk-action.
+adminContentRoutes.post('/:id', handleContentUpdate)
 
 export default adminContentRoutes

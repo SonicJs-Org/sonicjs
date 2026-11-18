@@ -1,6 +1,8 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import { invalidateTenantCache } from '../middleware/tenant'
 import { invalidatePluginStatusCache } from '../middleware/plugin-middleware'
+import { invalidateQueryTraceState } from '../plugins/core-plugins/query-trace-plugin/state'
+import { QUERY_TRACE_PLUGIN_ID } from '../plugins/core-plugins/query-trace-plugin/constants'
 import { TWO_FACTOR_PLUGIN_ID, refreshTwoFactorPolicy } from '../auth/two-factor-settings'
 
 export interface PluginData {
@@ -100,6 +102,43 @@ export class PluginService {
       downloadCount: pluginData.download_count || 0,
       rating: pluginData.rating || 0,
     })
+    // Re-installing something that is already there used to hit `idx_documents_unique_slug`
+    // and bubble the raw D1 constraint text out of the route as a 400. Treat it as a
+    // re-install instead: refresh the manifest fields and put the plugin back in the active
+    // state a fresh install would have left it in.
+    const existing = await this.getPlugin(slug)
+    if (existing) {
+      // Merge-patch the manifest fields only — `settings` is deliberately left out so a
+      // re-install does not reset configuration the user has already saved.
+      const patch = JSON.stringify({
+        displayName: pluginData.display_name || existing.display_name,
+        description: pluginData.description ?? existing.description,
+        version: pluginData.version || existing.version,
+        author: pluginData.author || existing.author,
+        category: pluginData.category || existing.category,
+        icon: pluginData.icon || existing.icon,
+        status: 'active',
+        activatedAt: now,
+        errorMessage: null,
+      })
+      await this.db.prepare(`
+        UPDATE documents
+        SET data = json_patch(data, json(?)), title = ?, updated_at = ?
+        WHERE slug = ? AND type_id = ? AND tenant_id = ? AND is_current_draft = 1 AND deleted_at IS NULL
+      `).bind(
+        patch, pluginData.display_name || existing.display_name, now,
+        slug, TYPE_ID, TENANT
+      ).run()
+      await this.db.prepare(`UPDATE plugins SET status = 'active' WHERE id = ?`).bind(slug).run().catch(() => {})
+      invalidateTenantCache()
+      invalidatePluginStatusCache(slug)
+      if (slug === QUERY_TRACE_PLUGIN_ID) invalidateQueryTraceState()
+      if (existing.status !== 'active') await this.logActivity(slug, 'activated', null)
+      const reinstalled = await this.getPlugin(slug)
+      if (!reinstalled) throw new Error('Failed to install plugin')
+      return reinstalled
+    }
+
     // R5: 17 columns / 9 ? / 8 literals — verified
     await this.db.prepare(`
       INSERT INTO documents (
@@ -117,6 +156,7 @@ export class PluginService {
       data, now, now
     ).run()
 
+    if (slug === QUERY_TRACE_PLUGIN_ID) invalidateQueryTraceState()
     await this.logActivity(slug, 'installed', null, { version: pluginData.version })
     await this.logActivity(slug, 'activated', null)
     const installed = await this.getPlugin(slug)
@@ -158,6 +198,7 @@ export class PluginService {
       SET deleted_at = ?, updated_at = ?, is_current_draft = 0, is_published = 0
       WHERE slug = ? AND type_id = ? AND tenant_id = ? AND is_current_draft = 1
     `).bind(now, now, pluginId, TYPE_ID, TENANT).run()
+    if (pluginId === QUERY_TRACE_PLUGIN_ID) invalidateQueryTraceState()
     await this.logActivity(pluginId, 'uninstalled', null, { name: plugin.name })
   }
 
@@ -181,6 +222,7 @@ export class PluginService {
     // the cache here. Cheap no-op for every other plugin.
     invalidateTenantCache()
     invalidatePluginStatusCache(pluginId)
+    if (pluginId === QUERY_TRACE_PLUGIN_ID) invalidateQueryTraceState()
     await this.logActivity(pluginId, 'activated', null)
   }
 
@@ -199,6 +241,7 @@ export class PluginService {
     await this.db.prepare(`UPDATE plugins SET status = 'inactive' WHERE id = ?`).bind(pluginId).run().catch(() => {})
     invalidateTenantCache()
     invalidatePluginStatusCache(pluginId)
+    if (pluginId === QUERY_TRACE_PLUGIN_ID) invalidateQueryTraceState()
     await this.logActivity(pluginId, 'deactivated', null)
   }
 
@@ -213,6 +256,7 @@ export class PluginService {
     `).bind(JSON.stringify(settings), now, pluginId, TYPE_ID, TENANT).run()
     // Multi-tenant resolver settings (header name, subdomain config) live in plugin settings.
     invalidateTenantCache()
+    if (pluginId === QUERY_TRACE_PLUGIN_ID) invalidateQueryTraceState()
     // The two-factor policy (issuer, lockout thresholds, backup-code count) is snapshotted
     // onto the Better Auth plugin options at construction time, so createAuth reads it from a
     // module-level cache synchronously. Re-read it here — a plain invalidation would leave this

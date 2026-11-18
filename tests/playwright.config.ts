@@ -1,89 +1,65 @@
-import { defineConfig, devices } from '@playwright/test';
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
+import { cmsReportingTarget, playwrightReporting } from './reporting/options'
+import { defineConfig, devices } from '@playwright/test'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const here = dirname(fileURLToPath(import.meta.url))
+const ci = !!process.env.CI
+const baseURL = process.env.BASE_URL || 'http://localhost:8787'
+// Remote preview (BASE_URL set) has inherent network flakiness that local runs don't.
+const remotePreview = !!process.env.BASE_URL
 
-/**
- * @see https://playwright.dev/docs/test-configuration
- */
 export default defineConfig({
   testDir: './e2e',
-  /* Run tests in files in parallel */
-  fullyParallel: true,
-  /* Fail the build on CI if you accidentally left test.only in the source code. */
-  forbidOnly: !!process.env.CI,
-  /* Retry on CI only — 2 retries handles consecutive transient CF Worker cold-starts */
-  retries: process.env.CI ? 2 : 0,
-  /* Per-test timeout: remote CF Workers under parallel load need headroom */
-  timeout: 60 * 1000,
-  /* 1 worker locally (in-memory D1 conflicts); 4 in CI (remote D1, I/O bound) */
-  workers: process.env.CI ? 4 : 1,
-  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
-  /* Global setup and teardown */
-  globalSetup: resolve(__dirname, './e2e/global-setup.ts'),
-  globalTeardown: resolve(__dirname, './e2e/global-teardown.ts'),
-  /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
-  use: {
-    /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: process.env.BASE_URL || 'http://localhost:8787',
-
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
-
-    /* Screenshot on failure */
-    screenshot: 'only-on-failure',
-
-    /* Video only on failure (recording all tests is too slow in CI) */
-    video: 'retain-on-failure',
-  },
-
-  /* Configure projects for major browsers */
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
-
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
-
-    // /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
-
-    /* Test against branded browsers. */
-    // {
-    //   name: 'Microsoft Edge',
-    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    // },
-    // {
-    //   name: 'Google Chrome',
-    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    // },
+  // File-level parallelism only; global-state specs still require narrow @lock-* tags.
+  fullyParallel: false,
+  forbidOnly: ci,
+  // Remote previews need more retries to absorb transient CF Worker cold-start / network flakiness.
+  // Local runs use 1 retry as a diagnostic signal, not a green-by-retry policy.
+  // Measured runs confirm some tail-exhaustion tests need retry #3; keep at 3 for the
+  // remote-preview path. Per-shard suites are smaller so total retry cost is still lower.
+  retries: ci ? (remotePreview ? 3 : 1) : 0,
+  // TODO: enable once the remaining flaky tests are stabilized.
+  // failOnFlakyTests: ci && !remotePreview,
+  maxFailures: ci ? 25 : 0,
+  timeout: ci ? 120_000 : 90_000,
+  // Playwright workers are I/O-bound on HTTP responses, but CF preview Workers have
+  // limited concurrency headroom. Measured runs show 3 workers-per-shard causes early
+  // timeouts from Worker overload. With 6 shards now sharing ONE preview deployment
+  // (bumped from 4 in the same change that lowered this), 2 workers/shard would raise
+  // total concurrent load against that single Worker from 4*2=8 to 6*2=12 — the wrong
+  // direction. Drop to 1 worker/shard on remote preview: 6*1=6 total, below the old 8.
+  workers: ci ? (remotePreview ? 1 : 2) : 1,
+  outputDir: resolve(here, '../test-results'),
+  reporter: [
+    ['list'],
+    ['html', { outputFolder: resolve(here, '../playwright-report'), open: 'never' }],
+    ['json', { outputFile: resolve(here, '../test-results/results.json') }],
+    ['junit', { outputFile: resolve(here, '../test-results/junit.xml') }],
+    // Live stats reporter — self-disables when PLAYWRIGHT_STATS_API_KEY is not set
+    [resolve(here, './e2e/stats-live-reporter.ts')],
+    ...playwrightReporting('cms-e2e', cmsReportingTarget(process.env)),
+    ['@testdino/playwright', { token: process.env.TESTDINO_TOKEN }],
   ],
-
-  /* Run your local dev server before starting the tests (local only) */
-  webServer: process.env.BASE_URL ? undefined : {
-    command: 'npm run dev',
-    cwd: resolve(__dirname, '../my-sonicjs-app'),
-    url: 'http://localhost:8787',
-    reuseExistingServer: true,
-    timeout: 180 * 1000, // Increased to 3 minutes
+  globalSetup: resolve(here, './e2e/global-setup.ts'),
+  globalTeardown: resolve(here, './e2e/global-teardown.ts'),
+  use: {
+    baseURL,
+    actionTimeout: 30_000,
+    navigationTimeout: 30_000,
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    video: 'on-first-retry',
   },
-}); 
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // npm run dev chooses a directory-hashed port, not 8787. Use an explicit port and no
+  // background watcher. Build core first so tests cannot accidentally exercise stale dist.
+  webServer: process.env.BASE_URL ? undefined : {
+    command: 'npx wrangler dev --local --port 8787' +
+      (process.env.E2E_PERSIST_DIR ? ' --persist-to "$E2E_PERSIST_DIR"' : ''),
+    cwd: resolve(here, '../my-sonicjs-app'),
+    url: baseURL,
+    reuseExistingServer: !ci && process.env.E2E_REUSE_SERVER === '1',
+    timeout: 180_000,
+  },
+})

@@ -37,15 +37,15 @@
     "mime": "^4.1.0"
   },
   "optionalDependencies": {
-    "@hono/node-server": "^2.0.10"
+    "@hono/node-server": "^2.1.6"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260724.1",
     "@types/node": "^20.19.1",
-    "hono": "^4.12.26",
+    "hono": "^4.13.13",
     "typescript": "^5.8.3",
     "vitest": "^4.1.9",
-    "wrangler": "^4.65.0",
+    "wrangler": "^4.153.0",
     "zod": "^3.25.67"
   },
   "engines": {

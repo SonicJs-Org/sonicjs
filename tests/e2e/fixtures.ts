@@ -13,9 +13,28 @@ export { uniqueTestId } from './utils/test-runtime'
 const HARDENED = Symbol('sonicjs.e2e.page')
 const HARDENED_CONTEXT = Symbol('sonicjs.e2e.context')
 
+// Exact transport-error tokens worth one bare retry — matched against the "net::XXX"
+// token Playwright/Chromium puts in the error message, never against the whole message
+// (a URL or call-log line containing one of these words must not trigger a retry).
+// ERR_ABORTED is intentionally EXCLUDED here: Chromium also raises it when a later
+// navigation supersedes an in-flight one, or when the first request's logout/mutation
+// already reached the server before the client saw the failure — retrying that case can
+// mask a real race or resubmit a state-changing request, which is worse than the flake.
+const RETRYABLE_NAV_ERROR_TOKENS = new Set([
+  'ERR_CONNECTION_RESET', 'ERR_CONNECTION_REFUSED', 'ERR_EMPTY_RESPONSE', 'ERR_NETWORK_CHANGED', 'ECONNRESET',
+])
+
+function retryableNavErrorToken(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  const token = err.message.match(/net::([A-Z_]+)/)?.[1]
+  return !!token && RETRYABLE_NAV_ERROR_TOKENS.has(token)
+}
+
 /** Default to parsed document; readiness belongs to locator assertions.
- * Explicit waitUntil/timeout contracts are never downgraded, swallowed, or retried.
- * Reload may resubmit a POST, so must not be replayed automatically. */
+ * Explicit waitUntil/timeout contracts are never downgraded, swallowed, or retried —
+ * a caller that passes its own options opts OUT of the transient-error retry below, too.
+ * Reload may resubmit a POST, so must not be replayed automatically — the transient-error
+ * retry applies ONLY to a default-options goto (always a GET), never to reload. */
 function preparePage(page: Page, headers?: Record<string, string>): Page {
   prepareLocalRequest(page.request, process.env.BASE_URL || 'http://localhost:8787', base.info().file, headers)
   const marked = page as unknown as Record<symbol, boolean>
@@ -23,7 +42,20 @@ function preparePage(page: Page, headers?: Record<string, string>): Page {
   marked[HARDENED] = true
   const goto = page.goto.bind(page)
   const reload = page.reload.bind(page)
-  page.goto = (url, options) => goto(url, { waitUntil: 'domcontentloaded', ...options })
+  page.goto = async (url: string, options?: Parameters<Page['goto']>[1]) => {
+    const navOptions = { waitUntil: 'domcontentloaded' as const, ...(options ?? {}) }
+    if (options) return goto(url, navOptions) // explicit options: caller owns the contract, no retry
+    try {
+      return await goto(url, navOptions)
+    } catch (err) {
+      if (!retryableNavErrorToken(err)) throw err
+      // One bare retry after a short backoff — cheaper than burning a whole Playwright
+      // test retry (which reruns beforeEach/login too) on a momentary connectivity blip.
+      // Single attempt only: this does not stack with any caller-side retry helper.
+      await new Promise(resolve => setTimeout(resolve, 500))
+      return await goto(url, navOptions)
+    }
+  }
   page.reload = options => reload({ waitUntil: 'domcontentloaded', ...options })
   return page
 }

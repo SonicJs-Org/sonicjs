@@ -239,7 +239,11 @@ jobs:
   # Waits for unit-tests (quality gate) and e2e-setup (CF deployment) in parallel.
   # @lock-* tests are intentionally excluded here — they share global auth/plugin
   # state across spec files and must run on a single runner (see e2e-locked job below).
-  # Non-locked tests (~80% of the suite) are sharded 4-ways for speed.
+  # Non-locked tests (~80% of the suite) are sharded 6-ways for speed. Playwright's
+  # built-in --shard balances by test COUNT per file, not measured duration, so a few
+  # slow spec files can still land together and make one shard the long pole (observed:
+  # a 4-way split put shard 3 at ~15m vs ~7-9m for its siblings). More, smaller shards
+  # shrink that worst case even without duration-aware balancing.
   # fail-fast: false ensures all shards complete so the cleanup job always runs.
   e2e-shard:
     needs: [unit-tests, e2e-setup]
@@ -248,13 +252,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     env:
       BASE_URL: ${{ needs.e2e-setup.outputs.base_url }}
       E2E_RUN_KEY: ${{ needs.e2e-setup.outputs.e2e_run_key }}
       E2E_DISPOSABLE_TARGET: '1'
       # e2e-setup already seeded admin via e2e-readiness.ts; skip globalSetup seed
-      # in every shard to avoid 4 concurrent seed calls on the same DB.
+      # in every shard to avoid concurrent seed calls on the same DB.
       E2E_ADMIN_SEEDED: '1'
       CI: 'true'
     steps:
@@ -287,7 +291,7 @@ jobs:
       - name: Install matching Playwright browser and OS dependencies
         run: npx playwright install --with-deps chromium
 
-      - name: Run E2E regression suite — shard ${{ matrix.shard }}/4 (non-locked tests)
+      - name: Run E2E regression suite — shard ${{ matrix.shard }}/6 (non-locked tests)
         timeout-minutes: 50
         env:
           # Gate stats key on e2e-setup path (trusted) only; prevents the key from
@@ -295,14 +299,14 @@ jobs:
           PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
           PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
           # TestDino streams results live from the reporter in tests/playwright.config.ts.
-          # A shared CI run id groups all 4 shards into one TestDino run.
+          # A shared CI run id groups all 6 shards into one TestDino run.
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
           TESTDINO_CI_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           mkdir -p e2e-logs
           npx playwright test --config=tests/playwright.config.ts \
-            --shard=${{ matrix.shard }}/4 \
+            --shard=${{ matrix.shard }}/6 \
             --grep-invert "@lock-" \
             2>&1 | tee e2e-logs/playwright-shard-${{ matrix.shard }}.log
 

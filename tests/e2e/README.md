@@ -106,9 +106,16 @@ the established implementations in `utils/test-helpers.ts`.
 ## Synchronization and locks
 
 Page `goto`/`reload` default to `domcontentloaded`. Explicit load states/timeouts are
-honored. Navigation errors are neither suppressed nor automatically replayed; there
-is no worker-wide latch that silently changes future tests' semantics. Native
-`waitForURL`, `waitForNavigation` and `waitForLoadState` keep Playwright's contracts.
+honored and opt the call out of all fixture-level retry behavior. A default-options
+`goto` (not `reload`, never a caller-supplied `waitUntil`/`timeout`) gets ONE bare retry
+on a narrow set of exact transport-error tokens (`ERR_CONNECTION_RESET`,
+`ERR_CONNECTION_REFUSED`, `ERR_EMPTY_RESPONSE`, `ERR_NETWORK_CHANGED`, `ECONNRESET`) —
+a momentary CF preview Worker connectivity blip, not an application/assertion failure.
+`ERR_ABORTED` is deliberately excluded: Chromium also raises it when a later navigation
+supersedes this one or after a state-changing request already reached the server, and
+replaying either case is worse than the flake. There is no worker-wide latch that
+silently changes future tests' semantics. Native `waitForURL`, `waitForNavigation` and
+`waitForLoadState` keep Playwright's contracts.
 Use observable role/label/test-id readiness instead of `networkidle` or fixed sleeps.
 
 Arm response/navigation waits **before** the triggering action. XHR helpers match

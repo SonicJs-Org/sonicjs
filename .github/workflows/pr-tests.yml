@@ -345,13 +345,30 @@ jobs:
   # the filesystem-based locks cannot coordinate. Each lock GROUP must run on one
   # runner with workers: 1 to avoid state corruption within that group.
   #
-  # The 5 lock groups below mutate disjoint slices of global state (login/IP
-  # throttle, registration-enabled toggle, hello-world plugin activation,
-  # multi-tenant plugin state, one RBAC grant) and have no evidence of needing to
-  # be serial WITH EACH OTHER — only within themselves. Previously all 5 ran in a
-  # single workers:1 job (one group after another), making the job's wall-clock the
-  # SUM of every group (~15m). Running them as parallel matrix entries instead
-  # drops it to roughly the slowest single group. See issue #1205.
+  # Groups are computed from the TRUE dependency graph, not just the 5 distinct tag
+  # names (PR #1207 review caught this the hard way — an earlier revision matrixed
+  # all 5 tags independently, but several tests carry more than one @lock-* tag, so
+  # --grep selected them into two parallel jobs at once, racing against each other
+  # on the same shared preview):
+  #   - @lock-auth-login, @lock-auth-registration, @lock-plugin-hello-world and
+  #     @lock-rbac-example-grant all co-occur on at least one test each (e.g.
+  #     two-factor.spec.ts:184 tags both auth-login and auth-registration;
+  #     plugin-core.spec.ts:1366 tags both plugin-hello-world and
+  #     auth-registration; rbac.spec.ts:720 carries rbac-example-grant inside a
+  #     describe tagged auth-registration) — transitively, all four are one
+  #     connected component and MUST run in the same serial job.
+  #   - @lock-plugin-multi-tenant never co-occurs with another lock tag, so it can
+  #     be its own group — but it ALSO shares the `multi-tenant` plugin's
+  #     activation state with plugin-core.spec.ts's "should filter plugins by
+  #     status" test (no shared tag, just the same mutable global row), which is
+  #     the same cross-group race by a different name. Fixed by switching that
+  #     test to toggle the inert, test-untouched `qr-generator` plugin instead
+  #     (see plugin-core.spec.ts), which severs the edge and leaves
+  #     plugin-multi-tenant genuinely independent.
+  #
+  # Net result: 2 true-independent groups, not 5. Still a real win — the combined
+  # auth/plugin-catalog group and the multi-tenant group now run in parallel
+  # instead of strictly one after the other.
   #
   # Runs after e2e-shard; running locked tests concurrently with shards causes
   # registration-disabled failures in unrelated Better Auth signup specs.
@@ -365,12 +382,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        lock_tag:
-          - auth-login
-          - auth-registration
-          - plugin-hello-world
-          - plugin-multi-tenant
-          - rbac-example-grant
+        include:
+          - lock_group: auth-and-plugin-catalog
+            lock_grep: '@lock-(auth-login|auth-registration|plugin-hello-world|rbac-example-grant)'
+          - lock_group: plugin-multi-tenant
+            lock_grep: '@lock-plugin-multi-tenant'
     env:
       BASE_URL: ${{ needs.e2e-setup.outputs.base_url }}
       E2E_RUN_KEY: ${{ needs.e2e-setup.outputs.e2e_run_key }}
@@ -407,7 +423,7 @@ jobs:
       - name: Install matching Playwright browser and OS dependencies
         run: npx playwright install --with-deps chromium
 
-      - name: Run @lock-${{ matrix.lock_tag }} tagged E2E tests (serial within group)
+      - name: Run @lock-* tests in group ${{ matrix.lock_group }} (serial within group)
         timeout-minutes: 80
         env:
           PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
@@ -421,25 +437,26 @@ jobs:
           mkdir -p e2e-logs
           # workers=1 serialises all tests within this one lock group — the same lock
           # tag can appear in multiple spec files, and concurrent workers on this
-          # runner would still race within the group. Other lock groups run in their
-          # own parallel matrix job, since they share no state with this group.
+          # runner would still race within the group. The other lock group runs in
+          # its own parallel matrix job, since the two share no state (see comment
+          # above the job for how that was verified, not assumed).
           npx playwright test --config=tests/playwright.config.ts \
-            --grep "@lock-${{ matrix.lock_tag }}" \
+            --grep "${{ matrix.lock_grep }}" \
             --workers 1 \
-            2>&1 | tee e2e-logs/playwright-locked-${{ matrix.lock_tag }}.log
+            2>&1 | tee e2e-logs/playwright-locked-${{ matrix.lock_group }}.log
 
-      - name: Upload @lock-${{ matrix.lock_tag }} test results to stats
+      - name: Upload group ${{ matrix.lock_group }} test results to stats
         if: always()
         env:
           PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
           PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
         run: bash packages/stats/scripts/report-playwright.sh test-results/results.json
 
-      - name: Upload @lock-${{ matrix.lock_tag }} E2E reports, traces and logs
+      - name: Upload group ${{ matrix.lock_group }} E2E reports, traces and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-locked-${{ matrix.lock_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: e2e-locked-${{ matrix.lock_group }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             playwright-report/
             test-results/
@@ -451,7 +468,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: flakiness-cms-e2e-locked-${{ matrix.lock_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: flakiness-cms-e2e-locked-${{ matrix.lock_group }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: flakiness-reports/cms-e2e/
           retention-days: 7
           if-no-files-found: warn

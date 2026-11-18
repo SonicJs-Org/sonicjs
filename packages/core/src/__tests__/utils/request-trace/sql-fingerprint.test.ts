@@ -18,6 +18,15 @@ describe('redactSql hardening', () => {
     expect(out).not.toMatch(/alice|tok123|deadbeef/)
     expect(fingerprintSql(sql, new RequestTrace('GET', '/'))).not.toMatch(/alice|tok123|deadbeef/)
   })
+  it('masks numeric literals with underscore digit separators entirely', () => {
+    const t = () => new RequestTrace('GET', '/')
+    expect(redactSql('SELECT 123_456_789')).toBe('SELECT ?')
+    expect(fingerprintSql('SELECT 123_456_789', t())).toBe('select ?')
+    expect(redactSql('SELECT 1_000.5, 1_0.2_5e+1_0, 0xAB_CD')).toBe('SELECT ?, ?, ?')
+    expect(fingerprintSql('SELECT 1_000.5', t())).toBe('select ?')
+    // identifiers containing digits/underscores stay intact
+    expect(redactSql('SELECT q_1_2 FROM t_3')).toBe('SELECT q_1_2 FROM t_3')
+  })
   it('keeps a double-quoted table name after arbitrary whitespace', () => {
     const sql = 'SELECT * FROM            "users" WHERE id = 1'
     expect(redactSql(sql)).toBe('SELECT * FROM "users" WHERE id = ?')

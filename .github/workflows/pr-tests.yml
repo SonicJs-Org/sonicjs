@@ -339,11 +339,20 @@ jobs:
           if-no-files-found: warn
           include-hidden-files: false
 
-  # ── Trusted E2E: @lock-* tests (serial, single runner) ───────────────────────
+  # ── Trusted E2E: @lock-* tests (serial per group, groups run in parallel) ────
   # @lock-* tags appear in MULTIPLE spec files sharing global auth/plugin/registration
   # state. File-level sharding (--shard) can place them on different runners where
-  # the filesystem-based locks cannot coordinate. These tests MUST run on one runner
-  # with workers: 1 to avoid state corruption.
+  # the filesystem-based locks cannot coordinate. Each lock GROUP must run on one
+  # runner with workers: 1 to avoid state corruption within that group.
+  #
+  # The 5 lock groups below mutate disjoint slices of global state (login/IP
+  # throttle, registration-enabled toggle, hello-world plugin activation,
+  # multi-tenant plugin state, one RBAC grant) and have no evidence of needing to
+  # be serial WITH EACH OTHER — only within themselves. Previously all 5 ran in a
+  # single workers:1 job (one group after another), making the job's wall-clock the
+  # SUM of every group (~15m). Running them as parallel matrix entries instead
+  # drops it to roughly the slowest single group. See issue #1205.
+  #
   # Runs after e2e-shard; running locked tests concurrently with shards causes
   # registration-disabled failures in unrelated Better Auth signup specs.
   e2e-locked:
@@ -353,6 +362,15 @@ jobs:
     if: always() && needs.e2e-setup.result == 'success' && needs.unit-tests.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        lock_tag:
+          - auth-login
+          - auth-registration
+          - plugin-hello-world
+          - plugin-multi-tenant
+          - rbac-example-grant
     env:
       BASE_URL: ${{ needs.e2e-setup.outputs.base_url }}
       E2E_RUN_KEY: ${{ needs.e2e-setup.outputs.e2e_run_key }}
@@ -389,35 +407,39 @@ jobs:
       - name: Install matching Playwright browser and OS dependencies
         run: npx playwright install --with-deps chromium
 
-      - name: Run @lock-* tagged E2E tests (serial — shared auth/plugin state)
+      - name: Run @lock-${{ matrix.lock_tag }} tagged E2E tests (serial within group)
         timeout-minutes: 80
         env:
           PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
           PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
-          # Not sharded, so this job reports to TestDino as its own run.
+          # A shared CI run id groups every lock-group job (and all shards) into
+          # one TestDino run instead of each reporting as its own separate run.
           TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
+          TESTDINO_CI_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           mkdir -p e2e-logs
-          # workers=1 serialises all @lock-* tests — the same lock tag can appear in
-          # multiple spec files, and concurrent workers on this runner would still race.
+          # workers=1 serialises all tests within this one lock group — the same lock
+          # tag can appear in multiple spec files, and concurrent workers on this
+          # runner would still race within the group. Other lock groups run in their
+          # own parallel matrix job, since they share no state with this group.
           npx playwright test --config=tests/playwright.config.ts \
-            --grep "@lock-" \
+            --grep "@lock-${{ matrix.lock_tag }}" \
             --workers 1 \
-            2>&1 | tee e2e-logs/playwright-locked.log
+            2>&1 | tee e2e-logs/playwright-locked-${{ matrix.lock_tag }}.log
 
-      - name: Upload @lock-* test results to stats
+      - name: Upload @lock-${{ matrix.lock_tag }} test results to stats
         if: always()
         env:
           PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
           PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
         run: bash packages/stats/scripts/report-playwright.sh test-results/results.json
 
-      - name: Upload @lock-* E2E reports, traces and logs
+      - name: Upload @lock-${{ matrix.lock_tag }} E2E reports, traces and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-locked-${{ github.run_id }}-${{ github.run_attempt }}
+          name: e2e-locked-${{ matrix.lock_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             playwright-report/
             test-results/
@@ -429,7 +451,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: flakiness-cms-e2e-locked-${{ github.run_id }}-${{ github.run_attempt }}
+          name: flakiness-cms-e2e-locked-${{ matrix.lock_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: flakiness-reports/cms-e2e/
           retention-days: 7
           if-no-files-found: warn

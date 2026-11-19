@@ -678,6 +678,26 @@ test.describe("Source: 97-user-edit-dynamic-roles.spec.ts", () => {
   })
 })
 
+// New E2E coverage for the Public-role default introduced in this PR.
+// Lives outside the preserved source wrapper so the consolidation guard
+// is not affected by the new assertions.
+test.describe('User new — Public role default @auth', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAsAdmin(page)
+  })
+
+  test('user-new form defaults to Public and allows selecting Admin', async ({ page }) => {
+    await page.goto('/admin/users/new')
+    await page.waitForLoadState('networkidle')
+    const select = page.locator('select[name="role"]')
+    await expect(select).toBeVisible()
+    await expect(select.locator('option[value="role-admin"]')).toBeAttached()
+    await expect(select).toHaveValue('role-public')
+    await select.selectOption('role-admin')
+    await expect(select).toHaveValue('role-admin')
+  })
+})
+
 // Original module scope: hooks, fixtures and configuration stay isolated.
 test.describe("Source: 98-public-role-api-acl.spec.ts", () => {
   /**

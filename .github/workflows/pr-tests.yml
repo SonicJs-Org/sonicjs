@@ -367,9 +367,13 @@ jobs:
   #     (see plugin-core.spec.ts), which severs the edge and leaves
   #     plugin-multi-tenant genuinely independent.
   #
-  # Net result: 2 true-independent groups, not 5. Still a real win — the combined
-  # auth/plugin-catalog group and the multi-tenant group now run in parallel
-  # instead of strictly one after the other.
+  # Net result: 3 serial groups (from 5) — combined auth/plugin-catalog, multi-tenant,
+  # and query-trace. The auth and multi-tenant splits were verified against the
+  # lock-tag co-occurrence graph (see the analysis above). The query-trace group
+  # is isolated by tag (@lock-query-trace appears only in 127-query-trace-plugin.spec.ts)
+  # but its plugin install/uninstall mutations may share global plugin state with
+  # other specs — treat as a separate group for safety rather than a proven
+  # independent group until a full state-overlap check is done.
   #
   # Runs after e2e-shard; running locked tests concurrently with shards causes
   # registration-disabled failures in unrelated Better Auth signup specs.
@@ -388,6 +392,8 @@ jobs:
             lock_grep: '@lock-(auth-login|auth-registration|plugin-hello-world|rbac-example-grant)'
           - lock_group: plugin-multi-tenant
             lock_grep: '@lock-plugin-multi-tenant'
+          - lock_group: plugin-query-trace
+            lock_grep: '@lock-query-trace'
     env:
       BASE_URL: ${{ needs.e2e-setup.outputs.base_url }}
       E2E_RUN_KEY: ${{ needs.e2e-setup.outputs.e2e_run_key }}
@@ -438,9 +444,9 @@ jobs:
           mkdir -p e2e-logs
           # workers=1 serialises all tests within this one lock group — the same lock
           # tag can appear in multiple spec files, and concurrent workers on this
-          # runner would still race within the group. The other lock group runs in
-          # its own parallel matrix job, since the two share no state (see comment
-          # above the job for how that was verified, not assumed).
+          # runner would still race within the group. The other lock groups run in
+          # their own parallel matrix jobs, since the groups share no state (see
+          # comment above the job for how that was verified, not assumed).
           npx playwright test --config=tests/playwright.config.ts \
             --grep "${{ matrix.lock_grep }}" \
             --workers 1 \

@@ -29,6 +29,36 @@ function truncate(s: string | undefined | null, maxLen: number): string | undefi
 }
 
 /**
+ * Retry a D1 batch, backing off on "D1 DB is overloaded" errors.
+ * Uses Cloudflare Workers' global `scheduler.wait()` for the delay so we
+ * don't need to reference `setTimeout` (which requires the `dom` lib).
+ */
+async function batchWithRetry(
+  db: { batch: (stmts: D1PreparedStatement[]) => Promise<unknown> },
+  stmts: D1PreparedStatement[],
+  maxAttempts = 3,
+  baseDelayMs = 1000,
+): Promise<void> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await db.batch(stmts)
+      return
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message ?? ''
+      const isOverloaded = msg.includes('D1 DB is overloaded')
+      if (!isOverloaded || attempt === maxAttempts) throw err
+      const delay = baseDelayMs * Math.pow(2, attempt - 1)
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[playwright] D1 overloaded — retrying batch (attempt ${attempt}/${maxAttempts}) in ${delay}ms`,
+      )
+      // Use globalThis.setTimeout — available in both Workers and Node/vitest.
+      await new Promise<void>((r) => { (globalThis as any).setTimeout(r, delay) })
+    }
+  }
+}
+
+/**
  * Payload shape from the GitHub Actions script.
  * This matches what our `report-playwright.sh` script will send.
  */
@@ -117,7 +147,11 @@ playwrightIngest.post('/', requirePlaywrightAuth(), async (c) => {
        VALUES (?, ?, 'playwright_runs', 1, 'published', ?, ?, ?, ?, ?)`
     ).bind(runId, runId, runTitle, JSON.stringify(runData), now, now, now).run()
 
-    // Insert test rows in batches (D1 batch API to avoid per-statement overhead)
+    // Insert test rows in small batches to stay within D1's per-10s resource budget.
+    // The previous limit of 500 caused D1 overload when multiple CI shards ingested
+    // in parallel (each ~750 tests × 2 batches = heavy concurrent write pressure).
+    // 100 rows per batch + retry backoff keeps each batch well under the limit.
+    const BATCH_SIZE = 100
     const stmts: D1PreparedStatement[] = []
     for (const t of body.tests) {
       const testDocId = crypto.randomUUID()
@@ -144,10 +178,8 @@ playwrightIngest.post('/', requirePlaywrightAuth(), async (c) => {
       )
     }
 
-    // D1 batch — up to 500 statements per batch
-    const BATCH_SIZE = 500
     for (let i = 0; i < stmts.length; i += BATCH_SIZE) {
-      await db.batch(stmts.slice(i, i + BATCH_SIZE))
+      await batchWithRetry(db, stmts.slice(i, i + BATCH_SIZE))
     }
 
     return c.json({

@@ -508,18 +508,28 @@ userRoutes.get('/users', async (c) => {
       params.push(roleFilter)
     }
 
-    // Get users
-    const usersStmt = db.prepare(`
+    // Get users. Older installs may be missing two_factor_enabled (added to migration 0001 after
+    // the DB was created). Try with the column first; self-heal and retry without it on failure
+    // so both the HTML and JSON response paths degrade gracefully instead of throwing a 500.
+    const buildUsersQuery = (withTwoFactor: boolean) => `
       SELECT u.id, u.email, u.first_name, u.last_name,
              u.role, u.avatar, u.created_at, u.last_login_at, u.updated_at,
-             u.email_verified, u.is_active
+             u.email_verified${withTwoFactor ? ', u.two_factor_enabled' : ''}, u.is_active
       FROM auth_user u
       ${whereClause}
       ORDER BY u.created_at DESC
       LIMIT ? OFFSET ?
-    `)
-
-    const { results: usersData } = await usersStmt.bind(...params, limit, offset).all()
+    `
+    let usersData: any[]
+    try {
+      const { results } = await db.prepare(buildUsersQuery(true)).bind(...params, limit, offset).all()
+      usersData = results
+    } catch {
+      // Column absent on this install — self-heal and retry without it.
+      await ensureTwoFactorRequiredColumn(db)
+      const { results } = await db.prepare(buildUsersQuery(false)).bind(...params, limit, offset).all()
+      usersData = results
+    }
 
     // Get total count
     const countStmt = db.prepare(`
@@ -613,6 +623,10 @@ userRoutes.get('/users', async (c) => {
     // Bare renderAlert() returns an unstyled fragment; when HTMX swaps it into hx-target="body"
     // the page loses all CSS and the alert's SVG icon renders at browser-default size (~300 px),
     // appearing as a large black circle.
+    // HTMX 2.x does not swap non-2xx responses by default; return 200 so the full-page error
+    // is actually displayed when a filter/search triggers the failure.
+    const isHtmxRequest = c.req.header('hx-request') === 'true'
+    const errorStatus = isHtmxRequest ? 200 : 500
     try {
       const errorPageData: UsersListPageData = {
         users: [],
@@ -636,14 +650,14 @@ userRoutes.get('/users', async (c) => {
           role: user!.role,
         },
       }
-      return c.html(renderUsersListPage(errorPageData), 500)
+      return c.html(renderUsersListPage(errorPageData), errorStatus)
     } catch {
       // Last-resort fallback if the page template itself throws.
       return c.html(renderAlert({
         type: 'error',
         message: 'Failed to load users. Please try again.',
         dismissible: true
-      }), 500)
+      }), errorStatus)
     }
   }
 })

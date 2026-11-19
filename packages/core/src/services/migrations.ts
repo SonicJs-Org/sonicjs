@@ -366,6 +366,6 @@ export async function ensureTwoFactorRequiredColumn(db: D1Database): Promise<voi
       .run()
     console.log('[MigrationService] Self-healed auth_user.two_factor_required')
   } catch (error) {
-    console.error('[MigrationService] auth_user.two_factor_required repair failed:', error)
+    console.error('[MigrationService] auth_user 2FA column repair failed:', error)
   }
 }

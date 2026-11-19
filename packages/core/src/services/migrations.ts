@@ -349,6 +349,15 @@ export async function ensureTwoFactorRequiredColumn(db: D1Database): Promise<voi
     if (!exists) return
     const info = await db.prepare(`PRAGMA table_xinfo('auth_user')`).all<{ name: string }>()
     const present = new Set((info.results ?? []).map((r) => r.name))
+    // two_factor_enabled was added to migration 0001 after some early DBs were created;
+    // those DBs hit a "no such column" 500 on every admin/users and admin/profile request.
+    // DEFAULT 0 → existing users are treated as not enrolled, which is the safe default.
+    if (!present.has('two_factor_enabled')) {
+      await db
+        .prepare(`ALTER TABLE auth_user ADD COLUMN two_factor_enabled INTEGER NOT NULL DEFAULT 0`)
+        .run()
+      console.log('[MigrationService] Self-healed auth_user.two_factor_enabled')
+    }
     if (present.has('two_factor_required')) return
     // Mirrors migration 0007 exactly. DEFAULT 0 matters: existing users must not become
     // retroactively locked out of the portal by the column appearing.

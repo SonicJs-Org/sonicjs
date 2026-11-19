@@ -512,7 +512,7 @@ userRoutes.get('/users', async (c) => {
     const usersStmt = db.prepare(`
       SELECT u.id, u.email, u.first_name, u.last_name,
              u.role, u.avatar, u.created_at, u.last_login_at, u.updated_at,
-             u.email_verified, u.two_factor_enabled, u.is_active
+             u.email_verified, u.is_active
       FROM auth_user u
       ${whereClause}
       ORDER BY u.created_at DESC
@@ -609,11 +609,42 @@ userRoutes.get('/users', async (c) => {
       return c.json({ error: 'Failed to load users' }, 500)
     }
 
-    return c.html(renderAlert({
-      type: 'error',
-      message: 'Failed to load users. Please try again.',
-      dismissible: true
-    }), 500)
+    // Render the full page with the error so the layout and CSS are preserved.
+    // Bare renderAlert() returns an unstyled fragment; when HTMX swaps it into hx-target="body"
+    // the page loses all CSS and the alert's SVG icon renders at browser-default size (~300 px),
+    // appearing as a large black circle.
+    try {
+      const errorPageData: UsersListPageData = {
+        users: [],
+        currentPage: 1,
+        totalPages: 0,
+        totalUsers: 0,
+        statusFilter: 'active',
+        error: 'Failed to load users. Please try again.',
+        pagination: {
+          currentPage: 1,
+          totalPages: 0,
+          totalItems: 0,
+          itemsPerPage: 20,
+          startItem: 0,
+          endItem: 0,
+          baseUrl: '/admin/users',
+        },
+        user: {
+          name: user!.email.split('@')[0] || user!.email,
+          email: user!.email,
+          role: user!.role,
+        },
+      }
+      return c.html(renderUsersListPage(errorPageData), 500)
+    } catch {
+      // Last-resort fallback if the page template itself throws.
+      return c.html(renderAlert({
+        type: 'error',
+        message: 'Failed to load users. Please try again.',
+        dismissible: true
+      }), 500)
+    }
   }
 })
 

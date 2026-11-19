@@ -1,4 +1,4 @@
-import type { D1Database } from '@cloudflare/workers-types'
+import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import type {
   AISearchSettings,
   SearchQuery,
@@ -14,6 +14,9 @@ import { DocumentTypeRegistry } from '../../../../services/document-type-registr
 import { documentSecondsToMs } from '../../../../services/documents'
 import { PluginService } from '../../../../services/plugin-service'
 import type { DocumentTypeSettings, PrincipalRef } from '../../../../schemas/document'
+import { Fts5Engine } from './fts5-engine'
+import { getFtsSettings } from './fts-settings.service'
+import { getCachedResult, putCachedResult } from './fts-search-cache'
 
 /**
  * AI Search Service
@@ -42,7 +45,8 @@ export class AISearchService {
     private vectorize?: any, // Vectorize for vector search
     // R3: document reads are tenant-scoped. Routes pass the request's tenant; 'default' is the
     // POC-wide constant for every other caller.
-    private tenantId: string = 'default'
+    private tenantId: string = 'default',
+    private kv?: KVNamespace, // CACHE_KV — lexical settings + result cache
   ) {
     this.plugins = new PluginService(db)
     // Initialize Custom RAG if bindings are available
@@ -300,13 +304,17 @@ export class AISearchService {
       }
     }
 
-    // Use AI Search if enabled and mode is 'ai'
-    if (query.mode === 'ai' && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
+    // Use AI Search if enabled, mode is 'ai', and the bindings exist.
+    const wantAI = query.mode === 'ai'
+    if (wantAI && settings.ai_mode_enabled && this.customRAG?.isAvailable()) {
       return this.searchAI(query, settings, principalSet)
     }
 
-    // Fallback to keyword search
-    return this.searchKeyword(query, settings, principalSet)
+    // Lexical (keyword) floor over documents_fts.
+    const result = await this.searchKeyword(query, settings, principalSet)
+    // LA4 degrade contract: an 'ai' request served by the lexical floor is flagged, never broken.
+    if (wantAI) result.degraded = true
+    return result
   }
 
   /**
@@ -320,7 +328,7 @@ export class AISearchService {
     try {
       if (!this.customRAG) {
         console.warn('[AISearchService] CustomRAG not available, falling back to keyword search')
-        return this.searchKeyword(query, settings, principalSet)
+        return { ...(await this.searchKeyword(query, settings, principalSet)), degraded: true }
       }
 
       // Use Custom RAG for semantic search - pass the full query object and settings
@@ -329,8 +337,23 @@ export class AISearchService {
       return result
     } catch (error) {
       console.error('[AISearchService] AI search error, falling back to keyword:', error)
-      // Fallback to keyword search
-      return this.searchKeyword(query, settings, principalSet)
+      // Fallback to keyword search (LA4: degraded, never broken).
+      return { ...(await this.searchKeyword(query, settings, principalSet)), degraded: true }
+    }
+  }
+
+  /**
+   * Document type ids whose base grants allow public read (settings.baseGrants.public includes
+   * 'read'). The unauthenticated /api/search path is restricted to these so that indexed-but-internal
+   * types never surface to anonymous callers (D5). Fails closed: any error yields an empty allowlist,
+   * which makes keyword search return nothing rather than over-share.
+   */
+  private async publicReadableTypeIds(): Promise<string[]> {
+    try {
+      const types = await new DocumentTypeRegistry(this.db).findAll(true)
+      return types.filter((t) => t.settings?.baseGrants?.public?.includes('read')).map((t) => t.id)
+    } catch {
+      return []
     }
   }
 
@@ -358,143 +381,91 @@ export class AISearchService {
     const startTime = Date.now()
 
     try {
-      // R3: every document query is tenant-scoped.
-      const conditions: string[] = ['d.tenant_id = ?', 'd.deleted_at IS NULL', 'd.is_published = 1']
-      const params: Array<string | number> = [this.tenantId]
+      // FTS settings (bm25 weights, result limit, cache TTL, searchable types) persist in CACHE_KV.
+      const fts = await getFtsSettings(this.kv)
+      const cacheable = !!this.kv && fts.cacheTtlSeconds > 0
 
-      if (query.query) {
-        conditions.push('(d.title LIKE ? OR d.slug LIKE ? OR d.data LIKE ?)')
-        const searchTerm = `%${query.query}%`
-        params.push(searchTerm, searchTerm, searchTerm)
+      // Best-effort result cache, keyed by normalized query + tenant.
+      if (cacheable) {
+        const cached = await getCachedResult(this.kv!, query, this.tenantId)
+        if (cached) return { ...cached, query_time_ms: Date.now() - startTime }
       }
 
-      // Collection filter. type_id == collection id for code-defined collections —
-      // autoRegisterCollectionDocumentTypes registers one document type per collection, id == name.
-      const collectionFilter =
-        query.filters?.collections && query.filters.collections.length > 0
-          ? query.filters.collections
-          : settings.selected_collections.length > 0
+      // Lexical FTS5 search over documents_fts (replaces the legacy `content LIKE` scan).
+      const engine = new Fts5Engine(this.db, {
+        titleBoost: fts.titleBoost,
+        slugBoost: fts.slugBoost,
+        bodyBoost: fts.bodyBoost,
+      })
+
+      // SECURITY (D5): /api/search is unauthenticated, so keyword results are limited to document
+      // types that grant public read. Internal/admin-only types (api_key, security_event,
+      // analytics_event, user_profile, rbac_*, site_settings, …) are indexed for admin tooling but
+      // must never surface to an anonymous caller. Authed admin draft/all-type search is a separate
+      // future endpoint, not this one.
+      const publicTypeIds = await this.publicReadableTypeIds()
+
+      // Resolve the requested type set, then intersect with the public allowlist: a client-supplied
+      // `filters.collections` (or a misconfigured `searchableTypes`) can only ever NARROW the scope,
+      // never widen it to an internal type.
+      const requested = query.filters?.collections?.length
+        ? query.filters.collections
+        : fts.searchableTypes.length
+          ? fts.searchableTypes
+          : settings.selected_collections.length
             ? settings.selected_collections
-            : null
-      if (collectionFilter) {
-        conditions.push(`d.type_id IN (${collectionFilter.map(() => '?').join(',')})`)
-        params.push(...collectionFilter.map(String))
+            : publicTypeIds
+      const typeIds = requested.filter((t) => publicTypeIds.includes(t))
+
+      // No publicly-readable type in scope → return empty. This guard is REQUIRED: the engine treats
+      // an empty/omitted typeIds as "no type filter = ALL types", so calling it here would leak
+      // exactly the internal types the allowlist just excluded.
+      if (typeIds.length === 0) {
+        return { results: [], total: 0, query_time_ms: Date.now() - startTime, mode: query.mode }
       }
 
-      if (query.filters?.status && query.filters.status.length > 0) {
-        conditions.push(`d.status IN (${query.filters.status.map(() => '?').join(',')})`)
-        params.push(...query.filters.status)
-      }
+      const { hits, total } = await engine.search({
+        query: query.query,
+        tenantId: this.tenantId,
+        typeIds,
+        // Server-authoritative: the public endpoint returns published documents only. Never derived
+        // from client-supplied `filters.status` — that previously let `status:['draft']` drop the
+        // published gate and expose every draft in the tenant.
+        publishedOnly: true,
+        limit: query.limit || fts.resultsLimit,
+        offset: query.offset || 0,
+      })
 
-      // documents timestamps are SECONDS (legacy `content` used ms) and the filter arrives as a Date.
-      if (query.filters?.dateRange) {
-        const field = query.filters.dateRange.field === 'updated_at' ? 'updated_at' : 'created_at'
-        if (query.filters.dateRange.start) {
-          conditions.push(`d.${field} >= ?`)
-          params.push(Math.floor(query.filters.dateRange.start.getTime() / 1000))
-        }
-        if (query.filters.dateRange.end) {
-          conditions.push(`d.${field} <= ?`)
-          params.push(Math.floor(query.filters.dateRange.end.getTime() / 1000))
-        }
-      }
+      const searchResults: SearchResult[] = hits.map((h) => ({
+        id: h.documentId,
+        title: h.title || 'Untitled',
+        slug: h.slug,
+        collection_id: h.typeId,
+        collection_name: h.typeId,
+        snippet: h.snippet,
+        relevance_score: h.score,
+        status: h.status,
+        // FTS snapshots documents.* in SECONDS; the response boundary is ms (search-modal renders
+        // `new Date(created_at)`). Convert here or every keyword hit dates to Jan 1970.
+        created_at: documentSecondsToMs(h.createdAt) ?? h.createdAt,
+        updated_at: documentSecondsToMs(h.updatedAt) ?? h.updatedAt,
+      }))
 
-      if (query.filters?.author) {
-        conditions.push('(d.owner_id = ? OR d.created_by = ?)')
-        params.push(query.filters.author, query.filters.author)
-      }
-
-      const whereClause = `WHERE ${conditions.join(' AND ')}`
-      const limit = query.limit || settings.results_limit
-      const offset = query.offset || 0
-
-      const [countResult, listed] = await Promise.all([
-        this.db
-          .prepare(`SELECT COUNT(*) as count FROM documents d ${whereClause}`)
-          .bind(...params)
-          .first<{ count: number }>(),
-        this.db
-          .prepare(
-            `SELECT
-               d.id, d.root_id, d.type_id, d.title, d.slug, d.status, d.data,
-               d.created_at, d.updated_at, u.email as author_email
-             FROM documents d
-             LEFT JOIN auth_user u ON u.id = d.owner_id
-             ${whereClause}
-             ORDER BY d.updated_at DESC, d.id DESC
-             LIMIT ? OFFSET ?`
-          )
-          .bind(...params, limit, offset)
-          .all<{
-            id: string
-            root_id: string
-            type_id: string
-            title: string | null
-            slug: string | null
-            status: string
-            data: string
-            created_at: number
-            updated_at: number
-            author_email?: string
-          }>(),
-      ])
-
-      const rows = listed.results ?? []
-
-      // One type lookup per distinct type on the page (the registry caches), then isAllowed per row.
-      // A type with no public base grant — contact_message, say — resolves to false and never
-      // surfaces in search results.
-      const typeRegistry = new DocumentTypeRegistry(this.db)
-      const repo = new DocumentRepository(this.db, this.tenantId)
-      const typeSettings = new Map<string, DocumentTypeSettings | undefined>()
-      for (const typeId of new Set(rows.map((r) => r.type_id))) {
-        typeSettings.set(typeId, (await typeRegistry.findById(typeId))?.settings)
-      }
-      const allowed = await Promise.all(
-        rows.map((row) => {
-          const docTypeSettings = typeSettings.get(row.type_id)
-          return docTypeSettings
-            ? repo.isAllowed(principalSet, row.root_id, 'read', docTypeSettings)
-            : Promise.resolve(false)
-        })
-      )
-
-      const registry = getCollectionRegistry()
-      const searchResults: SearchResult[] = rows
-        .filter((_, i) => allowed[i])
-        .map((row) => {
-          const collection = registry.getById(row.type_id) ?? registry.getByName(row.type_id)
-          return {
-            id: String(row.id),
-            title: row.title || 'Untitled',
-            slug: row.slug || '',
-            collection_id: row.type_id,
-            collection_name: collection?.displayName || collection?.name || row.type_id,
-            snippet: this.extractSnippet(row.data, query.query),
-            status: row.status,
-            // documents stores seconds; callers (and the legacy shape) expect ms.
-            created_at: documentSecondsToMs(row.created_at) ?? 0,
-            updated_at: documentSecondsToMs(row.updated_at) ?? 0,
-            author_name: row.author_email ?? undefined,
-          }
-        })
-
-      // Matches before the per-document ACL pass, which is what the query itself found. The public
-      // document API reports its pagination off the raw page the same way.
-      const total = countResult?.count || 0
-      const queryTime = Date.now() - startTime
-
-      // Log search history
-      await this.logSearch(query.query, query.mode, searchResults.length)
-
-      return {
+      const response: SearchResponse = {
         results: searchResults,
         total,
-        query_time_ms: queryTime,
+        query_time_ms: Date.now() - startTime,
         mode: query.mode,
       }
+
+      if (cacheable) await putCachedResult(this.kv!, query, this.tenantId, response, fts.cacheTtlSeconds)
+
+      // Log search history (best-effort; ai_search_history has no greenfield migration — L27).
+      await this.logSearch(query.query, query.mode, searchResults.length).catch(() => {})
+
+      return response
     } catch (error) {
-      console.error('Keyword search error:', error)
+      console.error('Keyword (FTS5) search error:', error)
       return {
         results: [],
         total: 0,

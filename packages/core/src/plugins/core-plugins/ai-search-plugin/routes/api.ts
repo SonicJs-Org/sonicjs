@@ -10,6 +10,7 @@ type Variables = {
     email: string
     role: string
   }
+  tenantId?: string
 }
 
 const apiRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -26,7 +27,7 @@ apiRoutes.post('/', async (c) => {
     // Anonymous callers resolve to the `public` principal; a signed-in caller also carries their
     // role, which is what matches role-keyed base grants (D11).
     const { tenantId, principalSet } = getDocumentRequestContext(c)
-    const service = new AISearchService(db, ai, vectorize, tenantId)
+    const service = new AISearchService(db, ai, vectorize, tenantId, (c.env as any).CACHE_KV)
 
     const body = await c.req.json()
 
@@ -77,7 +78,7 @@ apiRoutes.get('/suggest', async (c) => {
     const ai = (c.env as any).AI
     const vectorize = (c.env as any).VECTORIZE_INDEX
     const { tenantId } = getDocumentRequestContext(c)
-    const service = new AISearchService(db, ai, vectorize, tenantId)
+    const service = new AISearchService(db, ai, vectorize, tenantId, (c.env as any).CACHE_KV)
 
     const query = c.req.query('q') || ''
 

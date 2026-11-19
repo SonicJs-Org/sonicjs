@@ -396,6 +396,8 @@ async function softDeleteDocumentRoot(db: D1Database, tenantId: string, rootId: 
 
   const now = Math.floor(Date.now() / 1000)
   await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, rootId, tenantId).run()
+  // Raw deleted_at UPDATE bypasses DocumentProjection — deindex FTS so the deleted doc leaves public search.
+  await db.prepare("DELETE FROM documents_fts WHERE document_id IN (SELECT id FROM documents WHERE root_id = ? AND tenant_id = ?)").bind(rootId, tenantId).run()
   await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
   const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
   await apiCacheDel.invalidate('api:content-filtered:*')
@@ -1997,6 +1999,12 @@ adminContentRoutes.post('/bulk-action', async (c) => {
         await db
           .prepare(`UPDATE documents SET deleted_at = ?, updated_at = ? WHERE tenant_id = ? AND root_id IN (${dph})`)
           .bind(nowSec, nowSec, tenantId, ...docRoots.map(r => r.root_id))
+          .run()
+        // This raw deleted_at UPDATE bypasses DocumentProjection, so deindex FTS explicitly — else the
+        // deleted docs linger in public keyword search (documents_fts is keyed by each version's id).
+        await db
+          .prepare(`DELETE FROM documents_fts WHERE document_id IN (SELECT id FROM documents WHERE tenant_id = ? AND root_id IN (${dph}))`)
+          .bind(tenantId, ...docRoots.map(r => r.root_id))
           .run()
       } else {
         // publish / draft → run through DocumentsService so the published flag, prev-published

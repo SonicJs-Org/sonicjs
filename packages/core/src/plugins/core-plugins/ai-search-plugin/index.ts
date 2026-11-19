@@ -34,7 +34,8 @@ export const aiSearchPlugin = definePlugin({
 
   register(app) {
     app.route('/admin/plugins/ai-search', adminRoutes as any)
-    app.route('/api/search', apiRoutes as any)
+    // NOTE: /api/search is mounted in app.ts BEFORE the /api/:collection catch-all. Plugin
+    // register() runs after that catch-all, so mounting it here would be shadowed.
   },
 })
 

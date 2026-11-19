@@ -30,8 +30,8 @@ function truncate(s: string | undefined | null, maxLen: number): string | undefi
 
 /**
  * Retry a D1 batch, backing off on "D1 DB is overloaded" errors.
- * Uses Cloudflare Workers' global `scheduler.wait()` for the delay so we
- * don't need to reference `setTimeout` (which requires the `dom` lib).
+ * Uses jittered exponential backoff: delay = base * 2^(attempt-1) + rand(base).
+ * Non-overload errors and the final attempt re-throw unchanged.
  */
 async function batchWithRetry(
   db: { batch: (stmts: D1PreparedStatement[]) => Promise<unknown> },
@@ -54,7 +54,6 @@ async function batchWithRetry(
       console.warn(
         `[playwright] D1 overloaded — retrying batch (attempt ${attempt}/${maxAttempts}) in ${Math.round(delay)}ms`,
       )
-      // Use globalThis.setTimeout — available in both Workers and Node/vitest.
       await new Promise<void>((r) => { (globalThis as any).setTimeout(r, delay) })
     }
   }

@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware'
 import { renderFormsListPage } from '../templates/pages/admin-forms-list.template'
 import { renderFormBuilderPage, type FormBuilderPageData } from '../templates/pages/admin-forms-builder.template'
 import { renderFormCreatePage } from '../templates/pages/admin-forms-create.template'
+import { renderFormSubmissionsPage } from '../templates/pages/admin-forms-submissions.template'
 import { TurnstileService } from '../plugins/core-plugins/turnstile-plugin/services/turnstile'
 
 // Type definitions for forms
@@ -433,51 +434,16 @@ adminFormsRoutes.get('/:id/submissions', async (c) => {
       'SELECT * FROM form_submissions WHERE form_id = ? ORDER BY submitted_at DESC'
     ).bind(formId).all()
 
-    // Simple submissions page for now
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Submissions - ${form.display_name}</title>
-        <style>
-          body { font-family: system-ui; padding: 20px; }
-          h1 { margin-bottom: 20px; }
-          table { width: 100%; border-collapse: collapse; }
-          th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-          th { background: #f5f5f5; font-weight: 600; }
-          .back-link { display: inline-block; margin-bottom: 20px; color: #0066cc; text-decoration: none; }
-          .back-link:hover { text-decoration: underline; }
-        </style>
-      </head>
-      <body>
-        <a href="/admin/forms" class="back-link">← Back to Forms</a>
-        <h1>Submissions: ${form.display_name}</h1>
-        <p>Total submissions: ${submissions.results.length}</p>
-        ${submissions.results.length > 0 ? `
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Submitted</th>
-                <th>Data</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${submissions.results.map((sub: any) => `
-                <tr>
-                  <td>${sub.id.substring(0, 8)}</td>
-                  <td>${new Date(sub.submitted_at).toLocaleString()}</td>
-                  <td><pre>${JSON.stringify(JSON.parse(sub.submission_data), null, 2)}</pre></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        ` : '<p>No submissions yet.</p>'}
-      </body>
-      </html>
-    `
-    
-    return c.html(html)
+    return c.html(
+      renderFormSubmissionsPage({
+        form: form as unknown as { id: string; display_name: string },
+        submissions: (submissions.results ?? []) as any[],
+        user: user
+          ? { name: user.email, email: user.email, role: user.role }
+          : undefined,
+        version: c.get('appVersion'),
+      })
+    )
   } catch (error: any) {
     if (isTableMissing(error)) return c.html('<p>Forms storage not configured — run database migrations</p>', 503)
     console.error('Error loading submissions:', error)

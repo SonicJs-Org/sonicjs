@@ -20,20 +20,19 @@ jobs:
       - name: Authorize
         run: echo 'Workflow authorized; fork code never receives deployment secrets.'
 
-  test:
+  # ── Unit tests ───────────────────────────────────────────────────────────────
+  # Runs in parallel with e2e-setup so CF resource allocation and unit tests
+  # overlap rather than running serially on the critical path (saves ~2–3 min).
+  unit-tests:
     needs: authorize
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 30
     env:
       # Approval does not make fork code trusted.
       # Rollout branch pushes, forks and Dependabot run the full suite locally without secrets.
       TRUSTED_PREVIEW: ${{ github.actor != 'dependabot[bot]' && !(github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
-      E2E_DISPOSABLE_TARGET: '1'
       CI: 'true'
     steps:
-      - name: Initialize isolated E2E state path
-        run: echo "E2E_PERSIST_DIR=$RUNNER_TEMP/sonicjs-e2e-state" >> "$GITHUB_ENV"
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -58,9 +57,16 @@ jobs:
         run: |
           bash scripts/lint-e2e-no-skip.sh
           bash scripts/lint-e2e-tags.sh
+          bash scripts/lint-e2e-lock-groups.sh
 
       - name: Run unit tests with coverage
         run: npm run test:cov
+
+      - name: Run SDK unit tests
+        run: npm run test --workspace=@sonicjs-cms/sdk
+
+      - name: Run create-app CLI test
+        run: npm run test --workspace=create-sonicjs
 
       - name: Upload coverage to Codecov
         if: env.TRUSTED_PREVIEW == 'true'
@@ -71,14 +77,72 @@ jobs:
           flags: unittests
           fail_ci_if_error: false
 
+      - name: Upload Flakiness unit report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flakiness-unit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/
+          retention-days: 7
+          if-no-files-found: warn
+          include-hidden-files: false
+
+  # ── Trusted E2E: allocate CF resources and deploy preview Worker ─────────────
+  # Only runs for internal PRs and direct pushes to main/v3; forks/Dependabot/rollout
+  # get the e2e-local path instead (no secrets required).
+  # Runs in parallel with unit-tests; e2e-shard waits for both.
+  e2e-setup:
+    needs: authorize
+    if: >
+      github.actor != 'dependabot[bot]' &&
+      !(github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') &&
+      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      base_url: ${{ steps.deploy.outputs.base_url }}
+      db_name: ${{ steps.database.outputs.name }}
+      r2_name: ${{ steps.r2bucket.outputs.name }}
+      kv_id: ${{ steps.kvnamespace.outputs.id }}
+      worker_name: ${{ steps.database.outputs.name }}
+      e2e_run_key: ${{ steps.deploy.outputs.e2e_run_key }}
+    env:
+      E2E_DISPOSABLE_TARGET: '1'
+      CI: 'true'
+    steps:
+      - name: Initialize isolated E2E state path
+        run: echo "E2E_PERSIST_DIR=$RUNNER_TEMP/sonicjs-e2e-state" >> "$GITHUB_ENV"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install locked dependencies
+        run: npm ci
+
       - name: Build core package
         run: npm run build:core
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-chromium-
 
       - name: Install matching Playwright browser and OS dependencies
         run: npx playwright install --with-deps chromium
 
       - name: Allocate run-owned D1 database
-        if: env.TRUSTED_PREVIEW == 'true'
         id: database
         working-directory: my-sonicjs-app
         env:
@@ -95,7 +159,6 @@ jobs:
           npx wrangler d1 migrations apply DB --remote
 
       - name: Allocate run-owned R2 bucket
-        if: env.TRUSTED_PREVIEW == 'true'
         id: r2bucket
         working-directory: my-sonicjs-app
         env:
@@ -109,7 +172,6 @@ jobs:
           sed -i "s/bucket_name = \"sonicjs-ci-media\"/bucket_name = \"$NAME\"/" wrangler.toml
 
       - name: Allocate run-owned KV namespace
-        if: env.TRUSTED_PREVIEW == 'true'
         id: kvnamespace
         working-directory: my-sonicjs-app
         env:
@@ -126,7 +188,6 @@ jobs:
           sed -i "s/id = \"a16f8246fc294d809c90b0fb2df6d363\"/id = \"$KV_ID\"/" wrangler.toml
 
       - name: Deploy run-owned Workers preview
-        if: env.TRUSTED_PREVIEW == 'true'
         id: deploy
         working-directory: my-sonicjs-app
         env:
@@ -145,17 +206,13 @@ jobs:
             2>&1 | tee ../e2e-logs/deploy.log
           PREVIEW_URL=$(grep -oE "https://${WORKER_NAME}\.[a-zA-Z0-9-]+\.workers\.dev" ../e2e-logs/deploy.log | sort -u)
           test -n "$PREVIEW_URL"
+          echo "base_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          echo "e2e_run_key=$E2E_RUN_KEY" >> "$GITHUB_OUTPUT"
           echo "BASE_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
           echo "E2E_RUN_KEY=$E2E_RUN_KEY" >> "$GITHUB_ENV"
           printf 'run_id=%s\nattempt=%s\ncheckout=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$CHECKOUT_SHA" > ../e2e-logs/build.txt
 
-      - name: Prepare isolated local D1 for rollout, forks and Dependabot
-        if: env.TRUSTED_PREVIEW != 'true'
-        working-directory: my-sonicjs-app
-        run: npx wrangler d1 migrations apply DB --local --persist-to "$E2E_PERSIST_DIR"
-
       - name: Deployment and authenticated application readiness
-        if: env.TRUSTED_PREVIEW == 'true'
         timeout-minutes: 3
         run: |
           set -euo pipefail
@@ -176,21 +233,302 @@ jobs:
             exit 1
           fi
           echo "Build identity verified: $DEPLOYED_SHA"
+          # Seed admin and default data once; shard jobs skip globalSetup via E2E_ADMIN_SEEDED=1.
           npx tsx scripts/e2e-readiness.ts
 
-      - name: Run full E2E regression suite
-        timeout-minutes: 140
+  # ── Trusted E2E: matrix shards ───────────────────────────────────────────────
+  # Waits for unit-tests (quality gate) and e2e-setup (CF deployment) in parallel.
+  # @lock-* tests are intentionally excluded here — they share global auth/plugin
+  # state across spec files and must run on a single runner (see e2e-locked job below).
+  # Non-locked tests (~80% of the suite) are sharded 6-ways for speed. Playwright's
+  # built-in --shard balances by test COUNT per file, not measured duration, so a few
+  # slow spec files can still land together and make one shard the long pole (observed:
+  # a 4-way split put shard 3 at ~15m vs ~7-9m for its siblings). More, smaller shards
+  # shrink that worst case even without duration-aware balancing.
+  # fail-fast: false ensures all shards complete so the cleanup job always runs.
+  e2e-shard:
+    needs: [unit-tests, e2e-setup]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    env:
+      BASE_URL: ${{ needs.e2e-setup.outputs.base_url }}
+      E2E_RUN_KEY: ${{ needs.e2e-setup.outputs.e2e_run_key }}
+      E2E_DISPOSABLE_TARGET: '1'
+      # e2e-setup already seeded admin via e2e-readiness.ts; skip globalSetup seed
+      # in every shard to avoid concurrent seed calls on the same DB.
+      E2E_ADMIN_SEEDED: '1'
+      CI: 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build core package
+        run: npm run build:core
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-chromium-
+
+      - name: Install matching Playwright browser and OS dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E regression suite — shard ${{ matrix.shard }}/6 (non-locked tests)
+        timeout-minutes: 50
+        env:
+          # Gate stats key on e2e-setup path (trusted) only; prevents the key from
+          # reaching the step env even if workflow authorization rules change.
+          PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
+          PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
+          # TestDino streams results live from the reporter in tests/playwright.config.ts.
+          # A shared CI run id groups all 6 shards into one TestDino run.
+          TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
+          TESTDINO_CI_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           mkdir -p e2e-logs
-          npx playwright test --config=tests/playwright.config.ts 2>&1 | tee e2e-logs/playwright.log
+          npx playwright test --config=tests/playwright.config.ts \
+            --shard=${{ matrix.shard }}/6 \
+            --grep-invert "@lock-" \
+            2>&1 | tee e2e-logs/playwright-shard-${{ matrix.shard }}.log
 
-      - name: Upload Playwright results to stats
-        if: always() && env.TRUSTED_PREVIEW == 'true'
+      - name: Upload Playwright shard ${{ matrix.shard }} results to stats
+        if: always()
         env:
           PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
           PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
         run: bash packages/stats/scripts/report-playwright.sh test-results/results.json
+
+      - name: Upload E2E shard ${{ matrix.shard }} reports, traces and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+            e2e-logs/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload Flakiness CMS E2E shard report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flakiness-cms-e2e-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/cms-e2e/
+          retention-days: 7
+          if-no-files-found: warn
+          include-hidden-files: false
+
+  # ── Trusted E2E: @lock-* tests (serial per group, groups run in parallel) ────
+  # @lock-* tags appear in MULTIPLE spec files sharing global auth/plugin/registration
+  # state. File-level sharding (--shard) can place them on different runners where
+  # the filesystem-based locks cannot coordinate. Each lock GROUP must run on one
+  # runner with workers: 1 to avoid state corruption within that group.
+  #
+  # Groups are computed from the TRUE dependency graph, not just the 5 distinct tag
+  # names (PR #1207 review caught this the hard way — an earlier revision matrixed
+  # all 5 tags independently, but several tests carry more than one @lock-* tag, so
+  # --grep selected them into two parallel jobs at once, racing against each other
+  # on the same shared preview):
+  #   - @lock-auth-login, @lock-auth-registration, @lock-plugin-hello-world and
+  #     @lock-rbac-example-grant all co-occur on at least one test each (e.g.
+  #     two-factor.spec.ts:184 tags both auth-login and auth-registration;
+  #     plugin-core.spec.ts:1366 tags both plugin-hello-world and
+  #     auth-registration; rbac.spec.ts:720 carries rbac-example-grant inside a
+  #     describe tagged auth-registration) — transitively, all four are one
+  #     connected component and MUST run in the same serial job.
+  #   - @lock-plugin-multi-tenant never co-occurs with another lock tag, so it can
+  #     be its own group — but it ALSO shares the `multi-tenant` plugin's
+  #     activation state with plugin-core.spec.ts's "should filter plugins by
+  #     status" test (no shared tag, just the same mutable global row), which is
+  #     the same cross-group race by a different name. Fixed by switching that
+  #     test to toggle the inert, test-untouched `shortcodes` plugin instead
+  #     (see plugin-core.spec.ts), which severs the edge and leaves
+  #     plugin-multi-tenant genuinely independent.
+  #
+  # Net result: 2 true-independent groups, not 5. Still a real win — the combined
+  # auth/plugin-catalog group and the multi-tenant group now run in parallel
+  # instead of strictly one after the other.
+  #
+  # Runs after e2e-shard; running locked tests concurrently with shards causes
+  # registration-disabled failures in unrelated Better Auth signup specs.
+  e2e-locked:
+    # needs e2e-shard for ordering only, not as a gate: lock tests must still run
+    # (and reach flakiness.io) when a shard fails.
+    needs: [unit-tests, e2e-setup, e2e-shard]
+    if: always() && needs.e2e-setup.result == 'success' && needs.unit-tests.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lock_group: auth-and-plugin-catalog
+            lock_grep: '@lock-(auth-login|auth-registration|plugin-hello-world|rbac-example-grant)'
+          - lock_group: plugin-multi-tenant
+            lock_grep: '@lock-plugin-multi-tenant'
+    env:
+      BASE_URL: ${{ needs.e2e-setup.outputs.base_url }}
+      E2E_RUN_KEY: ${{ needs.e2e-setup.outputs.e2e_run_key }}
+      E2E_DISPOSABLE_TARGET: '1'
+      E2E_ADMIN_SEEDED: '1'
+      CI: 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build core package
+        run: npm run build:core
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-chromium-
+
+      - name: Install matching Playwright browser and OS dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Run @lock-* tests in group ${{ matrix.lock_group }} (serial within group)
+        timeout-minutes: 80
+        env:
+          PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
+          PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
+          # A shared CI run id groups every lock-group job (and all shards) into
+          # one TestDino run instead of each reporting as its own separate run.
+          TESTDINO_TOKEN: ${{ secrets.TESTDINO_TOKEN }}
+          TESTDINO_CI_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p e2e-logs
+          # workers=1 serialises all tests within this one lock group — the same lock
+          # tag can appear in multiple spec files, and concurrent workers on this
+          # runner would still race within the group. The other lock group runs in
+          # its own parallel matrix job, since the two share no state (see comment
+          # above the job for how that was verified, not assumed).
+          npx playwright test --config=tests/playwright.config.ts \
+            --grep "${{ matrix.lock_grep }}" \
+            --workers 1 \
+            2>&1 | tee e2e-logs/playwright-locked-${{ matrix.lock_group }}.log
+
+      - name: Upload group ${{ matrix.lock_group }} test results to stats
+        if: always()
+        env:
+          PLAYWRIGHT_STATS_API_KEY: ${{ secrets.PLAYWRIGHT_STATS_API_KEY }}
+          PLAYWRIGHT_STATS_URL: https://stats.sonicjs.com
+        run: bash packages/stats/scripts/report-playwright.sh test-results/results.json
+
+      - name: Upload group ${{ matrix.lock_group }} E2E reports, traces and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-locked-${{ matrix.lock_group }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+            e2e-logs/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload Flakiness CMS E2E locked report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flakiness-cms-e2e-locked-${{ matrix.lock_group }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/cms-e2e/
+          retention-days: 7
+          if-no-files-found: warn
+          include-hidden-files: false
+
+  # ── Untrusted E2E: forks, Dependabot, rollout-branch push ────────────────────
+  # Runs the full suite locally with wrangler dev (no CF secrets required).
+  # Waits for unit-tests to gate on type-check/lint/coverage first.
+  e2e-local:
+    needs: unit-tests
+    if: >
+      github.actor == 'dependabot[bot]' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/test/e2e-infrastructure-hardening') ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      CI: 'true'
+    steps:
+      - name: Initialize isolated E2E state path
+        run: echo "E2E_PERSIST_DIR=$RUNNER_TEMP/sonicjs-e2e-state" >> "$GITHUB_ENV"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build core package
+        run: npm run build:core
+
+      - name: Install matching Playwright browser and OS dependencies
+        # No browser cache on the untrusted path: fork-controlled code runs before the
+        # cache is saved and could replace files in ~/.cache/ms-playwright. A tampered
+        # browser would then be restored by trusted shard jobs that have PLAYWRIGHT_STATS_API_KEY.
+        # Same principle as the npm cache gate above (omitted for untrusted runs).
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare isolated local D1 for rollout, forks and Dependabot
+        working-directory: my-sonicjs-app
+        run: npx wrangler d1 migrations apply DB --local --persist-to "$E2E_PERSIST_DIR"
+
+      - name: Run full E2E regression suite
+        timeout-minutes: 140
+        env:
+          E2E_DISPOSABLE_TARGET: '1'
+        run: |
+          set -euo pipefail
+          mkdir -p e2e-logs
+          npx playwright test --config=tests/playwright.config.ts 2>&1 | tee e2e-logs/playwright.log
 
       - name: Upload E2E reports, failed-attempt traces and logs
         if: always()
@@ -204,43 +542,159 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Upload Flakiness CMS E2E local report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flakiness-cms-e2e-local-${{ github.run_id }}-${{ github.run_attempt }}
+          path: flakiness-reports/cms-e2e/
+          retention-days: 7
+          if-no-files-found: warn
+          include-hidden-files: false
+
+  # Upload data with a trusted CLI; never execute the producer checkout or artifacts.
+  flakiness-upload:
+    needs: [unit-tests, e2e-setup, e2e-shard, e2e-locked, e2e-local]
+    # Upload only main history: pushes to main and PRs targeting main.
+    # Fork/Dependabot reports (e2e-local) are untrusted data and can be forged, but they
+    # are never executed: pull_request_target runs this trusted base workflow, the job
+    # only reads artifact JSON with the pinned CLI from the base checkout, and passes
+    # --project explicitly.
+    if: >
+      always() &&
+      (github.ref == 'refs/heads/main' || github.base_ref == 'main') &&
+      (needs.e2e-setup.result == 'success' || needs.e2e-local.result == 'success' || needs.e2e-local.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout trusted CLI runtime
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: scripts/testing/flakiness-runtime
+          sparse-checkout-cone-mode: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pinned Flakiness CLI
+        working-directory: scripts/testing/flakiness-runtime
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Download Flakiness report artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: flakiness-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flakiness-artifacts
+          merge-multiple: false
+
+      - name: Upload reports to Flakiness.io
+        shell: bash
+        env:
+          FLAKINESS_ACCESS_TOKEN: ${{ secrets.FLAKINESS_ACCESS_TOKEN }}
+          FLAKINESS_PROJECT: SonicJs/sonicjs
+        run: |
+          set -euo pipefail
+          CLI="$GITHUB_WORKSPACE/scripts/testing/flakiness-runtime/node_modules/.bin/flakiness"
+          if ! "$CLI" access --project "$FLAKINESS_PROJECT"; then
+            echo "::error::Flakiness.io authentication denied for $FLAKINESS_PROJECT"
+            exit 1
+          fi
+
+          ARTIFACTS="$RUNNER_TEMP/flakiness-artifacts"
+          dirs=()
+          if [ -d "$ARTIFACTS" ]; then
+            while IFS= read -r -d '' link; do
+              echo "::warning::Removing symlink from Flakiness artifacts"
+              rm -- "$link"
+            done < <(find "$ARTIFACTS" -type l -print0)
+            while IFS= read -r -d '' report; do
+              dirs+=("${report%/report.json}")
+            done < <(find "$ARTIFACTS" -type f -name report.json -path '*/vendor/report.json' -print0)
+          fi
+          if [ "${#dirs[@]}" -eq 0 ]; then
+            echo "::warning::No Flakiness reports found"
+            exit 0
+          fi
+
+          OUTPUT="$RUNNER_TEMP/flakiness-upload.log"
+          "$CLI" upload --project "$FLAKINESS_PROJECT" "${dirs[@]}" 2>&1 | tee "$OUTPUT"
+          {
+            echo "## Flakiness.io"
+            echo
+            grep -oE 'https://flakiness[.]io/[^[:space:][:cntrl:]]+' "$OUTPUT" | sort -u || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Cleanup: delete all run-owned CF resources ───────────────────────────────
+  # Runs after all E2E jobs complete (success or failure) but only when e2e-setup
+  # actually allocated resources. Resource identifiers come from e2e-setup job outputs.
+  # Each deletion step uses always() so a failure in one does not skip the others.
+  cleanup:
+    needs: [e2e-setup, e2e-shard, e2e-locked]
+    if: always() && needs.e2e-setup.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code (for wrangler access)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install locked dependencies
+        run: npm ci
+
       - name: Clean run-owned R2 storage via preview handler
-        if: always() && env.TRUSTED_PREVIEW == 'true' && steps.deploy.outcome == 'success'
+        if: always() && needs.e2e-setup.outputs.base_url != ''
         run: |
           curl --fail --silent --show-error -X DELETE \
-            -H "X-E2E-Run-Key: $E2E_RUN_KEY" \
-            "$BASE_URL/__e2e__/storage" || true
+            -H "X-E2E-Run-Key: ${{ needs.e2e-setup.outputs.e2e_run_key }}" \
+            "${{ needs.e2e-setup.outputs.base_url }}/__e2e__/storage" || true
 
       - name: Delete run-owned Worker
-        if: always() && env.TRUSTED_PREVIEW == 'true' && steps.deploy.outcome != 'skipped' && steps.database.outputs.name != ''
+        if: always() && needs.e2e-setup.outputs.worker_name != ''
         working-directory: my-sonicjs-app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          WORKER_NAME: ${{ steps.database.outputs.name }}
+          WORKER_NAME: ${{ needs.e2e-setup.outputs.worker_name }}
         run: npx wrangler delete "$WORKER_NAME" --force
 
       - name: Delete run-owned D1 database
-        if: always() && env.TRUSTED_PREVIEW == 'true' && steps.database.outputs.name != ''
+        if: always() && needs.e2e-setup.outputs.db_name != ''
         working-directory: my-sonicjs-app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          DB_NAME: ${{ steps.database.outputs.name }}
+          DB_NAME: ${{ needs.e2e-setup.outputs.db_name }}
         run: npx wrangler d1 delete "$DB_NAME" --skip-confirmation
 
       - name: Delete run-owned R2 bucket
-        if: always() && env.TRUSTED_PREVIEW == 'true' && steps.r2bucket.outputs.name != ''
+        if: always() && needs.e2e-setup.outputs.r2_name != ''
         working-directory: my-sonicjs-app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler r2 bucket delete "${{ steps.r2bucket.outputs.name }}"
+        run: npx wrangler r2 bucket delete "${{ needs.e2e-setup.outputs.r2_name }}"
 
       - name: Delete run-owned KV namespace
-        if: always() && env.TRUSTED_PREVIEW == 'true' && steps.kvnamespace.outputs.id != ''
+        if: always() && needs.e2e-setup.outputs.kv_id != ''
         working-directory: my-sonicjs-app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler kv namespace delete --namespace-id="${{ steps.kvnamespace.outputs.id }}"
+        run: npx wrangler kv namespace delete --namespace-id="${{ needs.e2e-setup.outputs.kv_id }}"

@@ -92,6 +92,16 @@ export interface WireResult {
   booted: string[]
   /** Per-plugin errors (wiring never throws; one bad plugin can't break boot). */
   errors: Array<{ plugin: string; phase: 'subscribe' | 'onBoot'; error: unknown }>
+  /**
+   * The best-effort DB reflection/pruning work (Phase C/D below), kept
+   * separate from the main result so callers that only need subscribed hooks
+   * and booted plugins aren't forced to wait on it. Always resolves (never
+   * rejects — internal errors are already caught and logged). Callers that
+   * extend the wiring promise's lifetime via `waitUntil` (see
+   * `createPluginWirer`) should extend THIS too, or the D1 writes can still
+   * get dropped even though the main wiring settled first.
+   */
+  background: Promise<unknown>
 }
 
 /**
@@ -107,7 +117,7 @@ export async function wireRegisteredPlugins(
   context: PluginBootContext,
   options: WireOptions = {}
 ): Promise<WireResult> {
-  const result: WireResult = { subscribed: 0, booted: [], errors: [] }
+  const result: WireResult = { subscribed: 0, booted: [], errors: [], background: Promise.resolve() }
 
   // Sort by dependencies (default on). Plugins with no `dependencies` keep their
   // original position; v3 plugins that declare deps are moved after them.
@@ -165,16 +175,21 @@ export async function wireRegisteredPlugins(
   // Phase C (best-effort): reflect wired plugin list into the `plugins` DB table
   // so the admin view stays in sync with what's actually running. Errors are
   // non-fatal — DB unavailable during cron-first boot should not break wiring.
+  // Deliberately NOT awaited here (so `result` resolves without waiting on DB
+  // writes) — tracked via `result.background` instead so a caller extending
+  // the wiring promise's lifetime (see `createPluginWirer`) can extend this
+  // too, rather than it being silently dropped when the creating request ends.
   if (context.env?.DB) {
     const db = context.env.DB as D1DatabaseLike
-    reflectWiredPlugins(valid, db).catch((err) => {
+    const reflectDone = reflectWiredPlugins(valid, db).catch((err) => {
       console.warn('[plugins] DB reflection failed (non-fatal):', err)
     })
     // Phase D (best-effort): deactivate user plugins that were removed from config.
     // Any non-core active plugin document not in the current wired list is stale.
-    pruneStaleUserPlugins(valid, db).catch((err) => {
+    const pruneDone = pruneStaleUserPlugins(valid, db).catch((err) => {
       console.warn('[plugins] Stale plugin pruning failed (non-fatal):', err)
     })
+    result.background = Promise.all([reflectDone, pruneDone])
   }
 
   return result
@@ -283,6 +298,23 @@ async function reflectWiredPlugins(plugins: WirablePlugin[], db: D1DatabaseLike)
  * This is the first-request trigger — many concurrent first requests all await
  * one wiring pass.
  *
+ * `wireRegisteredPlugins` does I/O (D1 writes), so the promise it returns is an
+ * I/O object tied to whichever request's execution context happened to create
+ * it. On Workers with the `handle_cross_request_promise_resolution` compat
+ * flag, that context is torn down once ITS triggering request returns a
+ * response — and if that happens before the promise settles while a second,
+ * concurrent first-touch request is also awaiting the same cached promise, the
+ * runtime drops it for that second request with "This promise was created by a
+ * request that has since ended". Under concurrent traffic hitting a cold
+ * isolate this fires routinely (see #1194).
+ *
+ * The fix is for the CREATING call to extend its own request's context past
+ * its response via `ctx.waitUntil()`, so the context (and the promise) survive
+ * long enough for every concurrent awaiter to observe the real result instead
+ * of a dropped promise. Callers pass their `waitUntil` on every invocation;
+ * it is only actually used by the call that creates `started`, since only
+ * that call's request is the one whose context the promise is bound to.
+ *
  * @param plugins     Plugins to wire (evaluated lazily at first call).
  * @param ctxFactory  Builds the boot context at first-call time (so it can read
  *                    per-request env).
@@ -290,12 +322,20 @@ async function reflectWiredPlugins(plugins: WirablePlugin[], db: D1DatabaseLike)
 export function createPluginWirer(
   plugins: Array<WirablePlugin | undefined | null> | (() => Array<WirablePlugin | undefined | null>),
   ctxFactory: () => PluginBootContext
-): () => Promise<WireResult> {
+): (waitUntil?: (promise: Promise<unknown>) => void) => Promise<WireResult> {
   let started: Promise<WireResult> | undefined
-  return () => {
+  return (waitUntil) => {
     if (!started) {
       const list = typeof plugins === 'function' ? plugins() : plugins
       started = wireRegisteredPlugins(list, ctxFactory())
+      // Extend the creating request's I/O context so the promise can settle
+      // even after that request's own response has been sent, and so other
+      // requests racing to await it on a cold isolate don't get it dropped.
+      // Also extend `background` (the fire-and-forget DB reflection/pruning
+      // work) — it settles after `started` does, so it needs its own
+      // waitUntil registration or it can still get dropped.
+      waitUntil?.(started.catch(() => {}))
+      waitUntil?.(started.then((r) => r.background).catch(() => {}))
     }
     return started
   }

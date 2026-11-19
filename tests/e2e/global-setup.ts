@@ -40,7 +40,25 @@ export async function prepareEnvironment(baseURL: string): Promise<void> {
   }
 }
 
+/**
+ * Playwright global setup: seeds the admin DB and verifies readiness before any test runs.
+ * In sharded CI the setup job calls `prepareEnvironment` once; shard jobs set
+ * `E2E_ADMIN_SEEDED=1` so this function skips the seed while still enforcing the
+ * disposable-target safety guard.
+ */
 export default async function globalSetup(config: FullConfig): Promise<void> {
+  // In sharded CI runs, the setup job already ran e2e-readiness.ts which calls
+  // prepareEnvironment once before all shards start. Skip the seed mutations here to
+  // avoid concurrent seed calls on the same DB. Set E2E_ADMIN_SEEDED=1 in shard job env.
+  // The disposable-target guard still runs on the skip path so a stale local E2E_ADMIN_SEEDED
+  // cannot bypass the safety check against a non-disposable environment.
+  if (process.env.E2E_ADMIN_SEEDED === '1') {
+    if (process.env.E2E_DISPOSABLE_TARGET !== '1' && !process.env.CI) {
+      throw new Error('E2E setup refused: set E2E_DISPOSABLE_TARGET=1 only for an owned disposable environment')
+    }
+    console.log('E2E global setup: skipping seed (E2E_ADMIN_SEEDED=1 — already seeded by CI setup job)')
+    return
+  }
   const baseURL = config.projects[0]?.use.baseURL
   if (!baseURL) throw new Error('E2E setup requires baseURL')
   await prepareEnvironment(baseURL)

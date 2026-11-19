@@ -2,6 +2,8 @@ export interface PaginationData {
   currentPage: number
   totalPages: number
   totalItems: number
+  /** Render the total as "N+" (lower bound) instead of an exact count. */
+  totalItemsCapped?: boolean
   itemsPerPage: number
   startItem: number
   endItem: number
@@ -86,7 +88,7 @@ export function renderPagination(data: PaginationData): string {
           <p class="text-sm text-zinc-500 dark:text-zinc-400">
             Showing <span class="font-medium text-zinc-950 dark:text-white">${data.startItem}</span> to
             <span class="font-medium text-zinc-950 dark:text-white">${data.endItem}</span> of
-            <span class="font-medium text-zinc-950 dark:text-white">${data.totalItems}</span> results
+            <span class="font-medium text-zinc-950 dark:text-white">${data.totalItems}${data.totalItemsCapped ? '+' : ''}</span> results
           </p>
           ${data.showPageSizeSelector !== false ? `
             <div class="flex items-center gap-2">

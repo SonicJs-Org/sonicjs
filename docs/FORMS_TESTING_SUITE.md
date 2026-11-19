@@ -10,7 +10,7 @@
 
 | Type | File | Tests | Coverage |
 |------|------|-------|----------|
-| **E2E Tests** | `tests/e2e/50-forms.spec.ts` | 35+ tests | Full user workflows |
+| **E2E Tests** | `tests/e2e/forms.spec.ts` | 35+ tests | Full user workflows |
 | **Unit Tests** | `packages/core/src/__tests__/services/forms.test.ts` | 45+ tests | Service logic & validation |
 | **Manual Tests** | `docs/FORMS_TESTING_SCENARIOS.md` | 25 scenarios | Real user testing |
 
@@ -20,7 +20,7 @@
 
 ## 🧪 E2E Tests (Playwright)
 
-**File:** `/tests/e2e/50-forms.spec.ts`
+**File:** `/tests/e2e/forms.spec.ts`
 
 ### Test Suites
 
@@ -209,10 +209,10 @@ npm run e2e:smoke      # Quick smoke tests
 npm test -- forms.test.ts
 
 # E2E tests
-npx playwright test 50-forms.spec.ts
+npx playwright test tests/e2e/forms.spec.ts
 
 # With UI
-npx playwright test 50-forms.spec.ts --ui
+npx playwright test tests/e2e/forms.spec.ts --ui
 ```
 
 ### Debug Tests
@@ -222,7 +222,7 @@ npx playwright test 50-forms.spec.ts --ui
 npm test -- forms.test.ts --inspect
 
 # Debug E2E test
-npx playwright test 50-forms.spec.ts --debug
+npx playwright test tests/e2e/forms.spec.ts --debug
 
 # Show trace
 npx playwright show-trace trace.zip

@@ -189,6 +189,106 @@ describe('admin-content Option B (document-backed blog_post) — integration', (
     expect(db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='content'").get()).toBeFalsy()
   })
 
+  // ── All-view capped count + paging input (D1 overload fix) ─────────────────────────────────
+  // The All view counts at most `offset + limit * 10` matches. Below the cap it shows the exact
+  // total; above it, a lower bound rendered as "N+" in BOTH the header badge and the footer.
+  describe('all-view capped count', () => {
+    const footerTotal = (html: string) => /<span[^>]*>(\d+\+?)<\/span> results/.exec(html)?.[1]
+    const badgeTotal = (html: string) => /(\d+\+?) items?<\/span>/.exec(html)?.[1]
+    const list = async (qs: string) => {
+      const res = await app.request(`/admin/content?model=all${qs}`)
+      expect(res.status).toBe(200)
+      return res.text()
+    }
+
+    beforeEach(async () => {
+      for (let i = 0; i < 25; i++) await createPost(`cap-${i}`)
+    })
+
+    it('shows the exact total (no "+") when matches fit inside the count window', async () => {
+      const html = await list('&limit=100') // cap = 1000
+      const total = footerTotal(html)
+      expect(total).toMatch(/^\d+$/)
+      expect(Number(total)).toBe(25)
+      expect(badgeTotal(html)).toBe(total)
+    })
+
+    it('shows a lower bound "N+" in footer and header badge when the cap is hit', async () => {
+      const html = await list('&limit=2') // page 1 → cap = 0 + 2*10 = 20 < 25 posts
+      expect(footerTotal(html)).toBe('20+')
+      expect(badgeTotal(html)).toBe('20+')
+    })
+
+    it('grows the count window as the user pages forward', async () => {
+      const exact = Number(footerTotal(await list('&limit=100')))
+      const html = await list('&limit=2&page=4') // offset 6 → cap = 26
+      const expected = exact > 26 ? '26+' : String(exact)
+      expect(footerTotal(html)).toBe(expected)
+      expect(badgeTotal(html)).toBe(expected)
+    })
+
+    it('clamps invalid paging input instead of running an unbounded count', async () => {
+      // limit=-1 previously produced cap -10 → LIMIT -9 (unlimited) and a negative total.
+      expect(footerTotal(await list('&limit=-1'))).toBe('10+') // clamped to limit=1 → cap 10
+      expect(footerTotal(await list('&limit=0'))).toBe('10+')
+      const exact = footerTotal(await list('&limit=100'))
+      // Garbage → default 20 (cap 200 > 25 posts → exact); oversized → clamped to 100.
+      expect(footerTotal(await list('&limit=abc'))).toBe(exact)
+      expect(footerTotal(await list('&limit=100000'))).toBe(exact)
+      // Non-positive page → page 1 (the first 2 rows, cap 20).
+      expect(footerTotal(await list('&limit=2&page=-5'))).toBe('20+')
+      expect(footerTotal(await list('&limit=2&page=0'))).toBe('20+')
+    })
+
+    it('clamps very deep pages to the max offset instead of skipping millions of rows', async () => {
+      // limit=100 → last allowed page = 10_000 / 100 + 1 = 101; page=100000 clamps there.
+      const html = await list('&limit=100&page=100000')
+      expect(html).toContain('No content found') // offset 10_000 > 25 posts → empty page, not an error
+      // Footer "Showing 10001 to …": page clamped to 101 (offset 10_000), not 100000 (offset 9,999,900).
+      expect(html).toMatch(/Showing <span[^>]*>10001<\/span>/)
+    })
+
+    it('at the depth cap the pager offers no pages beyond the last reachable one; per-type lists are not capped', async () => {
+      // 10,150 more blog posts, inserted directly (the form path is too slow at this scale).
+      const ins = db.raw.prepare(
+        `INSERT INTO documents (id, root_id, type_id, type_version, version_number, is_current_draft, is_published, status,
+           parent_root_id, title, slug, tenant_id, locale, translation_group_id, data, metadata, created_at, updated_at)
+         VALUES (?, ?, 'blog_post', 1, 1, 1, 1, 'published', '', ?, ?, 'default', 'en', ?, '{}', '{}', ?, ?)`,
+      )
+      db.raw.transaction(() => {
+        for (let i = 0; i < 10_150; i++) {
+          const id = `bulk-${i}`
+          ins.run(id, id, `Bulk ${i}`, id, id, 1_000 + i, 1_000 + i)
+        }
+      })()
+
+      // limit=100 → last reachable All-view page = 10_000/100 + 1 = 101.
+      const html = await list('&limit=100&page=100000')
+      expect(html).toMatch(/Showing <span[^>]*>10001<\/span>/)
+      expect(footerTotal(html)).toBe('10100+') // count stops at the last reachable row
+      expect(html).not.toMatch(/[?&]page=10[2-9]\b/) // no Next / numbered links past page 101
+      expect(html).not.toMatch(/[?&]page=1[1-9]\d\b/)
+      expect(html).toMatch(/[?&]page=100\b/) // Previous still works
+
+      // The depth cap is All-view only: a per-type list still serves offset 10,100.
+      const typed = await (await app.request('/admin/content?model=blog_post&limit=100&page=102')).text()
+      expect(typed).toMatch(/Showing <span[^>]*>10101<\/span>/)
+      expect(typed).toContain('Bulk ')
+    })
+
+    it('all-view lists nothing when no visible document types remain (never internal ones)', async () => {
+    await createPost('hidden-when-internal')
+    // Mark every type internal: the registry then yields no visible types. An empty type filter used
+    // to mean "unrestricted" and listed every document, internal/auth-owned ones included.
+    db.raw.prepare(`UPDATE document_types SET settings = json_set(COALESCE(settings,'{}'), '$.internal', json('true'))`).run()
+    const res = await app.request('/admin/content?model=all')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).not.toContain('Post hidden-when-internal')
+    expect(html).toContain('No content found')
+  })
+  })
+
   it('does NOT offer internal/auth-owned types as content models in the filter dropdown', async () => {
     const res = await app.request('/admin/content')
     expect(res.status).toBe(200)

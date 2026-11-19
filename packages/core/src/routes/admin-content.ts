@@ -14,11 +14,26 @@ import { getBlocksFieldConfig, parseBlocksValue } from '../utils/blocks'
 import { escapeHtml, sanitizeRichText } from '../utils/sanitize'
 import { buildSchemaFieldOptions, resolveSchemaFieldType } from './admin-content-field-types'
 import { DocumentTypeRegistry } from '../services/document-type-registry'
-import { DocumentsService } from '../services/documents'
+import { DocumentsService, documentSecondsToMs } from '../services/documents'
+import { DocumentRepository } from '../services/document-repository'
 import { renderDocumentFormPage } from '../templates/pages/admin-documents-form.template'
 import { createDocumentSchema } from '../schemas/document'
 import type { QueryableField } from '../schemas/document'
 import { loadCollectionConfigs, getVisibleCollections } from '../services/collection-loader'
+
+// All-view count cap: count at most this many pages beyond the current offset (see the All-view branch).
+const ALL_VIEW_COUNT_WINDOW_PAGES = 10
+// Largest page size the list UI offers (pageSizeOptions in admin-content-list.template.ts).
+const MAX_PAGE_SIZE = 100
+// Deepest row offset a list page may request (OFFSET cost is linear in rows skipped).
+const MAX_LIST_OFFSET = 10_000
+
+/** Parse an integer query param, falling back on garbage and clamping to [min, max]. */
+function clampInt(raw: string | null | undefined, fallback: number, min: number, max: number): number {
+  const n = Number.parseInt(raw ?? '', 10)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(max, Math.max(min, n))
+}
 
 const adminContentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -381,6 +396,8 @@ async function softDeleteDocumentRoot(db: D1Database, tenantId: string, rootId: 
 
   const now = Math.floor(Date.now() / 1000)
   await db.prepare("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE root_id = ? AND tenant_id = ?").bind(now, now, rootId, tenantId).run()
+  // Raw deleted_at UPDATE bypasses DocumentProjection — deindex FTS so the deleted doc leaves public search.
+  await db.prepare("DELETE FROM documents_fts WHERE document_id IN (SELECT id FROM documents WHERE root_id = ? AND tenant_id = ?)").bind(rootId, tenantId).run()
   await getCacheService(CACHE_CONFIGS.content!).invalidate('content:list:*')
   const apiCacheDel = getCacheService(CACHE_CONFIGS.api!)
   await apiCacheDel.invalidate('api:content-filtered:*')
@@ -470,8 +487,10 @@ adminContentRoutes.get('/', async (c) => {
     const db = c.env.DB
 
     // Get query parameters
-    const page = parseInt(url.searchParams.get('page') || '1')
-    const limit = parseInt(url.searchParams.get('limit') || '20')
+    // Clamp paging input: a non-positive or huge `limit`/`page` would otherwise produce a negative
+    // offset / count cap (an unbounded count). The All view additionally caps its depth below.
+    const limit = clampInt(url.searchParams.get('limit'), 20, 1, MAX_PAGE_SIZE)
+    const page = clampInt(url.searchParams.get('page'), 1, 1, 100_000)
     // The filter dropdown posts `model`, but the content form's cancel link and the
     // post-save redirects below send `collection` instead. Accept both, or saving an item
     // drops the user on an unfiltered list rather than the collection they were editing.
@@ -593,56 +612,54 @@ adminContentRoutes.get('/', async (c) => {
     // The document-model POC keeps legacy `content` paths available, but the All view is
     // a documents-only list over every active document type.
     if (modelName === 'all') {
-      const allTypeIds = docTypes.map(dt => dt.id)
-      const like = search ? `%${search}%` : null
-      const docConds = ['d.is_current_draft = 1', 'd.tenant_id = ?']
-      const docParams: any[] = [reqTenant(c)]
-      if (allTypeIds.length > 0) {
-        const ph = allTypeIds.map(() => '?').join(',')
-        docConds.push(`d.type_id IN (${ph})`)
-        docParams.push(...allTypeIds)
+      // Reads go through DocumentRepository (R4). The list is index-backed (migration 0008) and the
+      // count is capped to a window ahead of the current page: an exact COUNT(*) scans every
+      // document on each load, which on telemetry-heavy installs tripped D1's per-10s resource limit.
+      // When the cap is hit the UI shows "N+" and the window grows as the user pages forward.
+      // Depth cap: OFFSET cost is linear in rows skipped, so the All view serves at most
+      // MAX_LIST_OFFSET rows deep. Deeper requests land on the last reachable page, and the count
+      // stops at that page's end so the pager never links beyond it (no "Next" that reloads itself).
+      const allMaxPage = Math.floor(MAX_LIST_OFFSET / limit) + 1
+      const allPage = Math.min(page, allMaxPage)
+      const allOffset = (allPage - 1) * limit
+      const repo = new DocumentRepository(db, reqTenant(c))
+      const indexOpts = {
+        typeIds: docTypes.map(dt => dt.id),
+        status: (['published', 'draft', 'deleted'].includes(status) ? status : 'all') as 'all' | 'published' | 'draft' | 'deleted',
+        search: search || undefined,
       }
-      if (status === 'deleted') docConds.push('d.deleted_at IS NOT NULL')
-      else {
-        docConds.push('d.deleted_at IS NULL')
-        if (status === 'published') docConds.push('d.is_published = 1')
-        else if (status === 'draft') docConds.push('d.is_published = 0')
-      }
-      if (like) { docConds.push("(d.title LIKE ? OR json_extract(d.data,'$.author') LIKE ?)"); docParams.push(like, like) }
-
-      const unionSql = `
-        SELECT d.root_id AS id, d.title AS title, d.slug AS slug,
-               CASE WHEN d.is_published = 1 THEN 'published' ELSE 'draft' END AS status,
-               d.updated_at * 1000 AS updated_at,
-               dt.display_name AS cdisplay, COALESCE(u.email, d.created_by, 'System') AS author_label
-        FROM documents d JOIN document_types dt ON dt.id = d.type_id LEFT JOIN auth_user u ON u.id = d.created_by
-        WHERE ${docConds.join(' AND ')}
-        ORDER BY updated_at DESC LIMIT ? OFFSET ?`
-      const { results: unionRows } = await db.prepare(unionSql).bind(...docParams, limit, offset).all()
-
-      const countRow = await db.prepare(
-        `SELECT COUNT(*) AS count FROM documents d WHERE ${docConds.join(' AND ')}`,
-      ).bind(...docParams).first() as any
+      // docTypes is already filtered to visible (non-internal, non-auth) types. The repository treats
+      // an empty typeIds list as "no type filter", so with nothing visible we must not query at all —
+      // otherwise internal/auth-owned documents would be listed.
+      const hasVisibleTypes = indexOpts.typeIds.length > 0
+      const indexRows = hasVisibleTypes ? await repo.listAdminIndex({ ...indexOpts, limit, offset: allOffset }) : []
+      const { count: totalItems, capped: totalItemsCapped } = hasVisibleTypes
+        ? await repo.countAdminIndex(indexOpts, Math.min(allOffset + limit * ALL_VIEW_COUNT_WINDOW_PAGES, allMaxPage * limit))
+        : { count: 0, capped: false }
 
       const badge: Record<string, string> = {
         published: 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20 dark:ring-green-500/20',
         draft: 'bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 ring-1 ring-inset ring-zinc-600/20 dark:ring-zinc-500/20',
         deleted: 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20 dark:ring-red-500/20',
       }
-      const contentItems = (unionRows || []).map((row: any) => ({
-        id: row.id,
-        title: row.title || row.slug || row.id,
-        slug: row.slug || '',
-        modelName: row.cdisplay,
-        statusBadge: `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${badge[row.status] ?? badge.draft}">${row.status}</span>`,
-        authorName: row.author_label,
-        formattedDate: new Date(row.updated_at ?? 0).toLocaleDateString(),
-        availableActions: [],
-      }))
+      const contentItems = indexRows.map(row => {
+        const rowStatus = row.is_published === 1 ? 'published' : 'draft'
+        return {
+          id: row.root_id,
+          title: row.title || row.slug || row.root_id,
+          slug: row.slug || '',
+          modelName: row.type_display_name,
+          statusBadge: `<span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${badge[rowStatus]}">${rowStatus}</span>`,
+          authorName: row.author_label,
+          formattedDate: new Date(documentSecondsToMs(row.updated_at) ?? 0).toLocaleDateString(),
+          availableActions: [],
+        }
+      })
 
       return c.html(renderContentListPage({
-        modelName, status, page, search, models, newContentCollections, contentItems,
-        totalItems: countRow?.count ?? 0,
+        modelName, status, page: allPage, search, models, newContentCollections, contentItems,
+        totalItems,
+        totalItemsCapped,
         itemsPerPage: limit,
         user: user ? { name: user.email, email: user.email, role: user.role } : undefined,
         version: c.get('appVersion'),
@@ -1982,6 +1999,12 @@ adminContentRoutes.post('/bulk-action', async (c) => {
         await db
           .prepare(`UPDATE documents SET deleted_at = ?, updated_at = ? WHERE tenant_id = ? AND root_id IN (${dph})`)
           .bind(nowSec, nowSec, tenantId, ...docRoots.map(r => r.root_id))
+          .run()
+        // This raw deleted_at UPDATE bypasses DocumentProjection, so deindex FTS explicitly — else the
+        // deleted docs linger in public keyword search (documents_fts is keyed by each version's id).
+        await db
+          .prepare(`DELETE FROM documents_fts WHERE document_id IN (SELECT id FROM documents WHERE tenant_id = ? AND root_id IN (${dph}))`)
+          .bind(tenantId, ...docRoots.map(r => r.root_id))
           .run()
       } else {
         // publish / draft → run through DocumentsService so the published flag, prev-published

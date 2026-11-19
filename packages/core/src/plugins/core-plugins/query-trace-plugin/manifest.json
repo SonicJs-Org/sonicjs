@@ -1,0 +1,29 @@
+{
+  "id": "query-trace",
+  "name": "Query Trace",
+  "version": "1.0.0",
+  "description": "Per-request D1/KV/cache tracing panel for admin performance tuning.",
+  "author": "SonicJS Team",
+  "license": "MIT",
+  "category": "development",
+  "tags": ["performance", "debugging", "d1", "tracing"],
+  "dependencies": [],
+  "settings": {},
+  "hooks": {
+    "onActivate": "activate",
+    "onDeactivate": "deactivate"
+  },
+  "routes": [],
+  "permissions": {},
+  "iconEmoji": "⚡",
+  "is_core": false,
+  "defaultActive": false,
+  "defaultSettings": {
+    "visibility": "opt-in",
+    "warnQueryMs": 25,
+    "slowQueryMs": 100,
+    "captureCallers": true,
+    "serverTimingHeader": true,
+    "maxEntries": 1000
+  }
+}

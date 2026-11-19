@@ -102,13 +102,15 @@ App construction (sync):
     └─ setPluginDefinitions(all plugins)
 
 First request (async):
-  registry.boot(env)
+  registry.boot(env, c.executionCtx)
     │
     └─ WIRE PASS — plugin.onBoot(ctx) ← async OK
          ├─ subscribe hooks
          ├─ init services (DB, email, etc.)
          └─ one-shot, cached for all subsequent requests
 ```
+
+Pass `c.executionCtx` (the Cloudflare `ExecutionContext` for the calling request) as `boot`'s second argument. On a cold isolate under concurrent request load, the wiring promise is I/O bound to whichever request created it; without `executionCtx.waitUntil()` extending that request's context past its own response, other concurrent first-touch requests awaiting the same cached promise can hit "This promise was created by a request that has since ended". Omitting it still works — it just loses that protection.
 
 If `register` returns a `Promise`, `registerPlugins` throws `RegisterPluginsError('register_returned_promise')` at startup — fail-fast, not at first request.
 
@@ -322,7 +324,7 @@ test('configure form renders', async ({ page }) => {
 Run:
 ```bash
 npm run e2e                                              # full suite
-npx playwright test tests/e2e/77-schema-driven-settings.spec.ts --headed
+npx playwright test tests/e2e/plugin-settings.spec.ts --headed
 ```
 
 ---

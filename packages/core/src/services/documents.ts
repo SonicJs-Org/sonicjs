@@ -8,6 +8,7 @@ import type {
   QueryableField,
 } from '../schemas/document'
 import { DocumentProjection } from './document-projection'
+import { retryTransientD1 } from './d1-retry'
 
 const DEFAULT_MAX_VERSIONS = 50
 
@@ -143,8 +144,9 @@ export class DocumentsService {
     )
 
     const derivedInserts = this.projection.buildDerivedInsertStatements(doc, this.opts.queryableFields ?? [], now)
+    const ftsStmts = this.projection.buildFtsUpsertStatements(doc, this.opts.queryableFields ?? [])
 
-    await this.db.batch([insertDoc, ...derivedInserts])
+    await retryTransientD1(() => this.db.batch([insertDoc, ...derivedInserts, ...ftsStmts]))
     return doc
   }
 
@@ -237,6 +239,10 @@ export class DocumentsService {
 
       // 4. Materialize derived rows for new draft.
       ...this.projection.buildDerivedInsertStatements(newDoc, this.opts.queryableFields ?? [], now),
+
+      // 4b. FTS: deindex the demoted prev draft if it became history (mirrors step 2); index the new draft.
+      ...(!prevIsPublished ? this.projection.buildFtsDeleteStatements(prevDraft.id) : []),
+      ...this.projection.buildFtsUpsertStatements(newDoc, this.opts.queryableFields ?? []),
     ]
 
     // 5. Prune excess versions (beyond maxVersionsPerRoot), never the published or current-draft row,
@@ -253,7 +259,7 @@ export class DocumentsService {
       ).bind(rootId, this.tenantId, rootId, this.tenantId, maxVersions, rootId, this.tenantId),
     )
 
-    await this.db.batch(statements)
+    await retryTransientD1(() => this.db.batch(statements))
 
     // Fetch the saved row to get the SQL-computed version_number.
     const saved = await this.db
@@ -305,9 +311,11 @@ export class DocumentsService {
       // R7: derived rows track the new data — delete then reinsert for this row.
       ...this.projection.buildDerivedDeleteStatements(updated.id),
       ...this.projection.buildDerivedInsertStatements(updated, this.opts.queryableFields ?? [], now),
+      // FTS: reproject this draft row (is_published unchanged = false on the in-place path).
+      ...this.projection.buildFtsUpsertStatements(updated, this.opts.queryableFields ?? []),
     ]
 
-    await this.db.batch(statements)
+    await retryTransientD1(() => this.db.batch(statements))
 
     const saved = await this.db.prepare('SELECT * FROM documents WHERE id = ?').bind(updated.id).first<DocumentRow>()
     return rowToDocument(saved!)
@@ -368,7 +376,30 @@ export class DocumentsService {
       statements.push(...this.projection.buildDerivedInsertStatements(targetDoc, this.opts.queryableFields ?? [], now))
     }
 
-    await this.db.batch(statements)
+    // FTS snapshots is_published, so reproject every row whose published state changed in this batch.
+    const qf = this.opts.queryableFields ?? []
+    if (prevPublishedRow) {
+      if (prevPublishedRow.is_current_draft === 1) {
+        // is_published cleared but the row stays the live draft → refresh its FTS row to is_published=0.
+        statements.push(
+          ...this.projection.buildFtsUpsertStatements(
+            { ...rowToDocument(prevPublishedRow), isPublished: false, status: 'draft' },
+            qf,
+          ),
+        )
+      } else {
+        // hard-deleted or demoted to history → deindex.
+        statements.push(...this.projection.buildFtsDeleteStatements(prevPublishedRow.id))
+      }
+    }
+    statements.push(
+      ...this.projection.buildFtsUpsertStatements(
+        { ...rowToDocument(targetRow), isPublished: true, status: 'published' },
+        qf,
+      ),
+    )
+
+    await retryTransientD1(() => this.db.batch(statements))
 
     const saved = await this.db.prepare('SELECT * FROM documents WHERE id = ?').bind(documentId).first<DocumentRow>()
     return rowToDocument(saved!)
@@ -397,7 +428,19 @@ export class DocumentsService {
       statements.push(...this.projection.buildDerivedDeleteStatements(documentId))
     }
 
-    await this.db.batch(statements)
+    // FTS: row is now is_published=0. Refresh it if it stays the live draft, else deindex.
+    if (row.is_current_draft === 1) {
+      statements.push(
+        ...this.projection.buildFtsUpsertStatements(
+          { ...rowToDocument(row), isPublished: false, status: 'draft' },
+          this.opts.queryableFields ?? [],
+        ),
+      )
+    } else {
+      statements.push(...this.projection.buildFtsDeleteStatements(documentId))
+    }
+
+    await retryTransientD1(() => this.db.batch(statements))
 
     const saved = await this.db.prepare('SELECT * FROM documents WHERE id = ?').bind(documentId).first<DocumentRow>()
     return rowToDocument(saved!)
@@ -407,10 +450,15 @@ export class DocumentsService {
 
   async softDelete(documentId: string): Promise<void> {
     const now = Math.floor(Date.now() / 1000)
-    await this.db
-      .prepare('UPDATE documents SET deleted_at = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
-      .bind(now, now, documentId, this.tenantId)
-      .run()
+    // Deindex from FTS in the same batch so a soft-deleted doc leaves public search immediately (LA2).
+    await retryTransientD1(() =>
+      this.db.batch([
+        this.db
+          .prepare('UPDATE documents SET deleted_at = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
+          .bind(now, now, documentId, this.tenantId),
+        ...this.projection.buildFtsDeleteStatements(documentId),
+      ]),
+    )
   }
 
   // ─── Hard erase (PII types) ───────────────────────────────────────────────
@@ -432,6 +480,7 @@ export class DocumentsService {
     for (const id of docIds) {
       statements.push(this.db.prepare('DELETE FROM document_facets WHERE document_id = ?').bind(id))
       statements.push(this.db.prepare('DELETE FROM document_references WHERE from_document_id = ?').bind(id))
+      statements.push(...this.projection.buildFtsDeleteStatements(id))
     }
 
     statements.push(this.db.prepare('DELETE FROM document_permissions WHERE root_id = ? AND tenant_id = ?').bind(rootId, tenantId))
@@ -441,6 +490,6 @@ export class DocumentsService {
       statements.push(this.db.prepare('DELETE FROM documents WHERE id = ?').bind(id))
     }
 
-    await this.db.batch(statements)
+    await retryTransientD1(() => this.db.batch(statements))
   }
 }

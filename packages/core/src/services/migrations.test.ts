@@ -152,7 +152,7 @@ describe('MigrationService', () => {
 
       expect(status.appliedMigrations).toBe(9)
       expect(status.pendingMigrations).toBe(0)
-      expect(status.lastApplied).toBe('2026-01-01T00:00:07.000Z')
+      expect(status.lastApplied).toBe('2026-01-01T00:00:08.000Z')
     })
   })
 })

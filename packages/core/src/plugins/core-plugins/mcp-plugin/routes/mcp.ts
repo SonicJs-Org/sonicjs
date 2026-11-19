@@ -6,7 +6,7 @@
  * (app.ts) resolves `Authorization: Bearer sk_…` to `c.get('user')` before this
  * runs. We only check that a user was resolved, then derive the ACL principal set
  * via the shared getDocumentRequestContext coupling point — so MCP callers get
- * exactly the permissions of the key's owning user, gated per document by isAllowed.
+ * exactly the permissions of the key's owning user, gated per document by the shared read check.
  *
  * v1 supports: initialize, tools/list, tools/call, resources/list, resources/read.
  * Write tools + search_content are gated off here until Phases 2 / 4.

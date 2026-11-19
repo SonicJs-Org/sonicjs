@@ -70,6 +70,16 @@ vi.mock('../../templates/pages/admin-users-list.template', () => ({
   User: {}
 }))
 
+// Role assignment is covered against real SQLite in admin-users-roles.integration.test.ts.
+vi.mock('../../services/rbac', () => ({
+  RbacService: class {
+    getRoles = vi.fn().mockResolvedValue([{ id: 'viewer', name: 'viewer', display_name: 'Viewer' }])
+    getRolesForUser = vi.fn().mockResolvedValue([])
+    isGrantedForRole = vi.fn().mockResolvedValue(false)
+    setUserRoles = vi.fn().mockResolvedValue(undefined)
+  },
+}))
+
 vi.mock('../../plugins/core-plugins/user-profiles', () => ({
   getUserProfileConfig: vi.fn().mockReturnValue(undefined),
   renderCustomProfileSection: vi.fn().mockReturnValue(''),
@@ -327,7 +337,8 @@ describe('Admin Users - Profile on Edit Page', () => {
       const { writeProfileData } = await import('../../plugins/core-plugins/user-profiles')
       mockDb = createOrderedMockDb([
         { first: null },                                // call 0: uniqueness check, no conflict
-        { run: { success: true } },                     // call 1: UPDATE users SET ...
+        { first: { role: 'viewer' } },                  // call 1: current auth_user.role label
+        { run: { success: true } },                     // call 2: UPDATE users SET ...
       ])
 
       app = createApp(mockDb)
@@ -365,8 +376,8 @@ describe('Admin Users - Profile on Edit Page', () => {
     it('should skip the profile write when no profile fields are submitted', async () => {
       const { writeProfileData } = await import('../../plugins/core-plugins/user-profiles')
       mockDb = createOrderedMockDb([
-        { all: { results: [] } },       // call 0: RbacService.getRoles() — no custom roles
-        { first: null },                // call 1: uniqueness check, no conflict
+        { first: null },                // call 0: uniqueness check, no conflict
+        { first: { role: 'viewer' } },  // call 1: current auth_user.role label
         { run: { success: true } }      // call 2: UPDATE users SET ...
       ])
 
@@ -393,7 +404,7 @@ describe('Admin Users - Profile on Edit Page', () => {
 
       // No profile fields + no custom config → profile write skipped entirely.
       expect(writeProfileData).not.toHaveBeenCalled()
-      // Only 3 prepare calls: getRoles (role validation) + uniqueness check + user update.
+      // Only 3 prepare calls: uniqueness check + role label + user update.
       expect(mockDb.prepare.mock.calls.length).toBe(3)
     })
 
@@ -410,7 +421,8 @@ describe('Admin Users - Profile on Edit Page', () => {
 
       mockDb = createOrderedMockDb([
         { first: null },                // call 0: uniqueness check — no conflict
-        { run: { success: true } },     // call 1: UPDATE users SET ...
+        { first: { role: 'viewer' } },  // call 1: current auth_user.role label
+        { run: { success: true } },     // call 2: UPDATE users SET ...
       ])
 
       app = createApp(mockDb)
@@ -451,7 +463,8 @@ describe('Admin Users - Profile on Edit Page', () => {
 
       mockDb = createOrderedMockDb([
         { first: null },                // call 0: uniqueness check, no conflict
-        { run: { success: true } },     // call 1: UPDATE users SET ...
+        { first: { role: 'viewer' } },  // call 1: current auth_user.role label
+        { run: { success: true } },     // call 2: UPDATE users SET ...
       ])
 
       app = createApp(mockDb)

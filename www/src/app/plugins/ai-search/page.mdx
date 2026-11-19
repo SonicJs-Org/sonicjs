@@ -60,6 +60,7 @@ Built on Cloudflare's edge infrastructure, it delivers fast, intelligent search 
 - Works across all content types
 
 ### Keyword Search
+- FTS5 lexical index (`documents_fts`) with BM25 ranking, Porter stemming and diacritic folding (v3.0.1)
 - Traditional text matching as fallback
 - Full-text search across titles, slugs, and content
 - Supports filtering by collection, date, status, and author
@@ -335,11 +336,27 @@ When AI mode is enabled and Vectorize is configured, queries are processed using
 
 ### Keyword Mode
 
-Traditional text-based search using SQL LIKE queries:
+Lexical search backed by an SQLite FTS5 index (v3.0.1):
 
-1. Query is matched against title, slug, and content fields
-2. Results are ordered by update date
-3. Exact and partial matches are found
+1. Migration `0009_documents_fts.sql` creates the `documents_fts` virtual table (`title`, `slug`, `body` indexed; tokenizer `porter unicode61 remove_diacritics 2`).
+2. The index is updated at write time with the same batch that projects facets, and a document is de-indexed on soft delete.
+3. Queries are sanitized (operators and punctuation stripped, stop words dropped for Latin terms, any script supported). One term uses prefix matching (`auth*`); several terms are OR-ed so more matches rank higher.
+4. Results are ranked with BM25 using the weights below, filtered by RBAC, and cached in KV.
+
+Existing installs need a one-time backfill: `my-sonicjs-app/scripts/backfill-fts.ts`.
+
+#### FTS settings
+
+`GET /admin/plugins/ai-search/fts-settings` returns the settings. `POST` saves them (admin role required) and clears the result cache.
+
+| Field | Meaning |
+|---|---|
+| `titleBoost`, `slugBoost`, `bodyBoost` | BM25 column weights |
+| `resultsLimit` | Max results returned |
+| `cacheTtlSeconds` | KV result cache lifetime |
+| `searchableTypes` | Document types included in the index |
+
+The POST endpoint needs the `CACHE_KV` binding and returns 500 without it.
 
 **Best for:**
 - Specific term searches ("JWT token")

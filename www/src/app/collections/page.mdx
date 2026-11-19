@@ -579,6 +579,15 @@ Clicking **Delete** on a content item (from the list or the edit form) navigates
 
 **Save and close** returns you to the unfiltered content list at `/admin/content`, regardless of which collection you were editing, so the saved item is visible immediately. The list title reflects the most recently submitted data — including a renamed `name`-field value — rather than a stale database title.
 
+### Content List Performance
+
+The **All** view at `/admin/content` is index-backed (v3.0.1). It orders on the raw `updated_at` column using migration `0008` (`idx_docs_tenant_draft_updated`) and converts seconds to milliseconds only when rendering. On a ~261k-document database this dropped the list query from ~785k rows read to 40.
+
+- The total count is **capped** at the current offset plus 10 pages. When the cap is hit, the header badge and pager show `N+` (for example `201+ items`) instead of an exact total.
+- Paging in the All view stops at an offset of 10,000 rows (page 101 at 100 per page). Use a collection filter or search to reach older items; per-collection lists are not depth-capped.
+- `page` and `limit` are clamped (`limit` max 100). Invalid values fall back to defaults rather than producing negative totals.
+- If no visible document types remain after access filtering, the All view is empty rather than unrestricted.
+
 ### API Endpoints
 
 Collections automatically get REST API endpoints:

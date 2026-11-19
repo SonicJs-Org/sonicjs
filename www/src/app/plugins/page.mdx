@@ -61,6 +61,7 @@ Extend SonicJS functionality with a powerful plugin architecture. Install, confi
       <li><a href="#redirect-management-plugin">Redirect Management</a></li>
       <li><a href="#ai-search-plugin">AI Search</a></li>
       <li><a href="#stripe-subscriptions-plugin">Stripe Subscriptions</a></li>
+      <li><a href="#query-trace-plugin">Query Trace</a></li>
     </ul>
   </div>
 </div>
@@ -589,14 +590,33 @@ Manage URL redirects (301/302) from the admin panel.
 **Status:** Inactive by default
 **Version:** 1.0.0-beta.1
 
-AI-powered content search using vector embeddings.
+AI-powered content search using vector embeddings, plus FTS5 lexical search.
 
 **Features:**
 - Semantic search across content
+- FTS5 lexical keyword search with BM25 ranking (v3.0.1)
 - Vector embedding generation
 - Relevance-ranked results
 
 **Usage:** See [AI Search Plugin Docs](/plugins/ai-search)
+
+---
+
+### Query Trace Plugin
+
+**Status:** Inactive by default
+**Version:** 1.0.0
+
+Admin-only performance panel (v3.0.1). On `/admin` pages it lists every D1 query, KV operation and cache lookup the request made, with timings, caller, and "opportunities" such as N+1 queries, missing-index suspects and slow batches.
+
+**Features:**
+- Per-request D1 / KV / cache trace with waterfall, grouped fingerprints and middleware spans
+- Opt-in per admin via `?trace=1` (sets the `sjs_trace` cookie); `?trace=0` clears it
+- `Server-Timing` header on traced admin responses
+- SQL literals and KV keys redacted; nothing persisted; panel shown to `admin` role only
+- Settings: `visibility` (`opt-in` / `all-admins`), `warnQueryMs`, `slowQueryMs`, `captureCallers`, `serverTimingHeader`, `maxEntries`
+
+**Requires** `compatibility_flags = ["nodejs_compat"]` in `wrangler.toml`. Without it the plugin shows "Tracing unavailable".
 
 ---
 

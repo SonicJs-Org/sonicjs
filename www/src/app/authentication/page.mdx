@@ -692,6 +692,8 @@ SonicJS supports four built-in roles with specific enforcement across the system
 - The **first registered user** is automatically assigned the `admin` role
 - All subsequent self-registered users default to the `viewer` role
 - Admins can change user roles via the admin panel
+- The admin **New User** form (`/admin/users/new`) preselects the **Public** role when it exists, so an account created without touching the dropdown gets least privilege (v3.0.1). Role labels and values in the dropdown are HTML-escaped
+- The user edit page also shows a per-tenant role select inside the **Tenant memberships** section; the main form's field is the labelled **Role** select (target it with `getByLabel('Role')` in Playwright, not `select[name="role"]`)
 
 ### Middleware
 

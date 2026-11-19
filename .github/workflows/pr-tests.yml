@@ -367,9 +367,9 @@ jobs:
   #     (see plugin-core.spec.ts), which severs the edge and leaves
   #     plugin-multi-tenant genuinely independent.
   #
-  # Net result: 2 true-independent groups, not 5. Still a real win — the combined
-  # auth/plugin-catalog group and the multi-tenant group now run in parallel
-  # instead of strictly one after the other.
+  # Net result: 3 true-independent groups, not 5. Still a real win — the combined
+  # auth/plugin-catalog group, the multi-tenant group, and the query-trace group
+  # now run in parallel instead of strictly one after the other.
   #
   # Runs after e2e-shard; running locked tests concurrently with shards causes
   # registration-disabled failures in unrelated Better Auth signup specs.
@@ -440,9 +440,9 @@ jobs:
           mkdir -p e2e-logs
           # workers=1 serialises all tests within this one lock group — the same lock
           # tag can appear in multiple spec files, and concurrent workers on this
-          # runner would still race within the group. The other lock group runs in
-          # its own parallel matrix job, since the two share no state (see comment
-          # above the job for how that was verified, not assumed).
+          # runner would still race within the group. The other lock groups run in
+          # their own parallel matrix jobs, since the groups share no state (see
+          # comment above the job for how that was verified, not assumed).
           npx playwright test --config=tests/playwright.config.ts \
             --grep "${{ matrix.lock_grep }}" \
             --workers 1 \

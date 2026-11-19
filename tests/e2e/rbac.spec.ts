@@ -611,15 +611,12 @@ test.describe("Source: 97-user-edit-dynamic-roles.spec.ts", () => {
       await loginAsAdmin(page)
     })
 
-    test('user-new form defaults to Public and allows selecting Admin', async ({ page }) => {
+    test('user-new form contains admin role option', async ({ page }) => {
       await page.goto('/admin/users/new')
       await page.waitForLoadState('networkidle')
       const select = page.locator('select[name="role"]')
       await expect(select).toBeVisible()
       await expect(select.locator('option[value="role-admin"]')).toBeAttached()
-      await expect(select).toHaveValue('role-public')
-      await select.selectOption('role-admin')
-      await expect(select).toHaveValue('role-admin')
     })
 
     test('user-edit form contains admin role option', async ({ page }) => {
@@ -678,6 +675,26 @@ test.describe("Source: 97-user-edit-dynamic-roles.spec.ts", () => {
       const optionCount = await select.locator('option').count()
       expect(optionCount).toBeGreaterThan(0)
     })
+  })
+})
+
+// New E2E coverage for the Public-role default introduced in this PR.
+// Lives outside the preserved source wrapper so the consolidation guard
+// is not affected by the new assertions.
+test.describe('User new — Public role default @auth', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAsAdmin(page)
+  })
+
+  test('user-new form defaults to Public and allows selecting Admin', async ({ page }) => {
+    await page.goto('/admin/users/new')
+    await page.waitForLoadState('networkidle')
+    const select = page.locator('select[name="role"]')
+    await expect(select).toBeVisible()
+    await expect(select.locator('option[value="role-admin"]')).toBeAttached()
+    await expect(select).toHaveValue('role-public')
+    await select.selectOption('role-admin')
+    await expect(select).toHaveValue('role-admin')
   })
 })
 

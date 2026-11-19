@@ -82,16 +82,25 @@ test.describe('GraphQL endpoint @api', () => {
     expect(Array.isArray(body.data.documents.items)).toBe(true)
   })
 
-  test('createDocument refuses internal types, even for an admin key', async ({ request }) => {
+  test('createDocument refuses internal types, even for an admin key', async ({ request, resourceId }) => {
     for (const typeId of ['rbac_user_roles', 'site_settings']) {
+      const slug = `gql-internal-${resourceId}`
       const { body } = await gql(
         request,
         `mutation($typeId: String!, $slug: String, $data: JSON!) { createDocument(typeId: $typeId, slug: $slug, data: $data) { id } }`,
-        { typeId, slug: `gql-internal-${Date.now()}`, data: { roleIds: ['role-admin'] } },
+        { typeId, slug, data: { roleIds: ['role-admin'] } },
       )
       // Yoga masks the resolver's message in production; the refusal is the error + no document.
       expect(body.errors?.length, typeId).toBeGreaterThan(0)
       expect(body.data?.createDocument ?? null, typeId).toBeNull()
+
+      // Verify no document was actually persisted despite the error
+      const { body: queryBody } = await gql(
+        request,
+        `query($typeId: String!, $slug: String) { documents(typeId: $typeId, filter: { slug: { eq: $slug } }) { items { id } } }`,
+        { typeId, slug },
+      )
+      expect(queryBody.data?.documents?.items?.length ?? 0, `${typeId} should not persist`).toBe(0)
     }
   })
 

@@ -16,21 +16,29 @@ test.describe('Content API write ACL @api', () => {
 
   const headers = () => ({ 'Content-Type': 'application/json', Cookie: cookie, Origin: TEST_ORIGIN })
 
-  test('admin can still create and delete ordinary content', async ({ request }) => {
-    const slug = `write-acl-${Date.now()}`
-    const created = await request.post(`${TEST_ORIGIN}/api/content`, {
-      data: { collectionId: 'blog_post', title: slug, slug, status: 'draft', data: {} },
-      headers: headers(),
-    })
-    expect(created.status()).toBe(201)
-    const id = (await created.json()).data.id
+  test('admin can still create and delete ordinary content', async ({ request, resourceId }) => {
+    let createdId: string | null = null
+    try {
+      const created = await request.post(`${TEST_ORIGIN}/api/content`, {
+        data: { collectionId: 'blog_post', title: resourceId, slug: resourceId, status: 'draft', data: {} },
+        headers: headers(),
+      })
+      expect(created.status()).toBe(201)
+      createdId = (await created.json()).data.id
 
-    const deleted = await request.delete(`${TEST_ORIGIN}/api/content/${id}`, { headers: headers() })
-    expect(deleted.status()).toBe(200)
+      const deleted = await request.delete(`${TEST_ORIGIN}/api/content/${createdId}`, { headers: headers() })
+      expect(deleted.status()).toBe(200)
+      createdId = null // successfully deleted
+    } finally {
+      // Cleanup if test failed after create but before delete
+      if (createdId) {
+        await request.delete(`${TEST_ORIGIN}/api/content/${createdId}`, { headers: headers() }).catch(() => {})
+      }
+    }
   })
 
-  test('site_settings is not writable through the content API, even by admin', async ({ request }) => {
-    const body = { title: 'security', slug: `security-${Date.now()}`, data: { jwtExpiresIn: '3650d' } }
+  test('site_settings is not writable through the content API, even by admin', async ({ request, resourceId }) => {
+    const body = { title: 'security', slug: `security-${resourceId}`, data: { jwtExpiresIn: '3650d' } }
     const viaCollection = await request.post(`${TEST_ORIGIN}/api/site_settings`, { data: body, headers: headers() })
     expect(viaCollection.status()).toBe(404)
     const viaContent = await request.post(`${TEST_ORIGIN}/api/content`, {
@@ -40,9 +48,9 @@ test.describe('Content API write ACL @api', () => {
     expect(viaContent.status()).toBe(404)
   })
 
-  test('anonymous writes are rejected', async ({ request }) => {
+  test('anonymous writes are rejected', async ({ request, resourceId }) => {
     const res = await request.post(`${TEST_ORIGIN}/api/blog_post`, {
-      data: { title: 'anon', slug: `anon-${Date.now()}` },
+      data: { title: 'anon', slug: `anon-${resourceId}` },
       headers: { 'Content-Type': 'application/json', Origin: TEST_ORIGIN },
     })
     expect(res.status()).toBe(401)

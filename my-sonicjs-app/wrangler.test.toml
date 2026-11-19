@@ -1,0 +1,41 @@
+name = "sonicjs-test"
+main = "src/index.ts"
+compatibility_date = "2025-05-05"
+compatibility_flags = ["nodejs_compat"]
+
+account_id = "f9d6328dc3115e621758a741dda3d5c4"
+
+# Custom domain handled via Cloudflare DNS (test.sonicjs.com -> sonicjs-test worker)
+workers_dev = false
+routes = [
+  { pattern = "test.sonicjs.com/*", zone_name = "sonicjs.com" }
+]
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "sonicjs-test"
+database_id = "1aeaa2cd-84e3-4cbb-9671-685bdc57ba6b"
+migrations_dir = "./migrations"
+
+# R2 Bucket for media storage
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "sonicjs-test-media"
+
+# KV Cache
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "bb639c5841354c76b61ae14eaad827dd"
+
+# Environment variables
+[vars]
+ENABLE_SEED_ADMIN = "true"
+ENVIRONMENT = "test"
+CORS_ORIGINS = "https://test.sonicjs.com"
+DEFAULT_FROM_EMAIL = "test@sonicjs.com"
+BETTER_AUTH_SECRET = "sonicjs-test-secret-not-for-prod!"
+
+# Observability
+[observability]
+enabled = true

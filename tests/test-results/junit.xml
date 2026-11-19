@@ -1,0 +1,2442 @@
+<testsuites id="" name="" tests="756" failures="1" skipped="8" errors="1" time="496.61144">
+<testsuite name="01-health.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="0.303" errors="0">
+<testcase name="Health Checks @smoke › API health endpoint should return running status" classname="01-health.spec.ts" time="0.294">
+</testcase>
+<testcase name="Health Checks @smoke › 404 routes should return not found" classname="01-health.spec.ts" time="0.009">
+</testcase>
+</testsuite>
+<testsuite name="02-authentication.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="9.606" errors="0">
+<testcase name="Authentication @smoke @auth @lock-auth-login › should display login form" classname="02-authentication.spec.ts" time="1.391">
+</testcase>
+<testcase name="Authentication @smoke @auth @lock-auth-login › should login successfully with valid credentials" classname="02-authentication.spec.ts" time="1.535">
+</testcase>
+<testcase name="Authentication @smoke @auth @lock-auth-login › should show error with invalid credentials" classname="02-authentication.spec.ts" time="1.493">
+</testcase>
+<testcase name="Authentication @smoke @auth @lock-auth-login › should logout successfully" classname="02-authentication.spec.ts" time="1.88">
+</testcase>
+<testcase name="Authentication @smoke @auth @lock-auth-login › should protect admin routes from unauthenticated access" classname="02-authentication.spec.ts" time="1.629">
+</testcase>
+<testcase name="Authentication @smoke @auth @lock-auth-login › should maintain session across page reloads" classname="02-authentication.spec.ts" time="1.678">
+</testcase>
+</testsuite>
+<testsuite name="02b-authentication-api.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="30" failures="0" skipped="0" time="12.206" errors="0">
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/register - User Registration › should register a new user successfully" classname="02b-authentication-api.spec.ts" time="9.312">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/register - User Registration › should normalize email to lowercase" classname="02b-authentication-api.spec.ts" time="0.023">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/register - User Registration › should validate required fields" classname="02b-authentication-api.spec.ts" time="0.106">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/register - User Registration › should prevent duplicate email registration" classname="02b-authentication-api.spec.ts" time="0.04">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/register - User Registration › should set auth cookie on registration" classname="02b-authentication-api.spec.ts" time="0.027">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/register - User Registration › should assign viewer role by default" classname="02b-authentication-api.spec.ts" time="0.024">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/login - User Login › should login successfully with valid credentials" classname="02b-authentication-api.spec.ts" time="0.053">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/login - User Login › should normalize email to lowercase on login" classname="02b-authentication-api.spec.ts" time="0.05">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/login - User Login › should fail with invalid email" classname="02b-authentication-api.spec.ts" time="0.045">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/login - User Login › should fail with invalid password" classname="02b-authentication-api.spec.ts" time="0.042">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/login - User Login › should validate required fields" classname="02b-authentication-api.spec.ts" time="0.053">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/login - User Login › should set auth cookie on login" classname="02b-authentication-api.spec.ts" time="0.047">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/login - User Login › should update last login timestamp" classname="02b-authentication-api.spec.ts" time="0.192">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/logout - User Logout › should logout successfully" classname="02b-authentication-api.spec.ts" time="0.065">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/logout - User Logout › GET /auth/logout should redirect to login" classname="02b-authentication-api.spec.ts" time="0.008">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › GET /auth/me - Current User › should return current user when authenticated" classname="02b-authentication-api.spec.ts" time="0.07">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › GET /auth/me - Current User › should return 401 when not authenticated" classname="02b-authentication-api.spec.ts" time="0.009">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › GET /auth/me - Current User › should return 401 with invalid token" classname="02b-authentication-api.spec.ts" time="0.008">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/refresh - Token Refresh › should refresh token when authenticated" classname="02b-authentication-api.spec.ts" time="1.168">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › POST /auth/refresh - Token Refresh › should return 401 when not authenticated" classname="02b-authentication-api.spec.ts" time="0.01">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › Security Tests › should not expose sensitive data in responses" classname="02b-authentication-api.spec.ts" time="0.045">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › Security Tests › should handle SQL injection attempts safely" classname="02b-authentication-api.spec.ts" time="0.066">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › Security Tests › should handle XSS attempts in registration" classname="02b-authentication-api.spec.ts" time="0.017">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › Security Tests › should enforce HTTPS-only cookies in production" classname="02b-authentication-api.spec.ts" time="0.049">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › Security Tests › should rate limit login attempts" classname="02b-authentication-api.spec.ts" time="0.346">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › Error Handling › should handle malformed JSON gracefully" classname="02b-authentication-api.spec.ts" time="0.008">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › Error Handling › should handle missing content-type" classname="02b-authentication-api.spec.ts" time="0.042">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › Error Handling › should handle server errors gracefully" classname="02b-authentication-api.spec.ts" time="0.02">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › Session Management › should maintain session across requests" classname="02b-authentication-api.spec.ts" time="0.06">
+</testcase>
+<testcase name="Authentication API @auth @api @lock-auth-login @lock-auth-registration › Session Management › should handle concurrent authentication requests" classname="02b-authentication-api.spec.ts" time="0.201">
+</testcase>
+</testsuite>
+<testsuite name="02c-otp-login.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="13" failures="0" skipped="0" time="0.489" errors="0">
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/email-otp/send-verification-otp - Request OTP Code › should accept valid email and return success" classname="02c-otp-login.spec.ts" time="0.037">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/email-otp/send-verification-otp - Request OTP Code › should normalize email to lowercase (accept uppercase)" classname="02c-otp-login.spec.ts" time="0.012">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/email-otp/send-verification-otp - Request OTP Code › should reject invalid email format with 400" classname="02c-otp-login.spec.ts" time="0.022">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/email-otp/send-verification-otp - Request OTP Code › should reject empty email with 400" classname="02c-otp-login.spec.ts" time="0.02">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/email-otp/send-verification-otp - Request OTP Code › should not reveal if user exists (same success response for any valid email)" classname="02c-otp-login.spec.ts" time="0.025">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/email-otp/send-verification-otp - Request OTP Code › should rate limit excessive requests from same email" classname="02c-otp-login.spec.ts" time="0.065">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/email-otp/send-verification-otp - Request OTP Code › should reject missing email field with 400" classname="02c-otp-login.spec.ts" time="0.013">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/email-otp/send-verification-otp - Request OTP Code › should reject missing type field with 400" classname="02c-otp-login.spec.ts" time="0.031">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/sign-in/email-otp - Verify OTP Code › should reject wrong OTP with 400" classname="02c-otp-login.spec.ts" time="0.017">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/sign-in/email-otp - Verify OTP Code › should reject invalid email format with 400" classname="02c-otp-login.spec.ts" time="0.02">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/sign-in/email-otp - Verify OTP Code › should reject missing email with 400" classname="02c-otp-login.spec.ts" time="0.025">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › POST /auth/sign-in/email-otp - Verify OTP Code › should reject missing otp with 400" classname="02c-otp-login.spec.ts" time="0.057">
+</testcase>
+<testcase name="Email OTP Authentication (Better Auth) @auth › Security Tests › should handle SQL injection attempts safely" classname="02c-otp-login.spec.ts" time="0.145">
+</testcase>
+</testsuite>
+<testsuite name="02d-magic-link-auth.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="14" failures="0" skipped="0" time="0.478" errors="0">
+<testcase name="Magic Link Authentication (Better Auth) @auth › POST /auth/sign-in/magic-link - Request Magic Link › should accept valid email and return status true" classname="02d-magic-link-auth.spec.ts" time="0.024">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › POST /auth/sign-in/magic-link - Request Magic Link › should normalize email to lowercase (accept uppercase)" classname="02d-magic-link-auth.spec.ts" time="0.048">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › POST /auth/sign-in/magic-link - Request Magic Link › should reject invalid email format with 400" classname="02d-magic-link-auth.spec.ts" time="0.042">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › POST /auth/sign-in/magic-link - Request Magic Link › should reject empty email with 400" classname="02d-magic-link-auth.spec.ts" time="0.007">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › POST /auth/sign-in/magic-link - Request Magic Link › should reject missing email field with 400" classname="02d-magic-link-auth.spec.ts" time="0.007">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › POST /auth/sign-in/magic-link - Request Magic Link › should not reveal whether user exists (same status true for any valid email)" classname="02d-magic-link-auth.spec.ts" time="0.016">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › POST /auth/sign-in/magic-link - Request Magic Link › should rate limit excessive requests from same email" classname="02d-magic-link-auth.spec.ts" time="0.058">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › GET /auth/magic-link/verify - Verify Magic Link › should return 400 for missing token" classname="02d-magic-link-auth.spec.ts" time="0.044">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › GET /auth/magic-link/verify - Verify Magic Link › should redirect with error for invalid token" classname="02d-magic-link-auth.spec.ts" time="0.027">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › GET /auth/magic-link/verify - Verify Magic Link › should redirect to callbackURL with error for invalid token" classname="02d-magic-link-auth.spec.ts" time="0.049">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › Security Tests › should handle SQL injection in token safely" classname="02d-magic-link-auth.spec.ts" time="0.068">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › Security Tests › should handle very long tokens" classname="02d-magic-link-auth.spec.ts" time="0.009">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › Security Tests › should handle special characters in token" classname="02d-magic-link-auth.spec.ts" time="0.071">
+</testcase>
+<testcase name="Magic Link Authentication (Better Auth) @auth › Error Handling › should handle malformed JSON gracefully" classname="02d-magic-link-auth.spec.ts" time="0.008">
+</testcase>
+</testsuite>
+<testsuite name="03-admin-dashboard.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="8.814" errors="0">
+<testcase name="Admin Dashboard @smoke › should land on the admin shell with sidebar navigation" classname="03-admin-dashboard.spec.ts" time="0.698">
+</testcase>
+<testcase name="Admin Dashboard @smoke › should display statistics cards" classname="03-admin-dashboard.spec.ts" time="2.678">
+</testcase>
+<testcase name="Admin Dashboard @smoke › should navigate to content page" classname="03-admin-dashboard.spec.ts" time="0.798">
+</testcase>
+<testcase name="Admin Dashboard @smoke › should navigate to media page" classname="03-admin-dashboard.spec.ts" time="0.635">
+</testcase>
+<testcase name="Admin Dashboard @smoke › should handle quick actions" classname="03-admin-dashboard.spec.ts" time="1.93">
+</testcase>
+<testcase name="Admin Dashboard @smoke › should open and close User Dropdown menu in desktop and mobile" classname="03-admin-dashboard.spec.ts" time="2.075">
+</testcase>
+</testsuite>
+<testsuite name="05-content.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="11" failures="0" skipped="0" time="17.437" errors="0">
+<testcase name="Content Management @smoke @content › should display content list" classname="05-content.spec.ts" time="1.614">
+</testcase>
+<testcase name="Content Management @smoke @content › should show existing content" classname="05-content.spec.ts" time="1.458">
+</testcase>
+<testcase name="Content Management @smoke @content › should filter content by status" classname="05-content.spec.ts" time="1.537">
+</testcase>
+<testcase name="Content Management @smoke @content › should filter content by collection" classname="05-content.spec.ts" time="1.475">
+</testcase>
+<testcase name="Content Management @smoke @content › should navigate to new content form" classname="05-content.spec.ts" time="1.022">
+</testcase>
+<testcase name="Content Management @smoke @content › should display content actions" classname="05-content.spec.ts" time="1.777">
+</testcase>
+<testcase name="Content Management @smoke @content › should handle bulk selection" classname="05-content.spec.ts" time="1.798">
+</testcase>
+<testcase name="Content Management @smoke @content › should refresh content list" classname="05-content.spec.ts" time="1.634">
+</testcase>
+<testcase name="Content Management @smoke @content › should handle pagination" classname="05-content.spec.ts" time="2.098">
+</testcase>
+<testcase name="Content Management @smoke @content › should display content metadata" classname="05-content.spec.ts" time="1.436">
+</testcase>
+<testcase name="Content Management @smoke @content › should create new content and land on its edit form" classname="05-content.spec.ts" time="1.588">
+</testcase>
+</testsuite>
+<testsuite name="06-media.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="13" failures="0" skipped="0" time="36.065" errors="0">
+<testcase name="Media Management @smoke @media › should display media library" classname="06-media.spec.ts" time="1.811">
+</testcase>
+<testcase name="Media Management @smoke @media › should open upload modal" classname="06-media.spec.ts" time="0.846">
+</testcase>
+<testcase name="Media Management @smoke @media › should handle file upload" classname="06-media.spec.ts" time="2.776">
+</testcase>
+<testcase name="Media Management @smoke @media › should validate file types" classname="06-media.spec.ts" time="2.855">
+</testcase>
+<testcase name="Media Management @smoke @media › escapes the filename in search results" classname="06-media.spec.ts" time="4.454">
+</testcase>
+<testcase name="Media Management @smoke @media › should display uploaded media" classname="06-media.spec.ts" time="2.535">
+</testcase>
+<testcase name="Media Management @smoke @media › should handle media selection" classname="06-media.spec.ts" time="3.336">
+</testcase>
+<testcase name="Media Management @smoke @media › should show media details" classname="06-media.spec.ts" time="3.811">
+</testcase>
+<testcase name="Media Management @smoke @media › should close upload modal" classname="06-media.spec.ts" time="1.088">
+</testcase>
+<testcase name="Media Management @smoke @media › should support media search/filter" classname="06-media.spec.ts" time="5.667">
+</testcase>
+<testcase name="Media Management @smoke @media › renders the empty state when a search matches nothing" classname="06-media.spec.ts" time="1.175">
+</testcase>
+<testcase name="Media Management @smoke @media › should display media list view correctly" classname="06-media.spec.ts" time="2.72">
+</testcase>
+<testcase name="Media Management @smoke @media › applies the page offset" classname="06-media.spec.ts" time="2.991">
+</testcase>
+</testsuite>
+<testsuite name="07-api.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="10" failures="0" skipped="0" time="0.056" errors="0">
+<testcase name="API Endpoints @smoke @api › should return health check" classname="07-api.spec.ts" time="0.008">
+</testcase>
+<testcase name="API Endpoints @smoke @api › should return API info" classname="07-api.spec.ts" time="0.006">
+</testcase>
+<testcase name="API Endpoints @smoke @api › should require authentication for admin API" classname="07-api.spec.ts" time="0.005">
+</testcase>
+<testcase name="API Endpoints @smoke @api › should handle 404 for unknown routes" classname="07-api.spec.ts" time="0.004">
+</testcase>
+<testcase name="API Endpoints @smoke @api › should serve static assets" classname="07-api.spec.ts" time="0.006">
+</testcase>
+<testcase name="API Endpoints @smoke @api › should handle CORS for API endpoints" classname="07-api.spec.ts" time="0.004">
+</testcase>
+<testcase name="API Endpoints @smoke @api › should handle content negotiation" classname="07-api.spec.ts" time="0.006">
+</testcase>
+<testcase name="API Endpoints @smoke @api › should return proper content-type headers" classname="07-api.spec.ts" time="0.005">
+</testcase>
+<testcase name="API Endpoints @smoke @api › should handle large requests gracefully" classname="07-api.spec.ts" time="0.006">
+</testcase>
+<testcase name="API Endpoints @smoke @api › should validate request methods" classname="07-api.spec.ts" time="0.006">
+</testcase>
+</testsuite>
+<testsuite name="09-integration.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="13.206" errors="0">
+<testcase name="Full Integration Workflows @smoke › should handle media upload and usage workflow" classname="09-integration.spec.ts" time="0.983">
+</testcase>
+<testcase name="Full Integration Workflows @smoke › should handle user session and authentication flow" classname="09-integration.spec.ts" time="1.666">
+</testcase>
+<testcase name="Full Integration Workflows @smoke › should maintain data consistency across operations" classname="09-integration.spec.ts" time="10.557">
+</testcase>
+</testsuite>
+<testsuite name="09-media-bulk-actions.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="7.63" errors="0">
+<testcase name="Media Bulk Actions @media › should display bulk actions menu without cutoff when files are selected" classname="09-media-bulk-actions.spec.ts" time="2.366">
+<system-out>
+<![CDATA[Uploaded 2 files: [ [32m'1yeqq39-Ke9D0SjrMN7Cj'[39m, [32m'kicDTzY6EFgSaygKWJd0O'[39m ]
+]]>
+</system-out>
+</testcase>
+<testcase name="Media Bulk Actions @media › should show correct count in bulk actions button" classname="09-media-bulk-actions.spec.ts" time="1.673">
+<system-out>
+<![CDATA[Uploaded 2 files: [ [32m'mzQbIXHCsqHa1fEsl0DII'[39m, [32m'A-63f6aiCnLX9PvZ3jLQ2'[39m ]
+]]>
+</system-out>
+</testcase>
+<testcase name="Media Bulk Actions @media › should close menu when clicking outside" classname="09-media-bulk-actions.spec.ts" time="1.369">
+<system-out>
+<![CDATA[Uploaded 2 files: [ [32m'c_IS23zM5AFwvSsc8B-VA'[39m, [32m'65oqx-D65fhS6FSxRZB7c'[39m ]
+]]>
+</system-out>
+</testcase>
+<testcase name="Media Bulk Actions @media › should have proper z-index to avoid overlap" classname="09-media-bulk-actions.spec.ts" time="0.907">
+<system-out>
+<![CDATA[Uploaded 2 files: [ [32m'7ped31iXs_0M2FFUiFNRV'[39m, [32m'ZOx4ObOry3iLp_11-8n1c'[39m ]
+]]>
+</system-out>
+</testcase>
+<testcase name="Media Bulk Actions @media › should successfully delete selected files using bulk delete" classname="09-media-bulk-actions.spec.ts" time="1.315">
+<system-out>
+<![CDATA[Uploaded 2 files: [ [32m'9cGKSlm7eZ_5jnEOrwdWx'[39m, [32m'tX1iu0TvWt4cg81eqGkYi'[39m ]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="10-media-view-switching.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="3.536" errors="0">
+<testcase name="Media View Switching @media › should switch between grid and list views bidirectionally" classname="10-media-view-switching.spec.ts" time="1.307">
+</testcase>
+<testcase name="Media View Switching @media › should persist view preference across page reloads" classname="10-media-view-switching.spec.ts" time="1.367">
+</testcase>
+<testcase name="Media View Switching @media › should reflect selected view in dropdown" classname="10-media-view-switching.spec.ts" time="0.862">
+</testcase>
+</testsuite>
+<testsuite name="100-content-title-preserved-on-edit.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.463" errors="0">
+<testcase name="Content title preserved after edit @content › editing Example item (no title in schema) preserves title on list page" classname="100-content-title-preserved-on-edit.spec.ts" time="1.239">
+</testcase>
+<testcase name="Content title preserved after edit @content › creating new Example item derives title from name field" classname="100-content-title-preserved-on-edit.spec.ts" time="1.224">
+</testcase>
+</testsuite>
+<testsuite name="100-demo-login-stats.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="3" time="0.287" errors="0">
+<testcase name="Demo login stats @stats › /v1/events accepts demo_login event" classname="100-demo-login-stats.spec.ts">
+<properties>
+<property name="skip" value="Stats surfaces live in the separate sonicjs-stats worker (packages/stats)">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+<testcase name="Demo login stats @stats › stats dashboard renders Demo Site Logins section" classname="100-demo-login-stats.spec.ts">
+<properties>
+<property name="skip" value="Stats surfaces live in the separate sonicjs-stats worker (packages/stats)">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+<testcase name="Demo login stats @stats › stats dashboard shows demo login KPIs" classname="100-demo-login-stats.spec.ts">
+<properties>
+<property name="skip" value="Stats surfaces live in the separate sonicjs-stats worker (packages/stats)">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+</testsuite>
+<testsuite name="100-graphql.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="0.206" errors="0">
+<testcase name="GraphQL endpoint @api › unauthenticated POST returns error, not 401" classname="100-graphql.spec.ts" time="0.018">
+</testcase>
+<testcase name="GraphQL endpoint @api › introspection returns schema types" classname="100-graphql.spec.ts" time="0.011">
+</testcase>
+<testcase name="GraphQL endpoint @api › documents query returns a page" classname="100-graphql.spec.ts" time="0.012">
+</testcase>
+<testcase name="GraphQL endpoint @api › createDocument → document query → publishDocument → deleteDocument" classname="100-graphql.spec.ts" time="0.046">
+</testcase>
+<testcase name="GraphQL endpoint @api › GET /graphql serves GraphiQL playground" classname="100-graphql.spec.ts" time="0.119">
+</testcase>
+</testsuite>
+<testsuite name="106-two-factor-auth.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="15" failures="0" skipped="0" time="11.209" errors="0">
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › enrolment page › is reachable from the sidebar and renders the disabled state @smoke" classname="106-two-factor-auth.spec.ts" time="0.627">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › enrolment page › warns that enrolling disables emailed sign-in for the account" classname="106-two-factor-auth.spec.ts" time="0.563">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › enrolment page › is linked from the profile page security panel" classname="106-two-factor-auth.spec.ts" time="0.703">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › enrolment page › rejects setup with the wrong password and stays in the off state" classname="106-two-factor-auth.spec.ts" time="0.91">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › enrolment page › redirects an unauthenticated visitor to login" classname="106-two-factor-auth.spec.ts" time="0.775">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › enrolment page › renders a scannable QR code for an enrolment URI" classname="106-two-factor-auth.spec.ts" time="1.093">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › enrolment page › refuses to render a QR for anything but a TOTP URI" classname="106-two-factor-auth.spec.ts" time="0.805">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › login challenge page › is served without a session — an enrolled user has none at challenge time @smoke" classname="106-two-factor-auth.spec.ts" time="0.465">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › login challenge page › always offers backup-code entry" classname="106-two-factor-auth.spec.ts" time="0.663">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › login challenge page › rejects a bogus code without signing anyone in" classname="106-two-factor-auth.spec.ts" time="0.591">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › full enrolment round trip (throwaway account) › challenges the password login, then a live TOTP code resolves it @smoke" classname="106-two-factor-auth.spec.ts" time="1.185">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › full enrolment round trip (throwaway account) › accepts a backup code at the challenge" classname="106-two-factor-auth.spec.ts" time="1.445">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › full enrolment round trip (throwaway account) › refuses a magic link while enrolled, without revealing that it refused" classname="106-two-factor-auth.spec.ts" time="0.174">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › QR rendering @auth › renders a QR big enough to scan, for any issuer length" classname="106-two-factor-auth.spec.ts" time="0.579">
+</testcase>
+<testcase name="Two-Factor Authentication @auth @lock-auth-login @lock-auth-registration › QR rendering @auth › refuses to render arbitrary content as a QR" classname="106-two-factor-auth.spec.ts" time="0.631">
+</testcase>
+</testsuite>
+<testsuite name="107-two-factor-admin-reset.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="8" failures="0" skipped="0" time="16.487" errors="0">
+<testcase name="Two-Factor Admin Reset @auth @lock-auth-registration › an admin can reset a locked-out user, who can then sign in with their password @smoke" classname="107-two-factor-admin-reset.spec.ts" time="11.765">
+</testcase>
+<testcase name="Two-Factor Admin Reset @auth @lock-auth-registration › the recovery panel on the user edit page shows enrolment state and the confirm field" classname="107-two-factor-admin-reset.spec.ts" time="0.832">
+</testcase>
+<testcase name="Two-Factor Admin Reset @auth @lock-auth-registration › a mistyped confirmation email changes nothing" classname="107-two-factor-admin-reset.spec.ts" time="0.888">
+</testcase>
+<testcase name="Two-Factor Admin Reset @auth @lock-auth-registration › resetting without demanding re-enrolment leaves the account password-only" classname="107-two-factor-admin-reset.spec.ts" time="0.931">
+</testcase>
+<testcase name="Two-Factor Admin Reset @auth @lock-auth-registration › an unauthenticated caller cannot reset anyone" classname="107-two-factor-admin-reset.spec.ts" time="0.286">
+</testcase>
+<testcase name="Two-Factor Admin Reset @auth @lock-auth-registration › a user under a requirement cannot turn their second factor back off" classname="107-two-factor-admin-reset.spec.ts" time="0.922">
+</testcase>
+<testcase name="Two-Factor Admin Reset @auth @lock-auth-registration › an ordinary enrolled user can still turn their own second factor off" classname="107-two-factor-admin-reset.spec.ts" time="0.22">
+</testcase>
+<testcase name="Two-Factor Admin Reset @auth @lock-auth-registration › an unknown user id is refused" classname="107-two-factor-admin-reset.spec.ts" time="0.643">
+</testcase>
+</testsuite>
+<testsuite name="108-two-factor-api-enforcement.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="0" time="7.728" errors="0">
+<testcase name="Two-Factor API Enforcement @auth @lock-auth-registration › a user who owes an enrolment is refused by the JSON API @smoke" classname="108-two-factor-api-enforcement.spec.ts" time="5.717">
+</testcase>
+<testcase name="Two-Factor API Enforcement @auth @lock-auth-registration › the same user is let back onto the API once they enrol" classname="108-two-factor-api-enforcement.spec.ts" time="0.921">
+</testcase>
+<testcase name="Two-Factor API Enforcement @auth @lock-auth-registration › an enrolled user under no requirement is untouched by the gate" classname="108-two-factor-api-enforcement.spec.ts" time="0.304">
+</testcase>
+<testcase name="Two-Factor API Enforcement @auth @lock-auth-registration › the disable guard is not stepped around with a trailing slash" classname="108-two-factor-api-enforcement.spec.ts" time="0.786">
+</testcase>
+</testsuite>
+<testsuite name="114-seed-admin-env-gate.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="0.142" errors="0">
+<testcase name="seed-admin environment gate @smoke @auth › seed-admin succeeds in the development preview" classname="114-seed-admin-env-gate.spec.ts" time="0.031">
+</testcase>
+<testcase name="seed-admin environment gate @smoke @auth › seeded admin can log in" classname="114-seed-admin-env-gate.spec.ts" time="0.111">
+</testcase>
+</testsuite>
+<testsuite name="115-admin-set-password.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="4.169" errors="0">
+<testcase name="Admin-set passwords sign in @auth › create a user, then change their password: new one works, old one does not" classname="115-admin-set-password.spec.ts" time="4.169">
+</testcase>
+</testsuite>
+<testsuite name="116-register-credential.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="0.092" errors="0">
+<testcase name="Register creates sign-in credential @smoke @auth @lock-auth-registration › registered user can sign in immediately" classname="116-register-credential.spec.ts" time="0.092">
+</testcase>
+</testsuite>
+<testsuite name="117-content-form-no-htmx.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="2.136" errors="0">
+<testcase name="Content form submits without htmx @content › creates and updates content with htmx unavailable" classname="117-content-form-no-htmx.spec.ts" time="2.136">
+</testcase>
+</testsuite>
+<testsuite name="118-admin-background-request-load.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="11.328" errors="0">
+<testcase name="Admin background request load @smoke › checks migration status once per session, not once per page view" classname="118-admin-background-request-load.spec.ts" time="2.733">
+</testcase>
+<testcase name="Admin background request load @smoke › does not let the dashboard metrics poll overlap itself" classname="118-admin-background-request-load.spec.ts" time="8.595">
+</testcase>
+</testsuite>
+<testsuite name="118-content-save-and-close.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="3.835" errors="0">
+<testcase name="Content save-and-close redirects to unfiltered list @smoke @content › save-and-close returns to unfiltered content list with updated title @content" classname="118-content-save-and-close.spec.ts" time="1.491">
+</testcase>
+<testcase name="Content save-and-close redirects to unfiltered list @smoke @content › name-field update reflects as title on content list @content" classname="118-content-save-and-close.spec.ts" time="1.278">
+</testcase>
+<testcase name="Content save-and-close redirects to unfiltered list @smoke @content › save-and-close preserves referrer params when present @content" classname="118-content-save-and-close.spec.ts" time="1.066">
+</testcase>
+</testsuite>
+<testsuite name="119-admin-dashboard-fragments.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="6.062" errors="0">
+<testcase name="Admin dashboard fragments @smoke › stats cards report real counts, not placeholder zeroes" classname="119-admin-dashboard-fragments.spec.ts" time="0.772">
+</testcase>
+<testcase name="Admin dashboard fragments @smoke › storage usage renders database and media rows" classname="119-admin-dashboard-fragments.spec.ts" time="0.918">
+</testcase>
+<testcase name="Admin dashboard fragments @smoke › each dashboard fragment is fetched once per page load" classname="119-admin-dashboard-fragments.spec.ts" time="4.372">
+</testcase>
+</testsuite>
+<testsuite name="120-bootstrap-skip-latency.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="0.086" errors="0">
+<testcase name="Bootstrap path skips @smoke @auth › health and static assets short-circuit ahead of the bootstrap work" classname="120-bootstrap-skip-latency.spec.ts" time="0.047">
+</testcase>
+<testcase name="Bootstrap path skips @smoke @auth › Better Auth sign-in answers without carrying the bootstrap" classname="120-bootstrap-skip-latency.spec.ts" time="0.039">
+</testcase>
+</testsuite>
+<testsuite name="121-plugin-card-display-names.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="4.044" errors="0">
+<testcase name="Plugin card identity @plugins › every plugin card has a real id and a label that is not its slug" classname="121-plugin-card-display-names.spec.ts" time="1.123">
+</testcase>
+<testcase name="Plugin card identity @plugins › SDK plugins show the name their definition declares" classname="121-plugin-card-display-names.spec.ts" time="1.253">
+</testcase>
+<testcase name="Plugin card identity @plugins › a plugin is listed once, not once per registration source" classname="121-plugin-card-display-names.spec.ts" time="1.668">
+</testcase>
+</testsuite>
+<testsuite name="122-content-form-no-background-write.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="3.852" errors="0">
+<testcase name="Content form background writes @smoke @content › typing in the form arms no long-running timer and sends no write" classname="122-content-form-no-background-write.spec.ts" time="2.705">
+</testcase>
+<testcase name="Content form background writes @smoke @content › the explicit save posts to the collection endpoint, not to a stringified node list" classname="122-content-form-no-background-write.spec.ts" time="1.147">
+</testcase>
+</testsuite>
+<testsuite name="123-admin-page-weight.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.1" errors="0">
+<testcase name="Admin page weight @smoke › pages that do not chart neither request nor define Chart.js" classname="123-admin-page-weight.spec.ts" time="1.449">
+</testcase>
+<testcase name="Admin page weight @smoke › the dashboard still loads Chart.js and draws its chart" classname="123-admin-page-weight.spec.ts" time="0.651">
+</testcase>
+</testsuite>
+<testsuite name="124-admin-template-xss.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.282" errors="0">
+<testcase name="Admin template XSS escaping @content @smoke › reflected ?ref= on the content edit page is escaped and never executes" classname="124-admin-template-xss.spec.ts" time="1.49">
+</testcase>
+<testcase name="Plugin settings page renders non-string settings @smoke @plugins › ai-search detail page renders instead of 500ing on array-valued settings" classname="124-admin-template-xss.spec.ts" time="0.792">
+</testcase>
+</testsuite>
+<testsuite name="124-better-auth-upgrade.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="1" time="0.761" errors="0">
+<testcase name="Better Auth 1.7 upgrade @auth › sign-up → get-session → sign-out round trip" classname="124-better-auth-upgrade.spec.ts" time="0.115">
+</testcase>
+<testcase name="Better Auth 1.7 upgrade @auth › a signed-in user cannot reach Better Auth organization endpoints" classname="124-better-auth-upgrade.spec.ts" time="0.204">
+</testcase>
+<testcase name="Better Auth 1.7 upgrade @auth › an unknown magic-link token is rejected without a session" classname="124-better-auth-upgrade.spec.ts" time="0.209">
+</testcase>
+<testcase name="Better Auth 1.7 upgrade @auth › GHSA-965c-763c-88jm: an OAuth state cannot be redeemed as a magic-link token" classname="124-better-auth-upgrade.spec.ts">
+<properties>
+<property name="skip" value="No GitHub provider configured on this deployment">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+</testsuite>
+<testsuite name="125-content-delete-confirmation-page.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="7.386" errors="0">
+<testcase name="Content Delete Confirmation Page @content › delete button navigates to confirmation page" classname="125-content-delete-confirmation-page.spec.ts" time="1.493">
+</testcase>
+<testcase name="Content Delete Confirmation Page @content › cancel button returns to edit page" classname="125-content-delete-confirmation-page.spec.ts" time="1.946">
+</testcase>
+<testcase name="Content Delete Confirmation Page @content › delete permanently removes content and redirects" classname="125-content-delete-confirmation-page.spec.ts" time="1.759">
+</testcase>
+<testcase name="Content Delete Confirmation Page @content › confirmation page shows content metadata" classname="125-content-delete-confirmation-page.spec.ts" time="1.322">
+</testcase>
+<testcase name="Content Delete Confirmation Page @content › nonexistent content redirects to list" classname="125-content-delete-confirmation-page.spec.ts" time="0.866">
+</testcase>
+</testsuite>
+<testsuite name="126-runner-contracts.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="0.963" errors="0">
+<testcase name="Runner contracts @smoke › explicit load timeouts are not downgraded or swallowed" classname="126-runner-contracts.spec.ts" time="0.381">
+</testcase>
+<testcase name="Runner contracts @smoke › XHR helper waits for the response body and fires the mutation once" classname="126-runner-contracts.spec.ts" time="0.582">
+</testcase>
+</testsuite>
+<testsuite name="13-migrations.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="5.242" errors="0">
+<testcase name="Migrations API Endpoints @content @media @api › should return migration status from API endpoint" classname="13-migrations.spec.ts" time="0.72">
+</testcase>
+<testcase name="Migrations API Endpoints @content @media @api › should report every bundled migration as applied" classname="13-migrations.spec.ts" time="0.65">
+</testcase>
+<testcase name="Migrations API Endpoints @content @media @api › should report the same status when read twice" classname="13-migrations.spec.ts" time="0.706">
+</testcase>
+<testcase name="Migrations API Endpoints @content @media @api › should return validation results from validate endpoint" classname="13-migrations.spec.ts" time="0.573">
+</testcase>
+<testcase name="Migrations API Endpoints @content @media @api › should explain that migration execution is managed by Wrangler" classname="13-migrations.spec.ts" time="0.582">
+</testcase>
+<testcase name="Migrations API Endpoints @content @media @api › should handle malformed API requests gracefully" classname="13-migrations.spec.ts" time="2.011">
+</testcase>
+</testsuite>
+<testsuite name="14-database-tools.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="18" failures="0" skipped="0" time="27.565" errors="0">
+<testcase name="Database Tools @database › should navigate to database tools settings tab" classname="14-database-tools.spec.ts" time="2.794">
+</testcase>
+<testcase name="Database Tools @database › should display database statistics cards" classname="14-database-tools.spec.ts" time="3.077">
+</testcase>
+<testcase name="Database Tools @database › should display database operation buttons" classname="14-database-tools.spec.ts" time="0.832">
+</testcase>
+<testcase name="Database Tools @database › should display danger zone warning" classname="14-database-tools.spec.ts" time="0.948">
+</testcase>
+<testcase name="Database Tools @database › should refresh database stats when button clicked" classname="14-database-tools.spec.ts" time="1.878">
+</testcase>
+<testcase name="Database Tools @database › should validate database when button clicked" classname="14-database-tools.spec.ts" time="1.873">
+</testcase>
+<testcase name="Database Tools @database › should create backup when button clicked" classname="14-database-tools.spec.ts" time="1.822">
+</testcase>
+<testcase name="Database Tools @database › should handle truncate confirmation dialog" classname="14-database-tools.spec.ts" time="1.943">
+</testcase>
+<testcase name="Database Tools @database › should display tables list section" classname="14-database-tools.spec.ts" time="0.643">
+</testcase>
+<testcase name="Database Tools @database › should load database stats via API call" classname="14-database-tools.spec.ts" time="2.898">
+</testcase>
+<testcase name="Database Tools @database › should have proper accessibility features" classname="14-database-tools.spec.ts" time="0.918">
+</testcase>
+<testcase name="Database Tools @database › should handle API errors gracefully" classname="14-database-tools.spec.ts" time="1.064">
+</testcase>
+<testcase name="Database Tools @database › should navigate to table view when clicking on a table row" classname="14-database-tools.spec.ts" time="3.475">
+</testcase>
+<testcase name="Database Tools API Endpoints @database › should return database stats from API endpoint" classname="14-database-tools.spec.ts" time="0.686">
+</testcase>
+<testcase name="Database Tools API Endpoints @database › should return validation results from validate endpoint" classname="14-database-tools.spec.ts" time="0.731">
+</testcase>
+<testcase name="Database Tools API Endpoints @database › should require admin role for backup endpoint" classname="14-database-tools.spec.ts" time="0.632">
+</testcase>
+<testcase name="Database Tools API Endpoints @database › should reject truncate without correct confirmation text" classname="14-database-tools.spec.ts" time="0.611">
+</testcase>
+<testcase name="Database Tools API Endpoints @database › should handle malformed API requests gracefully" classname="14-database-tools.spec.ts" time="0.74">
+</testcase>
+</testsuite>
+<testsuite name="15-plugins.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="13" failures="0" skipped="0" time="14.5" errors="0">
+<testcase name="Plugin Management @plugins › should access plugins page and show basic UI" classname="15-plugins.spec.ts" time="0.706">
+</testcase>
+<testcase name="Plugin Management @plugins › should show plugin stats" classname="15-plugins.spec.ts" time="0.643">
+</testcase>
+<testcase name="Plugin Management @plugins › should display existing plugins" classname="15-plugins.spec.ts" time="0.702">
+</testcase>
+<testcase name="Plugin Management @plugins › should install a catalog plugin if not present" classname="15-plugins.spec.ts" time="2.822">
+</testcase>
+<testcase name="Plugin Management @plugins › should show plugin actions" classname="15-plugins.spec.ts" time="1.093">
+</testcase>
+<testcase name="Plugin Management @plugins › should toggle plugin status @lock-plugin-hello-world" classname="15-plugins.spec.ts" time="1.603">
+</testcase>
+<testcase name="Plugin Management @plugins › should access plugin settings" classname="15-plugins.spec.ts" time="1.213">
+</testcase>
+<testcase name="Plugin Management @plugins › should show installable plugin options" classname="15-plugins.spec.ts" time="0.867">
+</testcase>
+<testcase name="Plugin Management @plugins › should filter plugins by search" classname="15-plugins.spec.ts" time="2.192">
+</testcase>
+<testcase name="Plugin Management @plugins › should show plugin information" classname="15-plugins.spec.ts" time="0.701">
+</testcase>
+<testcase name="Plugin Management @plugins › should handle plugin categories" classname="15-plugins.spec.ts" time="0.593">
+</testcase>
+<testcase name="Plugin Management @plugins › should show core vs non-core plugins" classname="15-plugins.spec.ts" time="0.707">
+</testcase>
+<testcase name="Plugin Management @plugins › should validate plugin management permissions" classname="15-plugins.spec.ts" time="0.658">
+</testcase>
+</testsuite>
+<testsuite name="15-user-xss-prevention.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.719" errors="0">
+<testcase name="User XSS Prevention @auth › should prevent XSS in user creation via API" classname="15-user-xss-prevention.spec.ts" time="1.402">
+</testcase>
+<testcase name="User XSS Prevention @auth › should sanitize user data in database" classname="15-user-xss-prevention.spec.ts" time="1.317">
+</testcase>
+</testsuite>
+<testsuite name="16-user-management.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="0.115" errors="0">
+<testcase name="User Management - Hard Delete @auth @lock-auth-login @lock-auth-registration › should soft delete a user via API (deactivate)" classname="16-user-management.spec.ts" time="0.047">
+</testcase>
+<testcase name="User Management - Hard Delete @auth @lock-auth-login @lock-auth-registration › should hard delete a user via API (permanent deletion)" classname="16-user-management.spec.ts" time="0.037">
+</testcase>
+<testcase name="User Management - Hard Delete @auth @lock-auth-login @lock-auth-registration › should default to soft delete when hardDelete is not specified" classname="16-user-management.spec.ts" time="0.031">
+</testcase>
+</testsuite>
+<testsuite name="17-media-upload-immediate.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="2.977" errors="0">
+<testcase name="Media Upload - Immediate Availability @media › uploaded photo should appear immediately in media list" classname="17-media-upload-immediate.spec.ts" time="2.977">
+</testcase>
+</testsuite>
+<testsuite name="18-media-bulk-menu-zindex.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="0" time="4.188" errors="0">
+<testcase name="Media Bulk Actions Menu Z-Index @media › bulk actions menu should have higher z-index than media items" classname="18-media-bulk-menu-zindex.spec.ts" time="0.943">
+<system-out>
+<![CDATA[Bulk Actions Menu z-index: 50
+Media Item z-index: auto
+]]>
+</system-out>
+</testcase>
+<testcase name="Media Bulk Actions Menu Z-Index @media › bulk actions menu buttons should be clickable and not obscured" classname="18-media-bulk-menu-zindex.spec.ts" time="1.065">
+</testcase>
+<testcase name="Media Bulk Actions Menu Z-Index @media › bulk actions menu should remain on top when hovering over media items" classname="18-media-bulk-menu-zindex.spec.ts" time="1.173">
+</testcase>
+<testcase name="Media Bulk Actions Menu Z-Index @media › bulk actions menu positioning should be correct relative to button" classname="18-media-bulk-menu-zindex.spec.ts" time="1.007">
+</testcase>
+</testsuite>
+<testsuite name="19-content-media-selector.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="13.583" errors="0">
+<testcase name="Content Media Selector @content @media › should open media selector modal when Select Media button is clicked" classname="19-content-media-selector.spec.ts" time="0.841">
+<system-out>
+<![CDATA[Uploaded test file: test-selector-1793288675789.jpg with ID: 4f4UIRG-Ml5S17iEaNN-V
+]]>
+</system-out>
+</testcase>
+<testcase name="Content Media Selector @content @media › should display media files in the selector modal" classname="19-content-media-selector.spec.ts" time="1.756">
+<system-out>
+<![CDATA[Uploaded test file: test-selector-1793288676600.jpg with ID: 8IomlesCjuaY7v8oPlhH9
+]]>
+</system-out>
+</testcase>
+<testcase name="Content Media Selector @content @media › should allow searching for media files" classname="19-content-media-selector.spec.ts" time="1.351">
+<system-out>
+<![CDATA[Uploaded test file: test-selector-1793288678397.jpg with ID: k4vvIBQ57mBMpZ0QtONAN
+]]>
+</system-out>
+</testcase>
+<testcase name="Content Media Selector @content @media › should select media file and populate the form field" classname="19-content-media-selector.spec.ts" time="3.589">
+<system-out>
+<![CDATA[Uploaded test file: test-selector-1793288679753.jpg with ID: AODmvn4ePyp8H4HSFNCIo
+]]>
+</system-out>
+</testcase>
+<testcase name="Content Media Selector @content @media › should close media selector when Cancel button is clicked" classname="19-content-media-selector.spec.ts" time="1.149">
+<system-out>
+<![CDATA[Uploaded test file: test-selector-1793288683356.jpg with ID: UNuMNG1GyThUS00mSYhjs
+]]>
+</system-out>
+</testcase>
+<testcase name="Content Media Selector @content @media › should clear selected media when Remove button is clicked" classname="19-content-media-selector.spec.ts" time="4.897">
+<system-out>
+<![CDATA[Uploaded test file: test-selector-1793288684587.jpg with ID: Zr7MEW8VtQzFg-_lfFKTg
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="20-content-api-collection-filter.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="0.056" errors="0">
+<testcase name="Content API Collection Filtering @content @api › should filter content by collection parameter" classname="20-content-api-collection-filter.spec.ts" time="0.017">
+<system-out>
+<![CDATA[Found 7 collections
+Testing with collection: blog_post (ID: blog_post)
+Total content items: 7
+Filtered content items for 'blog_post': 3
+✓ All 3 items belong to collection 'blog_post'
+Items in 'blog_post' from unfiltered query: 3
+Items in 'blog_post' from filtered query: 3
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API Collection Filtering @content @api › should filter content using status and collection together" classname="20-content-api-collection-filter.spec.ts" time="0.009">
+<system-out>
+<![CDATA[Filtered content (collection='blog_post', status='published'): 3 items
+✓ All 3 items are published and from 'blog_post'
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API Collection Filtering @content @api › should return empty array for non-existent collection" classname="20-content-api-collection-filter.spec.ts" time="0.006">
+<system-out>
+<![CDATA[✓ Non-existent collection returns empty array
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API Collection Filtering @content @api › should filter using bracket-syntax filter[field][contains] on collection content" classname="20-content-api-collection-filter.spec.ts" time="0.015">
+<system-out>
+<![CDATA[✓ Bracket-syntax filter[title][contains]=Refe returned 1 matching items
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API Collection Filtering @content @api › should work with sort and order parameters" classname="20-content-api-collection-filter.spec.ts" time="0.009">
+<system-out>
+<![CDATA[Sorted content for 'blog_post': 3 items
+✓ Items are sorted by created_at descending
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="21-plugin-version-display.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="7" failures="0" skipped="0" time="6.002" errors="0">
+<testcase name="Plugin Version Display @plugins › should display correct version format for all plugins" classname="21-plugin-version-display.spec.ts" time="0.887">
+<system-out>
+<![CDATA[Found 33 plugin cards
+]]>
+</system-out>
+</testcase>
+<testcase name="Plugin Version Display @plugins › should display version with &quot;v&quot; prefix" classname="21-plugin-version-display.spec.ts" time="0.867">
+</testcase>
+<testcase name="Plugin Version Display @plugins › should display version in plugin details/settings page" classname="21-plugin-version-display.spec.ts" time="0.908">
+</testcase>
+<testcase name="Plugin Version Display @plugins › should show consistent version across plugin list and plugin detail page" classname="21-plugin-version-display.spec.ts" time="0.959">
+<system-out>
+<![CDATA[Plugin: Example, UI Version: 1.0.1
+  Detail page version: 1.0.1
+]]>
+</system-out>
+</testcase>
+<testcase name="Plugin Version Display @plugins › should not display truncated version (e.g., v1.0.0 instead of v1.0.0-beta.1)" classname="21-plugin-version-display.spec.ts" time="0.925">
+</testcase>
+<testcase name="Plugin Version Display @plugins › should display version with proper formatting" classname="21-plugin-version-display.spec.ts" time="0.597">
+<system-out>
+<![CDATA[Version text format: "v1.0.0-beta.1 • SonicJS Team"
+]]>
+</system-out>
+</testcase>
+<testcase name="Plugin Version Display @plugins › should display version for core plugins" classname="21-plugin-version-display.spec.ts" time="0.859">
+<system-out>
+<![CDATA[Checking core plugin: Authentication System
+Checking core plugin: Media Manager
+Checking core plugin: Analytics & Insights
+Checking core plugin: Cache System
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="23-content-api-crud.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="13" failures="0" skipped="0" time="0.347" errors="0">
+<testcase name="Content API CRUD Operations @smoke @content @api › POST /api/content - Create Content › should create new content with valid data" classname="23-content-api-crud.spec.ts" time="0.015">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+Response status: 201
+Created content with ID: 1nRCdOPmMzdq8IX7MRSZS
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › POST /api/content - Create Content › should require authentication for content creation" classname="23-content-api-crud.spec.ts" time="0.009">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › POST /api/content - Create Content › should validate required fields" classname="23-content-api-crud.spec.ts" time="0.009">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+Validation error: title is required
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › POST /api/content - Create Content › should auto-generate slug if not provided" classname="23-content-api-crud.spec.ts" time="0.027">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+Auto-generated slug: auto-slug-test-1793288683609
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › POST /api/content - Create Content › should prevent duplicate slugs within same collection" classname="23-content-api-crud.spec.ts" time="0.022">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+Duplicate slug error: A content item with this slug already exists in this collection
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › PUT /api/content/:id - Update Content › should update existing content" classname="23-content-api-crud.spec.ts" time="0.054">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+Update response status: 200
+✓ Content updated successfully
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › PUT /api/content/:id - Update Content › should return 404 for non-existent content" classname="23-content-api-crud.spec.ts" time="0.021">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › PUT /api/content/:id - Update Content › should require authentication for updates" classname="23-content-api-crud.spec.ts" time="0.02">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › PUT /api/content/:id - Update Content › should preserve unchanged fields" classname="23-content-api-crud.spec.ts" time="0.057">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+✓ Unchanged fields preserved during partial update
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › DELETE /api/content/:id - Delete Content › should delete existing content" classname="23-content-api-crud.spec.ts" time="0.019">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+Delete response status: 200
+✓ Content deleted successfully
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › DELETE /api/content/:id - Delete Content › should return 404 when deleting non-existent content" classname="23-content-api-crud.spec.ts" time="0.019">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › DELETE /api/content/:id - Delete Content › should require authentication for deletion" classname="23-content-api-crud.spec.ts" time="0.024">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+]]>
+</system-out>
+</testcase>
+<testcase name="Content API CRUD Operations @smoke @content @api › Content API Integration › should handle complete CRUD lifecycle" classname="23-content-api-crud.spec.ts" time="0.051">
+<system-out>
+<![CDATA[Using collection ID: blog_post (blog_post)
+✓ Created content: k2wnE-FdCtU1N9rkiWaME
+✓ Read content successfully
+✓ Updated content successfully
+✓ Deleted content successfully
+✓ Complete CRUD lifecycle successful
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="24-media-thumbnail-loading.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="3.733" errors="0">
+<testcase name="Media Thumbnail Loading @media › uploaded image should display thumbnail without broken image" classname="24-media-thumbnail-loading.spec.ts" time="2.875">
+<system-out>
+<![CDATA[Image src: /files/uploads/4919217a-35da-41f4-a4e2-8e8337e5a92a.png
+Image naturalWidth: [33m1[39m
+]]>
+</system-out>
+</testcase>
+<testcase name="Media Thumbnail Loading @media › should display all uploaded images without broken thumbnails" classname="24-media-thumbnail-loading.spec.ts" time="0.858">
+<system-out>
+<![CDATA[Image ngFv9vrMtO4KzNe47-2Jk (/files/uploads/b027768398aa45f4be053.png) naturalWidth: [33m1[39m
+Image XSVRi5LioCSEbZPeBZkLq (/files/uploads/adbc1f44f14145169f322.png) naturalWidth: [33m1[39m
+Image DoOENnidLzLHIiE8XnomR (/files/uploads/f9ede887f7f1425fb8ad6.png) naturalWidth: [33m1[39m
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="25-media-cleanup-unused.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="16.355" errors="0">
+<testcase name="Media Cleanup Unused Files @media › should have cleanup unused button in sidebar" classname="25-media-cleanup-unused.spec.ts" time="0.667">
+</testcase>
+<testcase name="Media Cleanup Unused Files @media › should show confirmation dialog when clicking cleanup" classname="25-media-cleanup-unused.spec.ts" time="0.767">
+</testcase>
+<testcase name="Media Cleanup Unused Files @media › should cleanup unused media files" classname="25-media-cleanup-unused.spec.ts" time="5.417">
+</testcase>
+<testcase name="Media Cleanup Unused Files @media › should show message when no unused files exist" classname="25-media-cleanup-unused.spec.ts" time="3.583">
+</testcase>
+<testcase name="Media Cleanup Unused Files @media › should only delete unreferenced files" classname="25-media-cleanup-unused.spec.ts" time="5.311">
+</testcase>
+<testcase name="Media Cleanup Unused Files @media › should handle cleanup with admin role only" classname="25-media-cleanup-unused.spec.ts" time="0.61">
+</testcase>
+</testsuite>
+<testsuite name="26-content-duplicate.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="8" failures="0" skipped="0" time="13.443" errors="0">
+<testcase name="Content Duplicate Functionality @content › should have duplicate button on content edit page" classname="26-content-duplicate.spec.ts" time="1.27">
+</testcase>
+<testcase name="Content Duplicate Functionality @content › should show confirmation dialog when clicking duplicate" classname="26-content-duplicate.spec.ts" time="1.581">
+</testcase>
+<testcase name="Content Duplicate Functionality @content › should duplicate content successfully" classname="26-content-duplicate.spec.ts" time="1.667">
+</testcase>
+<testcase name="Content Duplicate Functionality @content › should create independent copy of content" classname="26-content-duplicate.spec.ts" time="2.372">
+</testcase>
+<testcase name="Content Duplicate Functionality @content › should carry the record data over to the duplicate" classname="26-content-duplicate.spec.ts" time="1.947">
+</testcase>
+<testcase name="Content Duplicate Functionality @content › should preserve content status as draft on duplicate" classname="26-content-duplicate.spec.ts" time="1.773">
+</testcase>
+<testcase name="Content Duplicate Functionality @content › should handle duplicate button visibility" classname="26-content-duplicate.spec.ts" time="1.279">
+</testcase>
+<testcase name="Content Duplicate Functionality @content › should navigate to duplicated content after duplication" classname="26-content-duplicate.spec.ts" time="1.554">
+</testcase>
+</testsuite>
+<testsuite name="27-profile-picture-upload.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="9.748" errors="0">
+<testcase name="Profile Picture Upload @media @auth › should update profile picture and display it immediately" classname="27-profile-picture-upload.spec.ts" time="3.068">
+</testcase>
+<testcase name="Profile Picture Upload @media @auth › should validate file type on upload" classname="27-profile-picture-upload.spec.ts" time="3.168">
+</testcase>
+<testcase name="Profile Picture Upload @media @auth › should handle large file size validation" classname="27-profile-picture-upload.spec.ts" time="3.512">
+</testcase>
+</testsuite>
+<testsuite name="27-settings-general.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="8" failures="0" skipped="0" time="20.751" errors="0">
+<testcase name="Settings - General Tab @auth › should display general settings page" classname="27-settings-general.spec.ts" time="1.26">
+</testcase>
+<testcase name="Settings - General Tab @auth › should load default settings values" classname="27-settings-general.spec.ts" time="1.281">
+</testcase>
+<testcase name="Settings - General Tab @auth › should save general settings successfully" classname="27-settings-general.spec.ts" time="3.597">
+</testcase>
+<testcase name="Settings - General Tab @auth › should toggle maintenance mode" classname="27-settings-general.spec.ts" time="4.967">
+</testcase>
+<testcase name="Settings - General Tab @auth › should validate required fields" classname="27-settings-general.spec.ts" time="1.298">
+</testcase>
+<testcase name="Settings - General Tab @auth › should update admin email" classname="27-settings-general.spec.ts" time="3.991">
+</testcase>
+<testcase name="Settings - General Tab @auth › should switch between settings tabs" classname="27-settings-general.spec.ts" time="2.634">
+</testcase>
+<testcase name="Settings - General Tab @auth › should show save button loading state" classname="27-settings-general.spec.ts" time="1.723">
+</testcase>
+</testsuite>
+<testsuite name="28-plugin-filters-search.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="11" failures="0" skipped="0" time="22.066" errors="0">
+<testcase name="Plugin Filters and Search @plugins @lock-plugin-hello-world › should have filter controls" classname="28-plugin-filters-search.spec.ts" time="1.111">
+</testcase>
+<testcase name="Plugin Filters and Search @plugins @lock-plugin-hello-world › should filter plugins by category" classname="28-plugin-filters-search.spec.ts" time="2.69">
+</testcase>
+<testcase name="Plugin Filters and Search @plugins @lock-plugin-hello-world › should filter plugins by status" classname="28-plugin-filters-search.spec.ts" time="2.942">
+</testcase>
+<testcase name="Plugin Filters and Search @plugins @lock-plugin-hello-world › should search plugins by name" classname="28-plugin-filters-search.spec.ts" time="1.77">
+</testcase>
+<testcase name="Plugin Filters and Search @plugins @lock-plugin-hello-world › should search plugins by description" classname="28-plugin-filters-search.spec.ts" time="1.793">
+</testcase>
+<testcase name="Plugin Filters and Search @plugins @lock-plugin-hello-world › should combine category and status filters" classname="28-plugin-filters-search.spec.ts" time="2.389">
+</testcase>
+<testcase name="Plugin Filters and Search @plugins @lock-plugin-hello-world › should combine all three filters" classname="28-plugin-filters-search.spec.ts" time="2.149">
+</testcase>
+<testcase name="Plugin Filters and Search @plugins @lock-plugin-hello-world › should show no results message when no plugins match" classname="28-plugin-filters-search.spec.ts" time="1.657">
+</testcase>
+<testcase name="Plugin Filters and Search @plugins @lock-plugin-hello-world › should maintain filter state when toggling plugin status" classname="28-plugin-filters-search.spec.ts" time="4.222">
+</testcase>
+<testcase name="Plugin Filters and Search @plugins @lock-plugin-hello-world › should have correct category options" classname="28-plugin-filters-search.spec.ts" time="0.673">
+</testcase>
+<testcase name="Plugin Filters and Search @plugins @lock-plugin-hello-world › should have correct status options" classname="28-plugin-filters-search.spec.ts" time="0.67">
+</testcase>
+</testsuite>
+<testsuite name="29-email-plugin-settings.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="4.704" errors="0">
+<testcase name="Email Plugin Settings @plugins › should navigate to email plugin settings from plugins page" classname="29-email-plugin-settings.spec.ts" time="0.877">
+</testcase>
+<testcase name="Email Plugin Settings @plugins › should display email settings form with all fields" classname="29-email-plugin-settings.spec.ts" time="0.848">
+</testcase>
+<testcase name="Email Plugin Settings @plugins › should save email settings successfully" classname="29-email-plugin-settings.spec.ts" time="0.796">
+</testcase>
+<testcase name="Email Plugin Settings @plugins › should validate required fields" classname="29-email-plugin-settings.spec.ts" time="0.695">
+</testcase>
+<testcase name="Email Plugin Settings @plugins › should display test email section" classname="29-email-plugin-settings.spec.ts" time="0.74">
+</testcase>
+<testcase name="Email Plugin Settings @plugins › should not show &quot;No Settings Available&quot; message" classname="29-email-plugin-settings.spec.ts" time="0.748">
+</testcase>
+</testsuite>
+<testsuite name="30-richtext-tinymce.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="7.333" errors="0">
+<testcase name="Rich Text Editor (TinyMCE) @content › should load TinyMCE for blog post content field" classname="30-richtext-tinymce.spec.ts" time="1.204">
+</testcase>
+<testcase name="Rich Text Editor (TinyMCE) @content › should load TinyMCE for page content field" classname="30-richtext-tinymce.spec.ts" time="1.268">
+</testcase>
+<testcase name="Rich Text Editor (TinyMCE) @content › should be able to type content in TinyMCE editor" classname="30-richtext-tinymce.spec.ts" time="1.597">
+</testcase>
+<testcase name="Rich Text Editor (TinyMCE) @content › should have TinyMCE toolbar buttons functional" classname="30-richtext-tinymce.spec.ts" time="1.308">
+</testcase>
+<testcase name="Rich Text Editor (TinyMCE) @content › should save content from TinyMCE editor" classname="30-richtext-tinymce.spec.ts" time="1.956">
+</testcase>
+</testsuite>
+<testsuite name="31-richtext-quill.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="7.402" errors="0">
+<testcase name="Rich Text Editor (Quill) @content › should load Quill for blog post content field" classname="31-richtext-quill.spec.ts" time="1.157">
+</testcase>
+<testcase name="Rich Text Editor (Quill) @content › should be able to type content in Quill editor" classname="31-richtext-quill.spec.ts" time="1.438">
+</testcase>
+<testcase name="Rich Text Editor (Quill) @content › should have Quill toolbar buttons functional" classname="31-richtext-quill.spec.ts" time="1.065">
+</testcase>
+<testcase name="Rich Text Editor (Quill) @content › should save content from Quill editor" classname="31-richtext-quill.spec.ts" time="2.27">
+</testcase>
+<testcase name="Rich Text Editor (Quill) @content › should apply bold formatting in Quill editor" classname="31-richtext-quill.spec.ts" time="1.472">
+</testcase>
+</testsuite>
+<testsuite name="32-mdxeditor-new-content.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="8.103" errors="0">
+<testcase name="MDXEditor on New Content Form @content › should load MDXEditor on new pages content form" classname="32-mdxeditor-new-content.spec.ts" time="5.116">
+<system-out>
+<![CDATA[Scripts loaded: [
+  [32m'https://cdn.tailwindcss.com'[39m,
+  [32m'https://unpkg.com/htmx.org@2.0.3'[39m,
+  [32m'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js'[39m,
+  [32m'https://cdn.jsdelivr.net/npm/@tailwindplus/elements@1'[39m
+]
+Has EasyMDE script: [33mfalse[39m
+Richtext fields found: [33m0[39m
+EasyMDE containers found: [33m0[39m
+mdxeditorEnabled in page: [33mfalse[39m
+mdxeditorSettings in page: [33mfalse[39m
+Console messages: []
+EasyMDE script not found - checking why
+MDX Editor plugin visible: [33mfalse[39m
+]]>
+</system-out>
+</testcase>
+<testcase name="MDXEditor on New Content Form @content › should check pages collection schema for richtext field" classname="32-mdxeditor-new-content.spec.ts" time="1.033">
+</testcase>
+<testcase name="MDXEditor on New Content Form @content › shows a coherent install status for the markdown editor plugin" classname="32-mdxeditor-new-content.spec.ts" time="1.954">
+</testcase>
+</testsuite>
+<testsuite name="32-mdxeditor-richtext.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="4.436" errors="0">
+<testcase name="MDXEditor Rich Text Editor @content › should activate MDXEditor plugin" classname="32-mdxeditor-richtext.spec.ts" time="0.596">
+</testcase>
+<testcase name="MDXEditor Rich Text Editor @content › should load MDXEditor scripts when plugin is active" classname="32-mdxeditor-richtext.spec.ts" time="0.73">
+</testcase>
+<testcase name="MDXEditor Rich Text Editor @content › should initialize MDXEditor for richtext fields" classname="32-mdxeditor-richtext.spec.ts" time="0.772">
+</testcase>
+<testcase name="MDXEditor Rich Text Editor @content › should allow typing content in MDXEditor" classname="32-mdxeditor-richtext.spec.ts" time="1.072">
+</testcase>
+<testcase name="MDXEditor Rich Text Editor @content › should save content with MDXEditor value" classname="32-mdxeditor-richtext.spec.ts" time="1.266">
+</testcase>
+</testsuite>
+<testsuite name="33-field-type-editor-options.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="2.616" errors="0">
+<testcase name="Field Type Editor Options @content › should show all active editor options in field type dropdown" classname="33-field-type-editor-options.spec.ts" time="0.767">
+</testcase>
+<testcase name="Field Type Editor Options @content › should not show inactive editor options" classname="33-field-type-editor-options.spec.ts" time="0.842">
+</testcase>
+<testcase name="Field Type Editor Options @content › should be able to select each editor type" classname="33-field-type-editor-options.spec.ts" time="1.007">
+</testcase>
+</testsuite>
+<testsuite name="34-field-type-persistence.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.146" errors="0">
+<testcase name="Field Properties Persistence @content › should persist all field properties when editing a field" classname="34-field-type-persistence.spec.ts" time="0.819">
+</testcase>
+<testcase name="Field Properties Persistence @content › should show all field properties in PUT request data" classname="34-field-type-persistence.spec.ts" time="1.327">
+</testcase>
+</testsuite>
+<testsuite name="35-collection-field-type-badges.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.172" errors="0">
+<testcase name="Collection Field Type Badges @collections › should display color-coded field type badges" classname="35-collection-field-type-badges.spec.ts" time="1.136">
+</testcase>
+<testcase name="Collection Field Type Badges @collections › should not display escaped HTML in badges" classname="35-collection-field-type-badges.spec.ts" time="1.036">
+</testcase>
+</testsuite>
+<testsuite name="36-collection-field-easymdx-edit.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.02" errors="0">
+<testcase name="Collection Field EasyMDX Edit @collections @content › should show EasyMDX in field type badge on collection edit page" classname="36-collection-field-easymdx-edit.spec.ts" time="0.955">
+</testcase>
+<testcase name="Collection Field EasyMDX Edit @collections @content › should handle error gracefully when loading collection with invalid field data" classname="36-collection-field-easymdx-edit.spec.ts" time="1.065">
+</testcase>
+</testsuite>
+<testsuite name="36-easymde-plugin-visible.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="7.689" errors="0">
+<testcase name="EasyMDE Plugin Visibility @content › should show EasyMDE Editor plugin in plugins list" classname="36-easymde-plugin-visible.spec.ts" time="1.569">
+<system-out>
+<![CDATA[Total plugin cards found: 33
+Plugin found: Authentication System
+Plugin found: Email
+Plugin found: Media Manager
+Plugin found: Example
+Plugin found: Hello World
+Plugin found: Lexical Rich Text Editor
+Plugin found: Multi-Tenant
+Plugin found: Two-Factor Authentication
+Plugin found: AI Search
+Plugin found: API Keys
+Plugin found: Analytics & Insights
+Plugin found: Cache System
+Plugin found: Database Tools
+Plugin found: Demo Login
+Plugin found: EasyMDE Markdown Editor
+Plugin found: Forms
+Plugin found: Global Variables
+Plugin found: Magic Link Authentication
+Plugin found: MCP Server
+Plugin found: Menu Manager
+Plugin found: OAuth Providers
+Plugin found: OTP Login
+Plugin found: Quill Rich Text Editor
+Plugin found: Redirect Management
+Plugin found: Security Audit
+Plugin found: Shortcodes
+Plugin found: Stripe Subscriptions
+Plugin found: TinyMCE Rich Text Editor
+Plugin found: Cloudflare Turnstile
+Plugin found: User Profiles
+Plugin found: Versioning
+Plugin found: Email Reconciliation
+Plugin found: GraphQL API
+EasyMDE plugin cards found: 1
+]]>
+</system-out>
+</testcase>
+<testcase name="EasyMDE Plugin Visibility @content › reports a real install status read from the database" classname="36-easymde-plugin-visible.spec.ts" time="6.12">
+</testcase>
+</testsuite>
+<testsuite name="37-disable-registration.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="12.47" errors="0">
+<testcase name="Disable User Registration @auth @lock-auth-registration › Registration when enabled (default) › should allow API registration when registration is enabled" classname="37-disable-registration.spec.ts" time="0.018">
+</testcase>
+<testcase name="Disable User Registration @auth @lock-auth-registration › Registration when enabled (default) › should show registration page when registration is enabled" classname="37-disable-registration.spec.ts" time="0.608">
+</testcase>
+<testcase name="Disable User Registration @auth @lock-auth-registration › Registration when disabled via API › should block API registration when disabled" classname="37-disable-registration.spec.ts" time="3.897">
+</testcase>
+<testcase name="Disable User Registration @auth @lock-auth-registration › Registration when disabled via API › should redirect registration page to login when disabled" classname="37-disable-registration.spec.ts" time="3.96">
+</testcase>
+<testcase name="Disable User Registration @auth @lock-auth-registration › First user bootstrap scenario › should allow first user registration even when disabled (bootstrap)" classname="37-disable-registration.spec.ts" time="0.042">
+</testcase>
+<testcase name="Disable User Registration @auth @lock-auth-registration › Error message validation › API returns appropriate error message when registration is disabled" classname="37-disable-registration.spec.ts" time="3.945">
+</testcase>
+</testsuite>
+<testsuite name="38-turnstile-plugin.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="4.073" errors="0">
+<testcase name="Turnstile Plugin @plugins › should display Turnstile plugin in plugins list" classname="38-turnstile-plugin.spec.ts" time="1.346">
+<system-out>
+<![CDATA[Install response: [33m200[39m
+Activate response: [33m200[39m
+]]>
+</system-out>
+</testcase>
+<testcase name="Turnstile Plugin @plugins › should show Turnstile settings page" classname="38-turnstile-plugin.spec.ts" time="1.278">
+</testcase>
+<testcase name="Turnstile Plugin @plugins › should save Turnstile settings" classname="38-turnstile-plugin.spec.ts" time="1.449">
+</testcase>
+</testsuite>
+<testsuite name="39-ai-search-plugin.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="10" failures="0" skipped="0" time="9.009" errors="0">
+<testcase name="AI Search Plugin @plugins › lists the plugin on the plugins page" classname="39-ai-search-plugin.spec.ts" time="0.734">
+</testcase>
+<testcase name="AI Search Plugin @plugins › renders every control the save handler reads" classname="39-ai-search-plugin.spec.ts" time="0.701">
+</testcase>
+<testcase name="AI Search Plugin @plugins › saves the selected collections and keeps them after a reload" classname="39-ai-search-plugin.spec.ts" time="1.134">
+</testcase>
+<testcase name="AI Search Plugin @plugins › refuses a reindex request that names no collection" classname="39-ai-search-plugin.spec.ts" time="0.774">
+</testcase>
+<testcase name="AI Search Plugin @plugins › records index status for a collection after a reindex" classname="39-ai-search-plugin.spec.ts" time="0.824">
+</testcase>
+<testcase name="AI Search Plugin @plugins › keyword search finds published content" classname="39-ai-search-plugin.spec.ts" time="0.76">
+</testcase>
+<testcase name="AI Search Plugin @plugins › keyword search honors the collection filter" classname="39-ai-search-plugin.spec.ts" time="0.805">
+</testcase>
+<testcase name="AI Search Plugin @plugins › ai mode falls back to keyword results when no vector index is bound" classname="39-ai-search-plugin.spec.ts" time="0.527">
+</testcase>
+<testcase name="AI Search Plugin @plugins › search suggestions come from logged queries" classname="39-ai-search-plugin.spec.ts" time="0.639">
+</testcase>
+<testcase name="AI Search Plugin @plugins › public search never returns unpublished content" classname="39-ai-search-plugin.spec.ts" time="2.111">
+</testcase>
+</testsuite>
+<testsuite name="39-slug-generation.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="10" failures="0" skipped="0" time="63.124" errors="1">
+<testcase name="Slug Generation @content › should auto-generate slug from title when creating new content" classname="39-slug-generation.spec.ts" time="1.546">
+</testcase>
+<testcase name="Slug Generation @content › should auto-generate slug for blog_post collection" classname="39-slug-generation.spec.ts" time="1.433">
+</testcase>
+<testcase name="Slug Generation @content › should handle special characters in slug generation" classname="39-slug-generation.spec.ts" time="2.121">
+</testcase>
+<testcase name="Slug Generation @content › should stop auto-generating after manual edit" classname="39-slug-generation.spec.ts" time="5.213">
+</testcase>
+<testcase name="Slug Generation @content › should regenerate slug when button clicked" classname="39-slug-generation.spec.ts" time="5.074">
+</testcase>
+<testcase name="Slug Generation @content › should detect duplicate slugs within same collection" classname="39-slug-generation.spec.ts" time="30.572">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../../test-results/39-slug-generation-Slug-Ge-c0614-lugs-within-same-collection-chromium/test-failed-1.png]]
+
+[[ATTACHMENT|../../test-results/39-slug-generation-Slug-Ge-c0614-lugs-within-same-collection-chromium/error-context.md]]
+
+[[ATTACHMENT|../../test-results/39-slug-generation-Slug-Ge-c0614-lugs-within-same-collection-chromium/trace.zip]]
+]]>
+</system-out>
+<error message="locator.fill: Timeout 30000ms exceeded." type="TimeoutError">
+<![CDATA[  [chromium] › 39-slug-generation.spec.ts:148:3 › Slug Generation @content › should detect duplicate slugs within same collection 
+
+    TimeoutError: locator.fill: Timeout 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('textbox', { name: 'Title', exact: true })
+
+
+      159 |     try {
+      160 |       await page.goto('/admin/content/new?collection=blog_post')
+    > 161 |       await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Different Title')
+          |                                                                       ^
+      162 |       const slugField = page.locator('input[name="slug"]')
+      163 |       await slugField.fill(slug)
+      164 |       await expect(page.locator('#field-slug-status')).toContainText('already in use', {
+        at /Users/lane/Dev/refs/sonicjs/tests/e2e/39-slug-generation.spec.ts:161:71
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../test-results/39-slug-generation-Slug-Ge-c0614-lugs-within-same-collection-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../test-results/39-slug-generation-Slug-Ge-c0614-lugs-within-same-collection-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../test-results/39-slug-generation-Slug-Ge-c0614-lugs-within-same-collection-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../test-results/39-slug-generation-Slug-Ge-c0614-lugs-within-same-collection-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+]]>
+</error>
+</testcase>
+<testcase name="Slug Generation @content › should not auto-change slug when editing existing content" classname="39-slug-generation.spec.ts" time="4.764">
+</testcase>
+<testcase name="Slug Generation @content › should allow manual regeneration in edit mode" classname="39-slug-generation.spec.ts" time="4.673">
+</testcase>
+<testcase name="Slug Generation @content › should show checking status during duplicate validation" classname="39-slug-generation.spec.ts" time="2.461">
+</testcase>
+<testcase name="Slug Generation @content › should prevent form submission with duplicate slug" classname="39-slug-generation.spec.ts" time="5.267">
+</testcase>
+</testsuite>
+<testsuite name="41-reference-fields.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="7" failures="0" skipped="0" time="9.72" errors="0">
+<testcase name="Reference Fields @content › should show reference field type in collection field dropdown" classname="41-reference-fields.spec.ts" time="2.207">
+</testcase>
+<testcase name="Reference Fields @content › should show field options container when reference type is selected" classname="41-reference-fields.spec.ts" time="1.445">
+</testcase>
+<testcase name="Reference Fields @content › should display reference picker button in content form" classname="41-reference-fields.spec.ts" time="0.849">
+</testcase>
+<testcase name="Reference Fields @content › should open reference selector modal when clicking Select Reference" classname="41-reference-fields.spec.ts" time="0.843">
+</testcase>
+<testcase name="Reference Fields @content › should search and display content in reference selector" classname="41-reference-fields.spec.ts" time="1.942">
+</testcase>
+<testcase name="Reference Fields @content › should select a reference and display it" classname="41-reference-fields.spec.ts" time="1.134">
+</testcase>
+<testcase name="Reference Fields @content › should clear a selected reference" classname="41-reference-fields.spec.ts" time="1.3">
+</testcase>
+</testsuite>
+<testsuite name="42-content-deletion-bug.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="7.919" errors="0">
+<testcase name="Content Deletion UI Bug (Issue #522) @content › should delete content without JavaScript errors" classname="42-content-deletion-bug.spec.ts" time="2.29">
+</testcase>
+<testcase name="Content Deletion UI Bug (Issue #522) @content › should handle bulk delete without JavaScript errors" classname="42-content-deletion-bug.spec.ts" time="2.796">
+</testcase>
+<testcase name="Content Deletion UI Bug (Issue #522) @content › should maintain table functionality after delete" classname="42-content-deletion-bug.spec.ts" time="2.833">
+</testcase>
+</testsuite>
+<testsuite name="42-dynamic-field-tdz.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.568" errors="0">
+<testcase name="Dynamic Field TDZ Bug Fix @content › should render content form with object fields without TDZ crash" classname="42-dynamic-field-tdz.spec.ts" time="0.939">
+</testcase>
+<testcase name="Dynamic Field TDZ Bug Fix @content › should allow adding blocks to array field without errors" classname="42-dynamic-field-tdz.spec.ts" time="1.629">
+</testcase>
+</testsuite>
+<testsuite name="43-cache-plugin.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="28" failures="0" skipped="0" time="23.556" errors="0">
+<testcase name="Cache Plugin Dashboard @plugins › should navigate to cache dashboard from admin menu" classname="43-cache-plugin.spec.ts" time="0.976">
+</testcase>
+<testcase name="Cache Plugin Dashboard @plugins › should display cache dashboard with statistics" classname="43-cache-plugin.spec.ts" time="0.789">
+</testcase>
+<testcase name="Cache Plugin Dashboard @plugins › should display cache statistics cards" classname="43-cache-plugin.spec.ts" time="0.666">
+</testcase>
+<testcase name="Cache Plugin Dashboard @plugins › should have clear all caches button" classname="43-cache-plugin.spec.ts" time="0.672">
+</testcase>
+<testcase name="Cache Plugin Dashboard @plugins › should have refresh functionality" classname="43-cache-plugin.spec.ts" time="0.89">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should return 200 for GET /admin/cache" classname="43-cache-plugin.spec.ts" time="0.815">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should return cache stats from /admin/cache/stats" classname="43-cache-plugin.spec.ts" time="0.68">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should return stats for specific namespace" classname="43-cache-plugin.spec.ts" time="0.683">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should return 404 for unknown namespace stats" classname="43-cache-plugin.spec.ts" time="1.213">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should clear all caches via POST /admin/cache/clear" classname="43-cache-plugin.spec.ts" time="0.744">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should clear specific namespace cache" classname="43-cache-plugin.spec.ts" time="1.723">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should return 404 when clearing unknown namespace" classname="43-cache-plugin.spec.ts" time="0.633">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should invalidate cache entries matching pattern" classname="43-cache-plugin.spec.ts" time="0.692">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should return 400 when pattern is missing for invalidation" classname="43-cache-plugin.spec.ts" time="1.674">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should return cache health status" classname="43-cache-plugin.spec.ts" time="0.768">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should return cache browser data" classname="43-cache-plugin.spec.ts" time="0.767">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should support cache browser filtering" classname="43-cache-plugin.spec.ts" time="0.743">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should return cache analytics data" classname="43-cache-plugin.spec.ts" time="0.816">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should return cache trends data" classname="43-cache-plugin.spec.ts" time="0.626">
+</testcase>
+<testcase name="Cache API Endpoints @plugins @api › should return top keys data (placeholder)" classname="43-cache-plugin.spec.ts" time="0.751">
+</testcase>
+<testcase name="Cache Management Workflow @plugins › should complete full cache management workflow" classname="43-cache-plugin.spec.ts" time="0.781">
+</testcase>
+<testcase name="Cache Management Workflow @plugins › should handle namespace-specific operations" classname="43-cache-plugin.spec.ts" time="0.725">
+</testcase>
+<testcase name="Cache Management Workflow @plugins › should handle pattern-based invalidation" classname="43-cache-plugin.spec.ts" time="0.838">
+</testcase>
+<testcase name="Cache Dashboard Navigation @plugins › should have Cache link in admin navigation" classname="43-cache-plugin.spec.ts" time="0.869">
+</testcase>
+<testcase name="Cache Dashboard Navigation @plugins › should navigate to cache dashboard when clicking Cache link" classname="43-cache-plugin.spec.ts" time="0.947">
+</testcase>
+<testcase name="Cache API Error Handling @plugins @api › should handle invalid namespace gracefully" classname="43-cache-plugin.spec.ts" time="0.658">
+</testcase>
+<testcase name="Cache API Error Handling @plugins @api › should handle missing pattern in invalidation request" classname="43-cache-plugin.spec.ts" time="0.658">
+</testcase>
+<testcase name="Cache API Error Handling @plugins @api › should handle invalid namespace in targeted invalidation" classname="43-cache-plugin.spec.ts" time="0.759">
+</testcase>
+</testsuite>
+<testsuite name="47-settings-wip-cleanup.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="0" time="5.654" errors="0">
+<testcase name="Settings - WIP cleanup @auth › removed tabs no longer appear in nav" classname="47-settings-wip-cleanup.spec.ts" time="1.515">
+</testcase>
+<testcase name="Settings - WIP cleanup @auth › removed routes return 404" classname="47-settings-wip-cleanup.spec.ts" time="1.454">
+</testcase>
+<testcase name="Settings - WIP cleanup @auth › security tab shows only Session/JWT fields, no WIP banner" classname="47-settings-wip-cleanup.spec.ts" time="1.646">
+</testcase>
+<testcase name="Settings - WIP cleanup @auth › remaining settings tabs render" classname="47-settings-wip-cleanup.spec.ts" time="1.039">
+</testcase>
+</testsuite>
+<testsuite name="50-forms.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="0" time="7.739" errors="0">
+<testcase name="Forms Management @content › should display forms list page" classname="50-forms.spec.ts" time="0.665">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Forms Management @content › should create a new form" classname="50-forms.spec.ts" time="1.934">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Forms Management @content › should validate form name format" classname="50-forms.spec.ts" time="2.648">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Form Deletion @forms › should delete a form" classname="50-forms.spec.ts" time="2.492">
+</testcase>
+</testsuite>
+<testsuite name="51-turnstile-integration.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="4.711" errors="0">
+<testcase name="Turnstile Forms List Buttons @forms › should show Examples and Quick Reference buttons on forms list" classname="51-turnstile-integration.spec.ts" time="1.171">
+</testcase>
+<testcase name="Turnstile Forms List Buttons @forms › should navigate to Examples page from forms list" classname="51-turnstile-integration.spec.ts" time="1.905">
+</testcase>
+<testcase name="Turnstile Forms List Buttons @forms › should navigate to Quick Reference page from forms list" classname="51-turnstile-integration.spec.ts" time="1.635">
+</testcase>
+</testsuite>
+<testsuite name="52-forms-smoke.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="7" failures="0" skipped="0" time="10.208" errors="0">
+<testcase name="Forms Smoke Test @forms › should access /admin/forms route" classname="52-forms-smoke.spec.ts" time="1.31">
+<system-out>
+<![CDATA[Page title: Forms - SonicJS AI Admin
+Body text (first 500 chars): 
+  
+    
+    
+      
+    
+      
+
+      
+      
+        
+    
+      
+    
+      
+      
+      
+      
+      
+      
+      
+      
+      
+    
+  
+      
+    
+      3.0.0
+    
+  
+    
+  
+        
+      
+
+      
+      
+
+      
+      
+        
+          
+          
+              
+                
+                
+                  
+                    
+        
+      
+                  
+                  Content
+                
+              
+            
+              
+                
+           
+H1 text: Forms
+]]>
+</system-out>
+</testcase>
+<testcase name="Forms Smoke Test @forms › should show Forms in sidebar menu" classname="52-forms-smoke.spec.ts" time="1.016">
+<system-out>
+<![CDATA[Forms link count in nav: [33m2[39m
+Forms link text: Forms
+]]>
+</system-out>
+</testcase>
+<testcase name="Forms Smoke Test @forms › should navigate to forms via sidebar" classname="52-forms-smoke.spec.ts" time="2.639">
+<system-out>
+<![CDATA[Create form button visible: [33mtrue[39m
+]]>
+</system-out>
+</testcase>
+<testcase name="Forms Smoke Test @forms › should load forms list page correctly" classname="52-forms-smoke.spec.ts" time="1.323">
+<system-out>
+<![CDATA[Forms list page elements: { heading: [32m'Forms'[39m, createLink: [33m1[39m, docsLink: [33m1[39m, examplesLink: [33m1[39m }
+]]>
+</system-out>
+</testcase>
+<testcase name="Forms Smoke Test @forms › should access forms create page" classname="52-forms-smoke.spec.ts" time="1.127">
+<system-out>
+<![CDATA[Create form fields: { hasNameField: [33mtrue[39m, hasDisplayNameField: [33mtrue[39m }
+]]>
+</system-out>
+</testcase>
+<testcase name="Forms Smoke Test @forms › should access forms docs page" classname="52-forms-smoke.spec.ts" time="1.228">
+<system-out>
+<![CDATA[Docs page has form content: [33mtrue[39m
+]]>
+</system-out>
+</testcase>
+<testcase name="Forms Smoke Test @forms › should access forms examples page" classname="52-forms-smoke.spec.ts" time="1.565">
+<system-out>
+<![CDATA[Examples page has content: [33mtrue[39m
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="53-block-media-persist.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="1.629" errors="0">
+<testcase name="Block Media Persistence @content @media › should persist media selection in blocks" classname="53-block-media-persist.spec.ts" time="1.629">
+</testcase>
+</testsuite>
+<testsuite name="53-forms-as-content.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="5.386" errors="0">
+<testcase name="Forms as Content @content › should NOT show form-sourced collections on collections page" classname="53-forms-as-content.spec.ts" time="1.368">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+<system-out>
+<![CDATA[Form fac_test_1793288834226 schema update: 200
+]]>
+</system-out>
+</testcase>
+<testcase name="Forms as Content @content › should NOT show form-sourced collections in new-content picker" classname="53-forms-as-content.spec.ts" time="1.109">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Forms as Content @content › should NOT show form submissions in the regular content list" classname="53-forms-as-content.spec.ts" time="1.297">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Forms as Content @content › should NOT show form collections in collections API" classname="53-forms-as-content.spec.ts" time="0.902">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Forms as Content @content › should NOT show form collections in public API" classname="53-forms-as-content.spec.ts" time="0.011">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Forms as Content @content › should preserve existing collection and content counts" classname="53-forms-as-content.spec.ts" time="0.699">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+<system-out>
+<![CDATA[Dashboard stats: collections=7, contentItems=42
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="53-object-layout.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="1.999" errors="0">
+<testcase name="Object Layout @content › should render flat objects expanded and nested objects collapsed by default" classname="53-object-layout.spec.ts" time="1.999">
+</testcase>
+</testsuite>
+<testsuite name="54-hero-cta-style-persistence.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="3.509" errors="0">
+<testcase name="Hero CTA Style Persistence @content › should keep CTA styles after unrelated second save" classname="54-hero-cta-style-persistence.spec.ts" time="3.509">
+</testcase>
+</testsuite>
+<testsuite name="55-collapsible-state-persistence.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="7.605" errors="0">
+<testcase name="Collapsible State Persistence @content › should persist object/repeater/block collapsed state per document in session" classname="55-collapsible-state-persistence.spec.ts" time="7.605">
+</testcase>
+</testsuite>
+<testsuite name="56-collapsible-validation-visibility.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="4.697" errors="0">
+<testcase name="Collapsible Validation Visibility @content › should surface a validation error without navigating away or losing collapse state" classname="56-collapsible-validation-visibility.spec.ts" time="2.246">
+</testcase>
+<testcase name="Collapsible Validation Visibility @content › should keep a collapsed nested repeater item editable after a rejected save" classname="56-collapsible-validation-visibility.spec.ts" time="2.451">
+</testcase>
+</testsuite>
+<testsuite name="57-nested-array-serialization-scope.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="1" skipped="0" time="27.709" errors="0">
+<testcase name="Nested Array Serialization Scope @content › should serialize only top-level repeater items and keep children nested" classname="57-nested-array-serialization-scope.spec.ts" time="4.617">
+</testcase>
+<testcase name="Nested Array Serialization Scope @content › should persist nested child deletion after save and reload" classname="57-nested-array-serialization-scope.spec.ts" time="17.577">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../../test-results/57-nested-array-serializat-73d13-etion-after-save-and-reload-chromium/test-failed-1.png]]
+
+[[ATTACHMENT|../../test-results/57-nested-array-serializat-73d13-etion-after-save-and-reload-chromium/error-context.md]]
+
+[[ATTACHMENT|../../test-results/57-nested-array-serializat-73d13-etion-after-save-and-reload-chromium/trace.zip]]
+]]>
+</system-out>
+<failure message="expect(locator).toHaveJSProperty(expected) failed" type="expect.toHaveJSProperty">
+<![CDATA[  [chromium] › 57-nested-array-serialization-scope.spec.ts:253:3 › Nested Array Serialization Scope @content › should persist nested child deletion after save and reload 
+
+    Error: expect(locator).toHaveJSProperty(expected) failed
+
+    Locator:  locator('#delete-repeater-item-confirm')
+    Expected: false
+    Received: true
+    Timeout:  1000ms
+
+    Call log:
+      - Expect "toHaveJSProperty" locator('#delete-repeater-item-confirm') with timeout 1000ms
+      - waiting for locator('#delete-repeater-item-confirm')
+        11 × locator resolved to <dialog open="" id="delete-repeater-item-confirm" aria-labelledby="delete-repeater-item-confirm-title" class="fixed inset-0 m-0 size-auto max-h-none max-w-none overflow-y-auto bg-transparent p-0 backdrop:bg-transparent">…</dialog>
+           - unexpected value "true"
+
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      76 |     await dialog.locator('.confirm-button').click()
+      77 |     await expect(dialog).toHaveJSProperty('open', false, { timeout: 1000 })
+    > 78 |   }).toPass({ timeout: 15000 })
+         |      ^
+      79 | }
+      80 |
+      81 | /**
+        at confirmRepeaterDelete (/Users/lane/Dev/refs/sonicjs/tests/e2e/57-nested-array-serialization-scope.spec.ts:78:6)
+        at /Users/lane/Dev/refs/sonicjs/tests/e2e/57-nested-array-serialization-scope.spec.ts:295:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../test-results/57-nested-array-serializat-73d13-etion-after-save-and-reload-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../test-results/57-nested-array-serializat-73d13-etion-after-save-and-reload-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../test-results/57-nested-array-serializat-73d13-etion-after-save-and-reload-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../test-results/57-nested-array-serializat-73d13-etion-after-save-and-reload-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+]]>
+</failure>
+</testcase>
+<testcase name="Nested Array Serialization Scope @content › should allow adding nested child on newly added root item after save and return" classname="57-nested-array-serialization-scope.spec.ts" time="5.515">
+</testcase>
+</testsuite>
+<testsuite name="58-nested-object-serialization.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="4.611" errors="0">
+<testcase name="Nested Object Serialization @content › should persist sibling flat child objects inside a nested parent object" classname="58-nested-object-serialization.spec.ts" time="4.611">
+</testcase>
+</testsuite>
+<testsuite name="59-array-media-picker-targeting.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="4.287" errors="0">
+<testcase name="Array Media Picker Targeting @content @media › should target the correct structured-array row when selecting media" classname="59-array-media-picker-targeting.spec.ts" time="4.287">
+</testcase>
+</testsuite>
+<testsuite name="62-public-content-api-status-visibility.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="0.032" errors="0">
+<testcase name="Public Content API Status Visibility @api @content › should force published-only results for anonymous /api/content requests" classname="62-public-content-api-status-visibility.spec.ts" time="0.013">
+</testcase>
+<testcase name="Public Content API Status Visibility @api @content › should force published-only results for anonymous collection-specific requests" classname="62-public-content-api-status-visibility.spec.ts" time="0.01">
+</testcase>
+<testcase name="Public Content API Status Visibility @api @content › should allow authenticated callers to request draft content explicitly" classname="62-public-content-api-status-visibility.spec.ts" time="0.009">
+</testcase>
+</testsuite>
+<testsuite name="63-document-blog-crud.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="2.637" errors="0">
+<testcase name="Blog posts on the document model (Option B) @smoke @content › admin Blog Posts list renders (doc-backed list branch)" classname="63-document-blog-crud.spec.ts" time="0.975">
+</testcase>
+<testcase name="Blog posts on the document model (Option B) @smoke @content › create via admin document API → readable on public API once published; draft hidden" classname="63-document-blog-crud.spec.ts" time="0.759">
+</testcase>
+<testcase name="Blog posts on the document model (Option B) @smoke @content › Option B: creating a blog post through the content collection route stores a document" classname="63-document-blog-crud.spec.ts" time="0.903">
+</testcase>
+</testsuite>
+<testsuite name="65-default-blog-post-seed.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="0.03" errors="0">
+<testcase name="default content seed @content › exposes the code-defined blog_post collection without legacy defaults" classname="65-default-blog-post-seed.spec.ts" time="0.011">
+</testcase>
+<testcase name="default content seed @content › seeds one published welcome blog post" classname="65-default-blog-post-seed.spec.ts" time="0.019">
+</testcase>
+</testsuite>
+<testsuite name="66-auth-better-auth.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="11" failures="0" skipped="0" time="5.422" errors="0">
+<testcase name="Better Auth — sign in / sign out @smoke @auth › POST /auth/sign-in/email returns user + token with valid credentials" classname="66-auth-better-auth.spec.ts" time="0.081">
+</testcase>
+<testcase name="Better Auth — sign in / sign out @smoke @auth › POST /auth/sign-in/email rejects wrong password" classname="66-auth-better-auth.spec.ts" time="0.112">
+</testcase>
+<testcase name="Better Auth — sign in / sign out @smoke @auth › GET /auth/get-session returns user email after sign-in" classname="66-auth-better-auth.spec.ts" time="0.232">
+</testcase>
+<testcase name="Better Auth — sign in / sign out @smoke @auth › GET /auth/get-session returns null when not signed in" classname="66-auth-better-auth.spec.ts" time="0.009">
+</testcase>
+<testcase name="Better Auth — sign in / sign out @smoke @auth › POST /auth/sign-out invalidates session" classname="66-auth-better-auth.spec.ts" time="0.182">
+</testcase>
+<testcase name="Better Auth — sign in / sign out @smoke @auth › loginAsAdmin helper lands on /admin" classname="66-auth-better-auth.spec.ts" time="0.712">
+</testcase>
+<testcase name="Better Auth — sign in / sign out @smoke @auth › logout redirects to login page" classname="66-auth-better-auth.spec.ts" time="1.095">
+</testcase>
+<testcase name="Better Auth — protected routes @auth › unauthenticated GET /admin redirects to login" classname="66-auth-better-auth.spec.ts" time="0.452">
+</testcase>
+<testcase name="Better Auth — protected routes @auth › authenticated GET /admin succeeds" classname="66-auth-better-auth.spec.ts" time="2.451">
+</testcase>
+<testcase name="Better Auth — protected routes @auth › unauthenticated API returns 401 or 302" classname="66-auth-better-auth.spec.ts" time="0.009">
+</testcase>
+<testcase name="Better Auth — seed-admin creates credentials @auth › seed-admin creates user and login works" classname="66-auth-better-auth.spec.ts" time="0.087">
+</testcase>
+</testsuite>
+<testsuite name="67-rbac.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="21" failures="0" skipped="0" time="26.826" errors="0">
+<testcase name="RBAC — seeded roles and grants @smoke @auth › RBAC admin UI lists the seeded admin role (the only hardcoded role)" classname="67-rbac.spec.ts" time="1.192">
+</testcase>
+<testcase name="RBAC — seeded roles and grants @smoke @auth › RBAC admin UI is accessible to admin" classname="67-rbac.spec.ts" time="0.702">
+</testcase>
+<testcase name="RBAC — portal access enforcement @auth › admin has portal:access (can load gated admin route)" classname="67-rbac.spec.ts" time="0.913">
+</testcase>
+<testcase name="RBAC — portal access enforcement @auth › unauthenticated request to admin route is blocked" classname="67-rbac.spec.ts" time="0.598">
+</testcase>
+<testcase name="RBAC — role management API @auth › GET /admin/rbac returns 200 with role matrix HTML" classname="67-rbac.spec.ts" time="0.813">
+</testcase>
+<testcase name="RBAC — role management API @auth › POST /admin/rbac/roles creates a custom role" classname="67-rbac.spec.ts" time="0.707">
+</testcase>
+<testcase name="RBAC — role management API @auth › DELETE /admin/rbac/roles/:id removes a non-system role" classname="67-rbac.spec.ts" time="1.206">
+</testcase>
+<testcase name="RBAC — sub-tab navigation @auth › Matrix tab is active by default" classname="67-rbac.spec.ts" time="1.398">
+</testcase>
+<testcase name="RBAC — sub-tab navigation @auth › Roles &amp; Verbs tab shows roles and verbs panels" classname="67-rbac.spec.ts" time="1.716">
+</testcase>
+<testcase name="RBAC — sub-tab navigation @auth › Tools tab shows live permission check" classname="67-rbac.spec.ts" time="1.638">
+</testcase>
+<testcase name="RBAC — sub-tab navigation @auth › Tools tab: Can I? check returns JSON result" classname="67-rbac.spec.ts" time="1.938">
+</testcase>
+<testcase name="RBAC — sub-tab navigation @auth › Hash navigation opens correct tab" classname="67-rbac.spec.ts" time="1.222">
+</testcase>
+<testcase name="RBAC — sub-tab navigation @auth › Roles &amp; Verbs tab has single Save roles button (no per-row Save)" classname="67-rbac.spec.ts" time="1.61">
+</testcase>
+<testcase name="RBAC — sub-tab navigation @auth › Save roles redirects back to Roles &amp; Verbs tab" classname="67-rbac.spec.ts" time="1.857">
+</testcase>
+<testcase name="RBAC — sub-tab navigation @auth › Portal access checkbox persists after save" classname="67-rbac.spec.ts" time="3.156">
+</testcase>
+<testcase name="RBAC — admin sections accessible @auth › admin can access users section" classname="67-rbac.spec.ts" time="0.72">
+</testcase>
+<testcase name="RBAC — admin sections accessible @auth › admin can access plugins section" classname="67-rbac.spec.ts" time="1.338">
+</testcase>
+<testcase name="RBAC — admin sections accessible @auth › admin can access settings section" classname="67-rbac.spec.ts" time="0.776">
+</testcase>
+<testcase name="RBAC — admin sections accessible @auth › admin can access rbac section" classname="67-rbac.spec.ts" time="0.789">
+</testcase>
+<testcase name="RBAC — admin sections accessible @auth › admin can access content section" classname="67-rbac.spec.ts" time="1.01">
+</testcase>
+<testcase name="RBAC — admin sections accessible @auth › admin can access media section" classname="67-rbac.spec.ts" time="1.527">
+</testcase>
+</testsuite>
+<testsuite name="68-blog-post-validation-no-nesting.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="3.165" errors="0">
+<testcase name="Blog post validation error - no nested form @content › validation error on new blog post does not nest the form inside itself" classname="68-blog-post-validation-no-nesting.spec.ts" time="1.657">
+</testcase>
+<testcase name="Blog post validation error - no nested form @content › validation error on new content via HTMX does not duplicate #form-messages" classname="68-blog-post-validation-no-nesting.spec.ts" time="1.508">
+</testcase>
+</testsuite>
+<testsuite name="68-example-plugin-settings.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="4.001" errors="0">
+<testcase name="Example plugin — settings reflected in API @plugins › GET /example returns greeting and defaultName from DB settings" classname="68-example-plugin-settings.spec.ts" time="0.986">
+</testcase>
+<testcase name="Example plugin — settings reflected in API @plugins › GET /example/:name uses updated greeting from settings" classname="68-example-plugin-settings.spec.ts" time="0.74">
+</testcase>
+<testcase name="Example plugin — settings reflected in API @plugins › GET /example/moods returns published moods list" classname="68-example-plugin-settings.spec.ts" time="2.275">
+</testcase>
+</testsuite>
+<testsuite name="68-login-redirect.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="2.545" errors="0">
+<testcase name="Login redirect param @smoke @auth › redirects to /admin by default" classname="68-login-redirect.spec.ts" time="0.843">
+</testcase>
+<testcase name="Login redirect param @smoke @auth › redirects to ?redirect= path after login" classname="68-login-redirect.spec.ts" time="0.839">
+</testcase>
+<testcase name="Login redirect param @smoke @auth › ignores external redirect (open-redirect guard)" classname="68-login-redirect.spec.ts" time="0.863">
+</testcase>
+</testsuite>
+<testsuite name="68-plugin-activity-log.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="4.882" errors="0">
+<testcase name="Plugin Activity Log @plugins @lock-plugin-hello-world › activity tab shows content for an active plugin" classname="68-plugin-activity-log.spec.ts" time="0.934">
+</testcase>
+<testcase name="Plugin Activity Log @plugins @lock-plugin-hello-world › activity tab shows entries after toggling a plugin" classname="68-plugin-activity-log.spec.ts" time="3.948">
+</testcase>
+</testsuite>
+<testsuite name="68-plugin-install-click.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="3.836" errors="0">
+<testcase name="Plugin Install Click Behavior @smoke @plugins @lock-plugin-hello-world › uninstalled plugin detail page shows Install button instead of auto-installing @plugins" classname="68-plugin-install-click.spec.ts" time="0.804">
+</testcase>
+<testcase name="Plugin Install Click Behavior @smoke @plugins @lock-plugin-hello-world › install button on detail page installs plugin @plugins" classname="68-plugin-install-click.spec.ts" time="3.032">
+</testcase>
+</testsuite>
+<testsuite name="68-user-profile-document.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="1.266" errors="0">
+<testcase name="User profile (document-backed) @auth › user_profile type is not offered as content" classname="68-user-profile-document.spec.ts" time="1.266">
+</testcase>
+</testsuite>
+<testsuite name="69-plugins-nav-accordion.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="6.72" errors="0">
+<testcase name="Plugins Nav Accordion @plugins @lock-plugin-hello-world › Plugins nav item renders as accordion with chevron toggle" classname="69-plugins-nav-accordion.spec.ts" time="1.384">
+</testcase>
+<testcase name="Plugins Nav Accordion @plugins @lock-plugin-hello-world › Plugins submenu starts hidden and expands on chevron click" classname="69-plugins-nav-accordion.spec.ts" time="1.108">
+</testcase>
+<testcase name="Plugins Nav Accordion @plugins @lock-plugin-hello-world › Plugin items do not appear as top-level nav items" classname="69-plugins-nav-accordion.spec.ts" time="1.389">
+</testcase>
+<testcase name="Plugins Nav Accordion @plugins @lock-plugin-hello-world › Hello World plugin menu entry appears inside accordion when activated" classname="69-plugins-nav-accordion.spec.ts" time="1.521">
+</testcase>
+<testcase name="Plugins Nav Accordion @plugins @lock-plugin-hello-world › Navigating to /admin/plugins marks Plugins as active" classname="69-plugins-nav-accordion.spec.ts" time="1.318">
+</testcase>
+</testsuite>
+<testsuite name="70-collection-registry.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="7" failures="0" skipped="0" time="1.568" errors="0">
+<testcase name="collection registry (PR 1) @collections › boot succeeds — blog_post document type is reachable" classname="70-collection-registry.spec.ts" time="0.007">
+</testcase>
+<testcase name="collection registry (PR 1) @collections › an unregistered document type returns 400 (registry gate works)" classname="70-collection-registry.spec.ts" time="0.006">
+</testcase>
+<testcase name="collection registry (PR 1) @collections › blog_post records carry the expected type id (autoRegister skipped blog_post, hand-tuned seed wins)" classname="70-collection-registry.spec.ts" time="0.007">
+</testcase>
+<testcase name="collection registry (PR 1) @collections › admin UI /admin/collections requires auth (read-only page)" classname="70-collection-registry.spec.ts" time="0.005">
+</testcase>
+<testcase name="collection registry (PR 1) @collections › admin UI /admin/collections/new requires auth (instructional page)" classname="70-collection-registry.spec.ts" time="0.005">
+</testcase>
+<testcase name="collection registry — authed admin UI @collections › /admin/collections lists code-defined blog_post as read-only" classname="70-collection-registry.spec.ts" time="0.653">
+</testcase>
+<testcase name="collection registry — authed admin UI @collections › /admin/collections/new shows code-defined instructions + docs link" classname="70-collection-registry.spec.ts" time="0.885">
+</testcase>
+</testsuite>
+<testsuite name="70-multi-tenant.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="7" failures="0" skipped="0" time="12.724" errors="0">
+<testcase name="Multi-Tenant plugin @auth @lock-plugin-multi-tenant › is off by default: Tenants page shows inactive notice, no nav, no switcher" classname="70-multi-tenant.spec.ts" time="2.039">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Multi-Tenant plugin @auth @lock-plugin-multi-tenant › can be turned on from the Plugins page" classname="70-multi-tenant.spec.ts" time="2.48">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Multi-Tenant plugin @auth @lock-plugin-multi-tenant › stays active for every admin request, not just the isolate that served the toggle" classname="70-multi-tenant.spec.ts" time="2.202">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Multi-Tenant plugin @auth @lock-plugin-multi-tenant › lists the default tenant and creates a new tenant via the admin UI" classname="70-multi-tenant.spec.ts" time="2">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Multi-Tenant plugin @auth @lock-plugin-multi-tenant › scopes documents to the active tenant (cross-tenant isolation)" classname="70-multi-tenant.spec.ts" time="0.549">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Multi-Tenant plugin @auth @lock-plugin-multi-tenant › switching the active tenant updates the current-tenant indicator" classname="70-multi-tenant.spec.ts" time="1.714">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Multi-Tenant plugin @auth @lock-plugin-multi-tenant › deactivating restores single-tenant behavior" classname="70-multi-tenant.spec.ts" time="1.74">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+</testsuite>
+<testsuite name="70-rbac-roles-verbs.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="14.285" errors="0">
+<testcase name="RBAC Roles &amp; Verbs tab @auth › navigates to Roles &amp; Verbs tab via hash" classname="70-rbac-roles-verbs.spec.ts" time="1.114">
+</testcase>
+<testcase name="RBAC Roles &amp; Verbs tab @auth › save roles persists display name change" classname="70-rbac-roles-verbs.spec.ts" time="4.848">
+</testcase>
+<testcase name="RBAC Roles &amp; Verbs tab @auth › save roles persists portal access checkbox" classname="70-rbac-roles-verbs.spec.ts" time="5.324">
+</testcase>
+<testcase name="RBAC Roles &amp; Verbs tab @auth › add new role card is present below Roles &amp; Verbs grid" classname="70-rbac-roles-verbs.spec.ts" time="1.356">
+</testcase>
+<testcase name="RBAC Roles &amp; Verbs tab @auth › admin role is the only locked-and-undeletable system role" classname="70-rbac-roles-verbs.spec.ts" time="1.643">
+</testcase>
+</testsuite>
+<testsuite name="71-home-link-redirect.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="0.716" errors="0">
+<testcase name="Home Link and Admin Redirect @smoke › /admin redirects to /admin/dashboard" classname="71-home-link-redirect.spec.ts" time="0.716">
+</testcase>
+</testsuite>
+<testsuite name="71-tenant-membership-gate.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="12.184" errors="0">
+<testcase name="Multi-Tenant membership gate @auth @lock-plugin-multi-tenant › switcher rejects a tenant the admin is not a member of (403)" classname="71-tenant-membership-gate.spec.ts" time="5.686">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Multi-Tenant membership gate @auth @lock-plugin-multi-tenant › a forged header for a non-member tenant does not resolve (no cross-tenant leak)" classname="71-tenant-membership-gate.spec.ts" time="0.838">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Multi-Tenant membership gate @auth @lock-plugin-multi-tenant › creating a tenant auto-enrolls the creator → switch succeeds" classname="71-tenant-membership-gate.spec.ts" time="1.713">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Multi-Tenant membership gate @auth @lock-plugin-multi-tenant › the sidebar switcher only lists member tenants (orphan hidden)" classname="71-tenant-membership-gate.spec.ts" time="1.249">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Multi-Tenant membership gate @auth @lock-plugin-multi-tenant › super-admin bypasses the gate: switches into a non-member tenant" classname="71-tenant-membership-gate.spec.ts" time="2.136">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Multi-Tenant membership gate @auth @lock-plugin-multi-tenant › teardown: deactivate plugin to restore single-tenant baseline" classname="71-tenant-membership-gate.spec.ts" time="0.562">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+</testsuite>
+<testsuite name="72-collection-base-routes.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="11" failures="0" skipped="0" time="3.807" errors="0">
+<testcase name="per-collection base routes @collections › GET /api/:collection returns list of published items" classname="72-collection-base-routes.spec.ts" time="0.014">
+</testcase>
+<testcase name="per-collection base routes @collections › GET /api/:collection returns 404 for unknown collection" classname="72-collection-base-routes.spec.ts" time="0.006">
+</testcase>
+<testcase name="per-collection base routes @collections › GET /api/:collection/:id returns 404 for unknown id" classname="72-collection-base-routes.spec.ts" time="0.006">
+</testcase>
+<testcase name="per-collection base routes @collections › GET /api/:collection does not conflict with /api/collections" classname="72-collection-base-routes.spec.ts" time="0.005">
+</testcase>
+<testcase name="per-collection base routes @collections › GET /api/:collection does not conflict with /api/content" classname="72-collection-base-routes.spec.ts" time="0.009">
+</testcase>
+<testcase name="per-collection base routes @collections › GET /api/:collection supports limit query param" classname="72-collection-base-routes.spec.ts" time="0.01">
+</testcase>
+<testcase name="per-collection base routes @collections › POST /api/:collection requires auth" classname="72-collection-base-routes.spec.ts" time="0.005">
+</testcase>
+<testcase name="per-collection base routes @collections › POST then GET single item via /api/:collection/:id" classname="72-collection-base-routes.spec.ts" time="0.755">
+</testcase>
+<testcase name="per-collection base routes @collections › PUT /api/:collection/:id updates item" classname="72-collection-base-routes.spec.ts" time="1.16">
+</testcase>
+<testcase name="per-collection base routes @collections › DELETE /api/:collection/:id removes item" classname="72-collection-base-routes.spec.ts" time="0.687">
+</testcase>
+<testcase name="per-collection base routes @collections › PUT /api/:collection/:id returns 404 for wrong collection" classname="72-collection-base-routes.spec.ts" time="1.15">
+</testcase>
+</testsuite>
+<testsuite name="72-per-tenant-roles.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="0" time="5.456" errors="0">
+<testcase name="Per-tenant roles @auth @lock-plugin-multi-tenant › viewer-in-tenant is DENIED create even though globally admin" classname="72-per-tenant-roles.spec.ts" time="3.565">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Per-tenant roles @auth @lock-plugin-multi-tenant › viewer-in-tenant is ALLOWED read in that tenant" classname="72-per-tenant-roles.spec.ts" time="0.559">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Per-tenant roles @auth @lock-plugin-multi-tenant › same user retains global admin create in the default tenant (no header)" classname="72-per-tenant-roles.spec.ts" time="0.703">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Per-tenant roles @auth @lock-plugin-multi-tenant › teardown: deactivate plugin to restore single-tenant baseline" classname="72-per-tenant-roles.spec.ts" time="0.629">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+</testsuite>
+<testsuite name="73-tenant-members.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="5.59" errors="0">
+<testcase name="Tenant member management @auth @lock-plugin-multi-tenant › full member lifecycle: add by email, change role, remove" classname="73-tenant-members.spec.ts" time="3.395">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Tenant member management @auth @lock-plugin-multi-tenant › adding a non-existent email shows an error" classname="73-tenant-members.spec.ts" time="1.437">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Tenant member management @auth @lock-plugin-multi-tenant › teardown: deactivate plugin to restore single-tenant baseline" classname="73-tenant-members.spec.ts" time="0.758">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+</testsuite>
+<testsuite name="74-tenant-invitations.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="7.727" errors="0">
+<testcase name="Tenant invitations @auth @lock-plugin-multi-tenant › invite → accept makes the invitee a member with the invited role" classname="74-tenant-invitations.spec.ts" time="4.995">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Tenant invitations @auth @lock-plugin-multi-tenant › a pending invitation can be revoked" classname="74-tenant-invitations.spec.ts" time="1.982">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Tenant invitations @auth @lock-plugin-multi-tenant › teardown: deactivate plugin to restore single-tenant baseline" classname="74-tenant-invitations.spec.ts" time="0.75">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+</testsuite>
+<testsuite name="75-global-document-types.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="1.891" errors="0">
+<testcase name="Global document types @content @lock-plugin-multi-tenant › a global-type doc created in tenant A is stored in the shared pool and visible from tenant B" classname="75-global-document-types.spec.ts" time="0.68">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Global document types @content @lock-plugin-multi-tenant › a normal-type doc created in tenant A is NOT visible from tenant B (isolation preserved)" classname="75-global-document-types.spec.ts" time="0.53">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="Global document types @content @lock-plugin-multi-tenant › teardown: deactivate plugin" classname="75-global-document-types.spec.ts" time="0.681">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+</testsuite>
+<testsuite name="76-plugin-menu-singleton.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="3.937" errors="0">
+<testcase name="Plugin menu singleton @plugins › plugin menu entries declared via definePlugin appear in the sidebar submenu" classname="76-plugin-menu-singleton.spec.ts" time="1.234">
+</testcase>
+<testcase name="Plugin menu singleton @plugins › email plugin menu entry navigates to the email admin page" classname="76-plugin-menu-singleton.spec.ts" time="1.584">
+</testcase>
+<testcase name="Plugin menu singleton @plugins › plugins without menu entries do not leak into top-level nav" classname="76-plugin-menu-singleton.spec.ts" time="1.119">
+</testcase>
+</testsuite>
+<testsuite name="76-user-tenant-memberships.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="0" time="5.491" errors="0">
+<testcase name="User-centric tenant memberships @auth @lock-plugin-multi-tenant › user edit page links to membership management when the plugin is active" classname="76-user-tenant-memberships.spec.ts" time="0.882">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="User-centric tenant memberships @auth @lock-plugin-multi-tenant › add user to a tenant, change role, remove" classname="76-user-tenant-memberships.spec.ts" time="1.805">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="User-centric tenant memberships @auth @lock-plugin-multi-tenant › the per-tenant role-usage page renders and lists assignments" classname="76-user-tenant-memberships.spec.ts" time="2.133">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+<testcase name="User-centric tenant memberships @auth @lock-plugin-multi-tenant › teardown: deactivate plugin" classname="76-user-tenant-memberships.spec.ts" time="0.671">
+<properties>
+<property name="serial" value="">
+</property>
+</properties>
+</testcase>
+</testsuite>
+<testsuite name="77-lexical-editor.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="0" time="3.566" errors="0">
+<testcase name="Lexical Rich Text Editor Plugin @content › ships active on a fresh install" classname="77-lexical-editor.spec.ts" time="0.756">
+</testcase>
+<testcase name="Lexical Rich Text Editor Plugin @content › renders the editor for a lexical field" classname="77-lexical-editor.spec.ts" time="0.746">
+</testcase>
+<testcase name="Lexical Rich Text Editor Plugin @content › renders the formatting actions the toolbar claims" classname="77-lexical-editor.spec.ts" time="0.91">
+</testcase>
+<testcase name="Lexical Rich Text Editor Plugin @content › typing fills the hidden input the form submits" classname="77-lexical-editor.spec.ts" time="1.154">
+</testcase>
+</testsuite>
+<testsuite name="77-schema-driven-settings.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="6.601" errors="0">
+<testcase name="Schema-driven plugin settings @plugins @lock-plugin-hello-world › hello-world /configure renders the greeting field with default value" classname="77-schema-driven-settings.spec.ts" time="1.229">
+</testcase>
+<testcase name="Schema-driven plugin settings @plugins @lock-plugin-hello-world › plugin without configSchema returns 404 from /configure" classname="77-schema-driven-settings.spec.ts" time="0.639">
+</testcase>
+<testcase name="Schema-driven plugin settings @plugins @lock-plugin-hello-world › hello-world configure save persists the value" classname="77-schema-driven-settings.spec.ts" time="2.077">
+</testcase>
+<testcase name="Schema-driven plugin settings @plugins @lock-plugin-hello-world › /admin/plugins/hello-world settings page renders (auto-registers plugin)" classname="77-schema-driven-settings.spec.ts" time="1.322">
+</testcase>
+<testcase name="Schema-driven plugin settings @plugins @lock-plugin-hello-world › email plugin keeps its legacy settings page instead of /configure" classname="77-schema-driven-settings.spec.ts" time="0.718">
+</testcase>
+<testcase name="Schema-driven plugin settings @plugins @lock-plugin-hello-world › a plugin that declares a configSchema renders its fields" classname="77-schema-driven-settings.spec.ts" time="0.616">
+</testcase>
+</testsuite>
+<testsuite name="78-author-user-search.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="7" failures="0" skipped="0" time="7.626" errors="0">
+<testcase name="Author user-search field @content › user search API returns results for known user" classname="78-author-user-search.spec.ts" time="0.646">
+</testcase>
+<testcase name="Author user-search field @content › user search API returns empty array for empty query" classname="78-author-user-search.spec.ts" time="0.698">
+</testcase>
+<testcase name="Author user-search field @content › blog post create form renders author field with autocomplete" classname="78-author-user-search.spec.ts" time="1.309">
+</testcase>
+<testcase name="Author user-search field @content › user by ID endpoint returns display name" classname="78-author-user-search.spec.ts" time="0.729">
+</testcase>
+<testcase name="Author user-search field @content › user search HTML endpoint returns results for admin" classname="78-author-user-search.spec.ts" time="0.961">
+</testcase>
+<testcase name="Author user-search field @content › custom author name syncs to hidden input on form submit" classname="78-author-user-search.spec.ts" time="1.554">
+</testcase>
+<testcase name="Author user-search field @content › typing in author field shows user dropdown" classname="78-author-user-search.spec.ts" time="1.729">
+</testcase>
+</testsuite>
+<testsuite name="78-new-content-dropdown.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="5.062" errors="0">
+<testcase name="New Content dropdown @content › shows dropdown button instead of plain link" classname="78-new-content-dropdown.spec.ts" time="0.771">
+</testcase>
+<testcase name="New Content dropdown @content › dropdown is hidden by default" classname="78-new-content-dropdown.spec.ts" time="0.868">
+</testcase>
+<testcase name="New Content dropdown @content › dropdown opens on click and shows collection links" classname="78-new-content-dropdown.spec.ts" time="1.07">
+</testcase>
+<testcase name="New Content dropdown @content › collection links point to new content form" classname="78-new-content-dropdown.spec.ts" time="1.216">
+</testcase>
+<testcase name="New Content dropdown @content › dropdown closes when clicking outside" classname="78-new-content-dropdown.spec.ts" time="1.137">
+</testcase>
+</testsuite>
+<testsuite name="79-plugin-filter-url.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="7" failures="0" skipped="0" time="6.539" errors="0">
+<testcase name="Plugin Filter URL Persistence @plugins › URL updates when category filter is checked" classname="79-plugin-filter-url.spec.ts" time="1.005">
+</testcase>
+<testcase name="Plugin Filter URL Persistence @plugins › URL updates when status filter is checked" classname="79-plugin-filter-url.spec.ts" time="1.282">
+</testcase>
+<testcase name="Plugin Filter URL Persistence @plugins › filter state is restored from URL on page load" classname="79-plugin-filter-url.spec.ts" time="0.878">
+</testcase>
+<testcase name="Plugin Filter URL Persistence @plugins › filter state is retained after page reload" classname="79-plugin-filter-url.spec.ts" time="1.011">
+</testcase>
+<testcase name="Plugin Filter URL Persistence @plugins › multiple category filters update URL with multiple params" classname="79-plugin-filter-url.spec.ts" time="0.923">
+</testcase>
+<testcase name="Plugin Filter URL Persistence @plugins › search text is reflected in URL" classname="79-plugin-filter-url.spec.ts" time="0.733">
+</testcase>
+<testcase name="Plugin Filter URL Persistence @plugins › default (empty) search is not added to URL" classname="79-plugin-filter-url.spec.ts" time="0.707">
+</testcase>
+</testsuite>
+<testsuite name="80-cache-warming-documents.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="2.051" errors="0">
+<testcase name="Cache Warming — document model @content › POST /admin/cache/warm succeeds and reports content + media namespaces" classname="80-cache-warming-documents.spec.ts" time="0.717">
+</testcase>
+<testcase name="Cache Warming — document model @content › warming does not error against the documents table" classname="80-cache-warming-documents.spec.ts" time="0.761">
+</testcase>
+<testcase name="Cache Warming — document model @content › cache stats endpoint reflects content + media namespaces after warming" classname="80-cache-warming-documents.spec.ts" time="0.573">
+</testcase>
+</testsuite>
+<testsuite name="80-redirect-management.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="7" failures="0" skipped="0" time="14.808" errors="0">
+<testcase name="Redirect Management @plugins › admin/redirects page loads" classname="80-redirect-management.spec.ts" time="1.164">
+</testcase>
+<testcase name="Redirect Management @plugins › can navigate to new redirect form" classname="80-redirect-management.spec.ts" time="2.053">
+</testcase>
+<testcase name="Redirect Management @plugins › can create a redirect and it appears in list" classname="80-redirect-management.spec.ts" time="1.699">
+</testcase>
+<testcase name="Redirect Management @plugins › redirect actually redirects HTTP requests" classname="80-redirect-management.spec.ts" time="1.742">
+</testcase>
+<testcase name="Redirect Management @plugins › can edit a redirect" classname="80-redirect-management.spec.ts" time="2.554">
+</testcase>
+<testcase name="Redirect Management @plugins › can delete a redirect" classname="80-redirect-management.spec.ts" time="3.157">
+</testcase>
+<testcase name="Redirect Management @plugins › shows error for duplicate source URL" classname="80-redirect-management.spec.ts" time="2.439">
+</testcase>
+</testsuite>
+<testsuite name="80-security-audit-document-model.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="4.554" errors="0">
+<testcase name="Security Audit Plugin — document model @smoke @content @lock-auth-login › dashboard page loads" classname="80-security-audit-document-model.spec.ts" time="0.789">
+</testcase>
+<testcase name="Security Audit Plugin — document model @smoke @content @lock-auth-login › event log page loads with empty state" classname="80-security-audit-document-model.spec.ts" time="0.667">
+</testcase>
+<testcase name="Security Audit Plugin — document model @smoke @content @lock-auth-login › stats API returns document-backed data" classname="80-security-audit-document-model.spec.ts" time="0.637">
+</testcase>
+<testcase name="Security Audit Plugin — document model @smoke @content @lock-auth-login › events API returns document-backed list" classname="80-security-audit-document-model.spec.ts" time="0.729">
+</testcase>
+<testcase name="Security Audit Plugin — document model @smoke @content @lock-auth-login › log and retrieve a security event via API" classname="80-security-audit-document-model.spec.ts" time="1.13">
+</testcase>
+<testcase name="Security Audit Plugin — document model @smoke @content @lock-auth-login › settings page loads" classname="80-security-audit-document-model.spec.ts" time="0.602">
+</testcase>
+</testsuite>
+<testsuite name="80-user-profile-code-config.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="5.368" errors="0">
+<testcase name="User Profiles — code-defined config @auth › plugin detail page explains where to define fields in code" classname="80-user-profile-code-config.spec.ts" time="1.365">
+</testcase>
+<testcase name="User Profiles — code-defined config @auth › user edit page hides Profile Information when no fields are defined" classname="80-user-profile-code-config.spec.ts" time="1.842">
+</testcase>
+<testcase name="User Profiles — code-defined config @auth › new user page hides Profile Information when no fields are defined" classname="80-user-profile-code-config.spec.ts" time="2.161">
+</testcase>
+</testsuite>
+<testsuite name="81-admin-rbac-access.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="1.846" errors="0">
+<testcase name="Admin RBAC access @smoke @auth › admin user can access admin area without permission error" classname="81-admin-rbac-access.spec.ts" time="0.869">
+</testcase>
+<testcase name="Admin RBAC access @smoke @auth › admin user can access admin dashboard" classname="81-admin-rbac-access.spec.ts" time="0.977">
+</testcase>
+</testsuite>
+<testsuite name="81-cache-collection-settings.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="5.159" errors="0">
+<testcase name="Cache — Collection Settings tab @plugins › Collection Settings tab is present and activatable" classname="81-cache-collection-settings.spec.ts" time="1.485">
+</testcase>
+<testcase name="Cache — Collection Settings tab @plugins › collection rows render with API path links" classname="81-cache-collection-settings.spec.ts" time="0.863">
+</testcase>
+<testcase name="Cache — Collection Settings tab @plugins › API path links open in new tab" classname="81-cache-collection-settings.spec.ts" time="0.816">
+</testcase>
+<testcase name="Cache — Collection Settings tab @plugins › blog-posts collection has correct /api/blog-posts link" classname="81-cache-collection-settings.spec.ts" time="1.057">
+</testcase>
+<testcase name="Cache — Collection Settings tab @plugins › API path link navigates to correct endpoint" classname="81-cache-collection-settings.spec.ts" time="0.938">
+</testcase>
+</testsuite>
+<testsuite name="81-media-document-model.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="3.833" errors="0">
+<testcase name="Media — document model (slice 3) @media › API upload returns document rootId and file is listed from documents" classname="81-media-document-model.spec.ts" time="0.21">
+</testcase>
+<testcase name="Media — document model (slice 3) @media › API upload-multiple creates document-backed files; bulk-delete removes them" classname="81-media-document-model.spec.ts" time="0.134">
+</testcase>
+<testcase name="Media — document model (slice 3) @media › API PATCH updates metadata on the document" classname="81-media-document-model.spec.ts" time="0.144">
+</testcase>
+<testcase name="Media — document model (slice 3) @media › Admin media library page loads without error" classname="81-media-document-model.spec.ts" time="0.703">
+</testcase>
+<testcase name="Media — document model (slice 3) @media › Admin upload creates document-backed file visible in media library" classname="81-media-document-model.spec.ts" time="2.642">
+</testcase>
+</testsuite>
+<testsuite name="81-versioning-optional.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="5.802" errors="0">
+<testcase name="Versioning (optional, plugin-backed) @smoke @content › collections page shows Versioning column — faq On, blog_post Off" classname="81-versioning-optional.spec.ts" time="1.153">
+</testcase>
+<testcase name="Versioning (optional, plugin-backed) @smoke @content › faq accumulates history and restore creates a new version" classname="81-versioning-optional.spec.ts" time="0.651">
+</testcase>
+<testcase name="Versioning (optional, plugin-backed) @smoke @content › faq edit form shows Version history section and Save Draft button" classname="81-versioning-optional.spec.ts" time="1.257">
+</testcase>
+<testcase name="Versioning (optional, plugin-backed) @smoke @content › history route returns 404 for unknown root" classname="81-versioning-optional.spec.ts" time="0.685">
+</testcase>
+<testcase name="Versioning (optional, plugin-backed) @smoke @content › versioning-off type edits in place — no extra version rows" classname="81-versioning-optional.spec.ts" time="0.719">
+</testcase>
+<testcase name="Versioning (optional, plugin-backed) @smoke @content › versioning-off type edit form shows Update button — no Save Draft" classname="81-versioning-optional.spec.ts" time="1.337">
+</testcase>
+</testsuite>
+<testsuite name="82-cors-auth-headers.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="1.712" errors="0">
+<testcase name="CORS - cross-origin auth and API access @auth @api @lock-auth-login › GET /health returns ACAO header for allowed origin" classname="82-cors-auth-headers.spec.ts" time="0.536">
+</testcase>
+<testcase name="CORS - cross-origin auth and API access @auth @api @lock-auth-login › OPTIONS preflight on /auth/login from allowed cross-origin succeeds" classname="82-cors-auth-headers.spec.ts" time="0.481">
+</testcase>
+<testcase name="CORS - cross-origin auth and API access @auth @api @lock-auth-login › POST /auth/login cross-origin fetch succeeds (no CORS block)" classname="82-cors-auth-headers.spec.ts" time="0.675">
+</testcase>
+<testcase name="CORS - cross-origin auth and API access @auth @api @lock-auth-login › /auth/login responds to OPTIONS without 404 (CORS preflight path exists)" classname="82-cors-auth-headers.spec.ts" time="0.009">
+</testcase>
+<testcase name="CORS - cross-origin auth and API access @auth @api @lock-auth-login › CORS headers present on /health via curl-equivalent (no-cors mode)" classname="82-cors-auth-headers.spec.ts" time="0.011">
+</testcase>
+</testsuite>
+<testsuite name="83-json-field-viewer.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="0" time="4.384" errors="0">
+<testcase name="JSON field viewer @database › edit form shows JSON viewer, not [object Object]" classname="83-json-field-viewer.spec.ts" time="0.689">
+</testcase>
+<testcase name="JSON field viewer @database › toggle switches to textarea and back to viewer" classname="83-json-field-viewer.spec.ts" time="1">
+</testcase>
+<testcase name="JSON field viewer @database › invalid JSON shows inline error and blocks switch back to viewer" classname="83-json-field-viewer.spec.ts" time="1.082">
+</testcase>
+<testcase name="JSON field viewer @database › edited JSON saves correctly on form submit" classname="83-json-field-viewer.spec.ts" time="1.613">
+</testcase>
+</testsuite>
+<testsuite name="83-login-returns-token.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="0.169" errors="0">
+<testcase name="POST /auth/login returns token @smoke @auth @lock-auth-login › login response includes token field" classname="83-login-returns-token.spec.ts" time="0.073">
+</testcase>
+<testcase name="POST /auth/login returns token @smoke @auth @lock-auth-login › returned token works for Bearer auth on /auth/me" classname="83-login-returns-token.spec.ts" time="0.051">
+</testcase>
+<testcase name="POST /auth/login returns token @smoke @auth @lock-auth-login › auth_token cookie set on login" classname="83-login-returns-token.spec.ts" time="0.045">
+</testcase>
+</testsuite>
+<testsuite name="85-admin-panel-roles-naming.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.487" errors="0">
+<testcase name="Admin Panel naming and seeded roles @auth › Roles &amp; Verbs tab shows &quot;Admin Panel&quot; label (not &quot;Access portal&quot;)" classname="85-admin-panel-roles-naming.spec.ts" time="1.455">
+</testcase>
+<testcase name="Admin Panel naming and seeded roles @auth › seeded roles include Administrator, Editor, Authenticated, Public" classname="85-admin-panel-roles-naming.spec.ts" time="1.032">
+</testcase>
+</testsuite>
+<testsuite name="86-api-key-auth.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="7" failures="0" skipped="0" time="0.356" errors="0">
+<testcase name="Programmatic API keys @smoke @api-keys @lock-auth-login › x-api-key authenticates an API request as the owning user" classname="86-api-key-auth.spec.ts" time="0.068">
+</testcase>
+<testcase name="Programmatic API keys @smoke @api-keys @lock-auth-login › Authorization: Bearer sk_ header also authenticates" classname="86-api-key-auth.spec.ts" time="0.074">
+</testcase>
+<testcase name="Programmatic API keys @smoke @api-keys @lock-auth-login › an invalid key is rejected with 401" classname="86-api-key-auth.spec.ts" time="0.009">
+</testcase>
+<testcase name="Programmatic API keys @smoke @api-keys @lock-auth-login › list returns metadata only — never the secret or hash" classname="86-api-key-auth.spec.ts" time="0.067">
+</testcase>
+<testcase name="Programmatic API keys @smoke @api-keys @lock-auth-login › revoking a key disables it immediately" classname="86-api-key-auth.spec.ts" time="0.077">
+</testcase>
+<testcase name="Programmatic API keys @smoke @api-keys @lock-auth-login › creating a key requires authentication" classname="86-api-key-auth.spec.ts" time="0.007">
+</testcase>
+<testcase name="Programmatic API keys @smoke @api-keys @lock-auth-login › admin manage page renders for an admin" classname="86-api-key-auth.spec.ts" time="0.054">
+</testcase>
+</testsuite>
+<testsuite name="87-session-lifecycle.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="0.281" errors="0">
+<testcase name="Session lifecycle @smoke @auth › logout destroys the session — /auth/me then rejects" classname="87-session-lifecycle.spec.ts" time="0.089">
+</testcase>
+<testcase name="Session lifecycle @smoke @auth › logging out one session leaves a concurrent session alive" classname="87-session-lifecycle.spec.ts" time="0.183">
+</testcase>
+<testcase name="Session lifecycle @smoke @auth › an unauthenticated context cannot reach /auth/me" classname="87-session-lifecycle.spec.ts" time="0.009">
+</testcase>
+</testsuite>
+<testsuite name="88-media-library-fixes.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="0.854" errors="0">
+<testcase name="Media library fixes (#888, #890) @media › #888 All Files count reflects real total, not page size" classname="88-media-library-fixes.spec.ts" time="0.657">
+</testcase>
+<testcase name="Media library fixes (#888, #890) @media › #890 Media selector search input has name attribute" classname="88-media-library-fixes.spec.ts" time="0.197">
+</testcase>
+</testsuite>
+<testsuite name="88-plugin-system.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="7" failures="0" skipped="0" time="2.253" errors="0">
+<testcase name="Plugin system @plugins @lock-plugin-hello-world @lock-auth-registration › hello-world plugin route accessible after login" classname="88-plugin-system.spec.ts" time="0.701">
+</testcase>
+<testcase name="Plugin system @plugins @lock-plugin-hello-world @lock-auth-registration › admin plugins page lists hello-world plugin" classname="88-plugin-system.spec.ts" time="0.693">
+</testcase>
+<testcase name="Plugin system @plugins @lock-plugin-hello-world @lock-auth-registration › hello-world plugin route returns 401 without auth" classname="88-plugin-system.spec.ts" time="0.008">
+</testcase>
+<testcase name="Plugin system @plugins @lock-plugin-hello-world @lock-auth-registration › app booted successfully — all registered plugins passed validation" classname="88-plugin-system.spec.ts" time="0.017">
+</testcase>
+<testcase name="Plugin system @plugins @lock-plugin-hello-world @lock-auth-registration › auth:registration:completed hook path — sign-up endpoint exists" classname="88-plugin-system.spec.ts" time="0.049">
+</testcase>
+<testcase name="Plugin system @plugins @lock-plugin-hello-world @lock-auth-registration › legacy auth:login hook fires — login endpoint exists and works" classname="88-plugin-system.spec.ts" time="0.048">
+</testcase>
+<testcase name="Plugin system @plugins @lock-plugin-hello-world @lock-auth-registration › configSchema auto-form rendered on plugins admin page" classname="88-plugin-system.spec.ts" time="0.737">
+</testcase>
+</testsuite>
+<testsuite name="89-hello-cruel-world-plugin.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="9" failures="0" skipped="0" time="5.577" errors="0">
+<testcase name="Example plugin @plugins › GET /example returns greeting with random mood" classname="89-hello-cruel-world-plugin.spec.ts" time="0.008">
+</testcase>
+<testcase name="Example plugin @plugins › GET /example/moods lists all published moods" classname="89-hello-cruel-world-plugin.spec.ts" time="0.008">
+</testcase>
+<testcase name="Example plugin @plugins › GET /example/:name returns personalised greeting" classname="89-hello-cruel-world-plugin.spec.ts" time="0.011">
+</testcase>
+<testcase name="Example plugin @plugins › plugin appears in /admin/plugins list" classname="89-hello-cruel-world-plugin.spec.ts" time="0.721">
+</testcase>
+<testcase name="Example plugin @plugins › admin page loads and shows plugin name" classname="89-hello-cruel-world-plugin.spec.ts" time="0.609">
+</testcase>
+<testcase name="Example plugin @plugins › admin page links to the public API" classname="89-hello-cruel-world-plugin.spec.ts" time="0.635">
+</testcase>
+<testcase name="Example plugin @plugins › admin page has Manage Moods link to moods collection" classname="89-hello-cruel-world-plugin.spec.ts" time="1.315">
+</testcase>
+<testcase name="Example plugin @plugins › plugin settings page has View Page link to admin page" classname="89-hello-cruel-world-plugin.spec.ts" time="1.544">
+</testcase>
+<testcase name="Example plugin @plugins › plugin menu entry appears in admin sidebar" classname="89-hello-cruel-world-plugin.spec.ts" time="0.726">
+</testcase>
+</testsuite>
+<testsuite name="90-plugin-stale-settings-pruning.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="5.937" errors="0">
+<testcase name="Plugin stale settings pruning (issue #972) @plugins @lock-plugin-hello-world › legacy settings page does not render stale keys absent from configSchema" classname="90-plugin-stale-settings-pruning.spec.ts" time="1.211">
+</testcase>
+<testcase name="Plugin stale settings pruning (issue #972) @plugins @lock-plugin-hello-world › /configure POST prunes stale keys not in configSchema" classname="90-plugin-stale-settings-pruning.spec.ts" time="2.47">
+</testcase>
+<testcase name="Plugin stale settings pruning (issue #972) @plugins @lock-plugin-hello-world › _-prefixed internal keys are preserved through /configure save" classname="90-plugin-stale-settings-pruning.spec.ts" time="2.256">
+</testcase>
+</testsuite>
+<testsuite name="91-database-table-search.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="11" failures="0" skipped="0" time="9.567" errors="0">
+<testcase name="Database Table Viewer — Search &amp; JSON Browser @database › table viewer loads and shows search bar" classname="91-database-table-search.spec.ts" time="0.6">
+</testcase>
+<testcase name="Database Table Viewer — Search &amp; JSON Browser @database › search filters rows via URL param" classname="91-database-table-search.spec.ts" time="0.732">
+</testcase>
+<testcase name="Database Table Viewer — Search &amp; JSON Browser @database › pressing Enter in search navigates with search param" classname="91-database-table-search.spec.ts" time="0.94">
+</testcase>
+<testcase name="Database Table Viewer — Search &amp; JSON Browser @database › Search button navigates with search param" classname="91-database-table-search.spec.ts" time="1.051">
+</testcase>
+<testcase name="Database Table Viewer — Search &amp; JSON Browser @database › clear search button removes search param" classname="91-database-table-search.spec.ts" time="1.005">
+</testcase>
+<testcase name="Database Table Viewer — Search &amp; JSON Browser @database › empty search shows all rows without filter" classname="91-database-table-search.spec.ts" time="0.788">
+</testcase>
+<testcase name="Database Table Viewer — Search &amp; JSON Browser @database › JSON modal closes on backdrop click" classname="91-database-table-search.spec.ts" time="0.893">
+</testcase>
+<testcase name="Database Table Viewer — Search &amp; JSON Browser @database › JSON modal closes on Escape key" classname="91-database-table-search.spec.ts" time="0.841">
+</testcase>
+<testcase name="Database Table Viewer — Search &amp; JSON Browser @database › search preserved across page navigation" classname="91-database-table-search.spec.ts" time="0.924">
+</testcase>
+<testcase name="Database Table Viewer — Search &amp; JSON Browser @database › search preserved when changing page size" classname="91-database-table-search.spec.ts" time="0.822">
+</testcase>
+<testcase name="Database Table Viewer — Search &amp; JSON Browser @database › search preserved when sorting columns" classname="91-database-table-search.spec.ts" time="0.971">
+</testcase>
+</testsuite>
+<testsuite name="91-media-upload-date.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="3.713" errors="0">
+<testcase name="Media upload date display (#889) @media › media library page loads without 1970 dates" classname="91-media-upload-date.spec.ts" time="1.231">
+</testcase>
+<testcase name="Media upload date display (#889) @media › newly uploaded file appears at the top of the media grid with a valid date" classname="91-media-upload-date.spec.ts" time="2.482">
+</testcase>
+</testsuite>
+<testsuite name="91-plugin-routes-tab-persistence.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="4.983" errors="0">
+<testcase name="Plugin Information tab - routes persistence @plugins › routes remain visible after saving settings via legacy settings tab" classname="91-plugin-routes-tab-persistence.spec.ts" time="4.067">
+</testcase>
+<testcase name="Plugin Information tab - routes persistence @plugins › POST /:id/settings preserves _routes in response body" classname="91-plugin-routes-tab-persistence.spec.ts" time="0.916">
+</testcase>
+</testsuite>
+<testsuite name="92-api-keys-copy-before-redirect.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="0" time="4.122" errors="0">
+<testcase name="API Keys - copy key before redirect @api-keys › shows key banner after create without page reload" classname="92-api-keys-copy-before-redirect.spec.ts" time="1.017">
+</testcase>
+<testcase name="API Keys - copy key before redirect @api-keys › new key row appears in table without reload" classname="92-api-keys-copy-before-redirect.spec.ts" time="0.989">
+</testcase>
+<testcase name="API Keys - copy key before redirect @api-keys › copy &amp; dismiss button hides the banner" classname="92-api-keys-copy-before-redirect.spec.ts" time="1.117">
+</testcase>
+<testcase name="API Keys - copy key before redirect @api-keys › dismiss X button hides banner without copy" classname="92-api-keys-copy-before-redirect.spec.ts" time="0.999">
+</testcase>
+</testsuite>
+<testsuite name="92-media-create-folder.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="1.902" errors="0">
+<testcase name="Media create folder (#929) @media › POST /api/media/create-folder succeeds without legacy media table" classname="92-media-create-folder.spec.ts" time="0.696">
+</testcase>
+<testcase name="Media create folder (#929) @media › rejects invalid folder name characters" classname="92-media-create-folder.spec.ts" time="0.596">
+</testcase>
+<testcase name="Media create folder (#929) @media › rejects missing folder name" classname="92-media-create-folder.spec.ts" time="0.61">
+</testcase>
+</testsuite>
+<testsuite name="93-disabled-plugin-sidebar.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="2.621" errors="0">
+<testcase name="Disabled plugin hidden from sidebar (#971) @plugins @lock-plugin-hello-world › disabling a plugin removes it from the sidebar" classname="93-disabled-plugin-sidebar.spec.ts" time="2.621">
+</testcase>
+</testsuite>
+<testsuite name="93-oauth-providers-settings.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="2.916" errors="0">
+<testcase name="OAuth Providers - settings page @smoke @auth › shows Settings tab without needing prior saved settings" classname="93-oauth-providers-settings.spec.ts" time="0.713">
+</testcase>
+<testcase name="OAuth Providers - settings page @smoke @auth › renders GitHub and Google credential fields" classname="93-oauth-providers-settings.spec.ts" time="0.658">
+</testcase>
+<testcase name="OAuth Providers - settings page @smoke @auth › saves and reloads nested provider settings correctly" classname="93-oauth-providers-settings.spec.ts" time="1.545">
+</testcase>
+</testsuite>
+<testsuite name="94-content-edit-info-sidebar.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="1.876" errors="0">
+<testcase name="Content edit - Content Info sidebar @content › dates show current year, not 1970" classname="94-content-edit-info-sidebar.spec.ts" time="1.01">
+</testcase>
+<testcase name="Content edit - Content Info sidebar @content › author shows display name, not raw ID" classname="94-content-edit-info-sidebar.spec.ts" time="0.866">
+</testcase>
+</testsuite>
+<testsuite name="94-removed-plugin-deactivated.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="2.621" errors="0">
+<testcase name="Removed plugin deactivated on boot (#970) @plugins › admin plugins page shows inactive plugin as inactive (not active)" classname="94-removed-plugin-deactivated.spec.ts" time="1.304">
+</testcase>
+<testcase name="Removed plugin deactivated on boot (#970) @plugins › pruneStaleUserPlugins: non-core active plugin absent from wired list is deactivated" classname="94-removed-plugin-deactivated.spec.ts" time="1.317">
+</testcase>
+</testsuite>
+<testsuite name="94-self-host-smoke.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="6" failures="0" skipped="0" time="2.948" errors="0">
+<testcase name="Self-Host Smoke Tests @smoke @lock-auth-registration › health endpoint returns ok" classname="94-self-host-smoke.spec.ts" time="0.008">
+</testcase>
+<testcase name="Self-Host Smoke Tests @smoke @lock-auth-registration › unauthenticated /admin redirects to login" classname="94-self-host-smoke.spec.ts" time="0.549">
+</testcase>
+<testcase name="Self-Host Smoke Tests @smoke @lock-auth-registration › sign-in and access admin dashboard" classname="94-self-host-smoke.spec.ts" time="2.065">
+</testcase>
+<testcase name="Self-Host Smoke Tests @smoke @lock-auth-registration › admin content route accessible after sign-in" classname="94-self-host-smoke.spec.ts" time="0.223">
+</testcase>
+<testcase name="Self-Host Smoke Tests @smoke @lock-auth-registration › admin media route accessible after sign-in" classname="94-self-host-smoke.spec.ts" time="0.059">
+</testcase>
+<testcase name="Self-Host Smoke Tests @smoke @lock-auth-registration › sign-up creates a new user (self-host allows registration)" classname="94-self-host-smoke.spec.ts" time="0.044">
+</testcase>
+</testsuite>
+<testsuite name="95-mcp-admin.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="8" failures="0" skipped="0" time="5.348" errors="0">
+<testcase name="MCP admin dashboard @plugins › renders the /admin/mcp page with correct heading" classname="95-mcp-admin.spec.ts" time="0.706">
+</testcase>
+<testcase name="MCP admin dashboard @plugins › shows the /mcp endpoint URL" classname="95-mcp-admin.spec.ts" time="0.734">
+</testcase>
+<testcase name="MCP admin dashboard @plugins › endpoint URL copy button is present" classname="95-mcp-admin.spec.ts" time="0.695">
+</testcase>
+<testcase name="MCP admin dashboard @plugins › shows exposed collections table" classname="95-mcp-admin.spec.ts" time="0.587">
+</testcase>
+<testcase name="MCP admin dashboard @plugins › shows Claude Code integration snippet" classname="95-mcp-admin.spec.ts" time="0.614">
+</testcase>
+<testcase name="MCP admin dashboard @plugins › shows Cursor integration snippet" classname="95-mcp-admin.spec.ts" time="0.733">
+</testcase>
+<testcase name="MCP admin dashboard @plugins › links to /admin/plugins/api-keys for key management" classname="95-mcp-admin.spec.ts" time="0.587">
+</testcase>
+<testcase name="MCP admin dashboard @plugins › unauthenticated access redirects to login" classname="95-mcp-admin.spec.ts" time="0.692">
+</testcase>
+</testsuite>
+<testsuite name="95-viewer-sidebar-scope.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="2" failures="0" skipped="0" time="1.661" errors="0">
+<testcase name="Viewer role sidebar scope @auth @lock-auth-login @lock-auth-registration › viewer sees Content and Collections but not Users/Plugins/Settings" classname="95-viewer-sidebar-scope.spec.ts" time="0.796">
+</testcase>
+<testcase name="Viewer role sidebar scope @auth @lock-auth-login @lock-auth-registration › admin sees all sidebar items" classname="95-viewer-sidebar-scope.spec.ts" time="0.865">
+</testcase>
+</testsuite>
+<testsuite name="96-block-stable-ids.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="1.315" errors="0">
+<testcase name="Block stable IDs @content › saved blocks include blockId in fetched JSON" classname="96-block-stable-ids.spec.ts" time="1.315">
+</testcase>
+</testsuite>
+<testsuite name="96-mcp-endpoint.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="0" time="0.055" errors="0">
+<testcase name="MCP JSON-RPC endpoint @plugins @api › rejects a request with no API key (-32001)" classname="96-mcp-endpoint.spec.ts" time="0.008">
+</testcase>
+<testcase name="MCP JSON-RPC endpoint @plugins @api › initialize returns the handshake" classname="96-mcp-endpoint.spec.ts" time="0.008">
+</testcase>
+<testcase name="MCP JSON-RPC endpoint @plugins @api › tools/list advertises blog_post read + write tools" classname="96-mcp-endpoint.spec.ts" time="0.009">
+</testcase>
+<testcase name="MCP JSON-RPC endpoint @plugins @api › create draft → get by slug resolves the unpublished draft" classname="96-mcp-endpoint.spec.ts" time="0.03">
+</testcase>
+</testsuite>
+<testsuite name="97-cache-invalidation.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="0.798" errors="0">
+<testcase name="Cache invalidation — list freshness after item update @api › creating item via public API invalidates list cache" classname="97-cache-invalidation.spec.ts" time="0.193">
+</testcase>
+<testcase name="Cache invalidation — list freshness after item update @api › updating item via public API invalidates list cache" classname="97-cache-invalidation.spec.ts" time="0.078">
+</testcase>
+<testcase name="Cache invalidation — list freshness after item update @api › admin clear cache endpoint restores fresh list" classname="97-cache-invalidation.spec.ts" time="0.527">
+</testcase>
+</testsuite>
+<testsuite name="97-otp-request-route.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="0" time="0.033" errors="0">
+<testcase name="OTP Routes (documents settings + otp_codes table) @smoke @auth › POST /auth/otp/request › returns 200 (not 500) for an unknown email" classname="97-otp-request-route.spec.ts" time="0.008">
+</testcase>
+<testcase name="OTP Routes (documents settings + otp_codes table) @smoke @auth › POST /auth/otp/request › returns 200 for a known admin email" classname="97-otp-request-route.spec.ts" time="0.009">
+</testcase>
+<testcase name="OTP Routes (documents settings + otp_codes table) @smoke @auth › POST /auth/otp/request › rejects invalid email with 400" classname="97-otp-request-route.spec.ts" time="0.005">
+</testcase>
+<testcase name="OTP Routes (documents settings + otp_codes table) @smoke @auth › POST /auth/otp/verify › returns a controlled 4xx for a wrong code (not a 500)" classname="97-otp-request-route.spec.ts" time="0.006">
+</testcase>
+<testcase name="OTP Routes (documents settings + otp_codes table) @smoke @auth › POST /auth/otp/verify › rejects invalid email with 400" classname="97-otp-request-route.spec.ts" time="0.005">
+</testcase>
+</testsuite>
+<testsuite name="97-stats-dashboard-fixes.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="5" failures="0" skipped="4" time="3.505" errors="0">
+<testcase name="Stats dashboard data parsing @stats › dashboard renders without JS errors" classname="97-stats-dashboard-fixes.spec.ts" time="1.202">
+</testcase>
+<testcase name="Stats dashboard data parsing @stats › install failures table has Step and Version columns" classname="97-stats-dashboard-fixes.spec.ts">
+<properties>
+<property name="skip" value="Stats surfaces live in the separate sonicjs-stats worker (packages/stats)">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+<testcase name="Stats dashboard data parsing @stats › What People Build section renders when snapshot data exists" classname="97-stats-dashboard-fixes.spec.ts">
+<properties>
+<property name="skip" value="Stats surfaces live in the separate sonicjs-stats worker (packages/stats)">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+<testcase name="Stats dashboard data parsing @stats › /v1/events accepts project_snapshot payload" classname="97-stats-dashboard-fixes.spec.ts">
+<properties>
+<property name="skip" value="Stats surfaces live in the separate sonicjs-stats worker (packages/stats)">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+<testcase name="Stats dashboard data parsing @stats › /v1/events accepts installation_failed with step" classname="97-stats-dashboard-fixes.spec.ts">
+<properties>
+<property name="skip" value="Stats surfaces live in the separate sonicjs-stats worker (packages/stats)">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+</testsuite>
+<testsuite name="97-user-edit-dynamic-roles.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="4" failures="0" skipped="0" time="5.304" errors="0">
+<testcase name="User edit — dynamic role dropdown @auth › user-new form contains admin role option" classname="97-user-edit-dynamic-roles.spec.ts" time="1.202">
+</testcase>
+<testcase name="User edit — dynamic role dropdown @auth › user-edit form contains admin role option" classname="97-user-edit-dynamic-roles.spec.ts" time="0.829">
+</testcase>
+<testcase name="User edit — dynamic role dropdown @auth › custom role created in RBAC appears in user-edit dropdown" classname="97-user-edit-dynamic-roles.spec.ts" time="2.407">
+</testcase>
+<testcase name="User edit — dynamic role dropdown @auth › custom role created in RBAC appears in user-edit dropdown for existing user" classname="97-user-edit-dynamic-roles.spec.ts" time="0.866">
+</testcase>
+</testsuite>
+<testsuite name="98-public-role-api-acl.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="3" failures="0" skipped="0" time="2.548" errors="0">
+<testcase name="Public role — API ACL enforcement @auth @api @lock-auth-registration › anonymous user sees published content (baseline)" classname="98-public-role-api-acl.spec.ts" time="0.158">
+</testcase>
+<testcase name="Public role — API ACL enforcement @auth @api @lock-auth-registration › public-role user cannot see content from default-grant collection via /api/:collection @lock-rbac-example-grant" classname="98-public-role-api-acl.spec.ts" time="1.567">
+</testcase>
+<testcase name="Public role — API ACL enforcement @auth @api @lock-auth-registration › admin still sees all published content after ACL fix" classname="98-public-role-api-acl.spec.ts" time="0.823">
+</testcase>
+</testsuite>
+<testsuite name="99-rbac-grant-api-access.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="1" failures="0" skipped="0" time="4.879" errors="0">
+<testcase name="RBAC grant → immediate API access @auth @api @lock-rbac-example-grant › granting public role read on document_type:example unblocks /api/example immediately" classname="99-rbac-grant-api-access.spec.ts" time="4.879">
+</testcase>
+</testsuite>
+<testsuite name="smoke.spec.ts" timestamp="2026-10-29T15:42:31.668Z" hostname="chromium" tests="15" failures="0" skipped="0" time="17.964" errors="0">
+<testcase name="Smoke Tests - Critical Path @smoke › API health check returns running status" classname="smoke.spec.ts" time="0.007">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › Home page redirects to login when not authenticated" classname="smoke.spec.ts" time="0.688">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › Admin routes require authentication" classname="smoke.spec.ts" time="0.673">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › Login with valid credentials succeeds" classname="smoke.spec.ts" time="1.06">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › Dashboard loads with stats and recent activity" classname="smoke.spec.ts" time="3.369">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › Collections API is accessible and returns data" classname="smoke.spec.ts" time="0.008">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › Create content via backend form" classname="smoke.spec.ts" time="3.354">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › Media upload and cleanup works" classname="smoke.spec.ts" time="0.695">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › Database connectivity via stats query" classname="smoke.spec.ts" time="3.279">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › Recent activity displays content changes" classname="smoke.spec.ts" time="3.245">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › API error handling returns proper status codes" classname="smoke.spec.ts" time="0.013">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › CORS headers are present on API endpoints" classname="smoke.spec.ts" time="0.007">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › API returns correct content-type headers" classname="smoke.spec.ts" time="0.008">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › Session persists across page reloads" classname="smoke.spec.ts" time="0.803">
+</testcase>
+<testcase name="Smoke Tests - Critical Path @smoke › Logout successfully clears session" classname="smoke.spec.ts" time="0.755">
+</testcase>
+</testsuite>
+</testsuites>

@@ -39,7 +39,10 @@ export default defineConfig({
     // Live stats reporter — self-disables when PLAYWRIGHT_STATS_API_KEY is not set
     [resolve(here, './e2e/stats-live-reporter.ts')],
     ...playwrightReporting('cms-e2e', cmsReportingTarget(process.env)),
-    ['@testdino/playwright', { token: process.env.TESTDINO_TOKEN }],
+    // ciRunId groups every shard/lock-group job's results into one TestDino run
+    // instead of each reporting as a separate run (set from CI's TESTDINO_CI_RUN_ID;
+    // undefined locally, which the reporter treats as "no run grouping").
+    ['@testdino/playwright', { token: process.env.TESTDINO_TOKEN, ciRunId: process.env.TESTDINO_CI_RUN_ID }],
   ],
   globalSetup: resolve(here, './e2e/global-setup.ts'),
   globalTeardown: resolve(here, './e2e/global-teardown.ts'),

@@ -733,7 +733,6 @@
   "[\"97-stats-dashboard-fixes.spec.ts\",[\"Stats dashboard data parsing @stats\"],\"/v1/events accepts project_snapshot payload\",\"chromium\",[\"stats\"],90000,\"passed\",[]]",
   "[\"97-stats-dashboard-fixes.spec.ts\",[\"Stats dashboard data parsing @stats\"],\"/v1/events accepts installation_failed with step\",\"chromium\",[\"stats\"],90000,\"passed\",[]]",
   "[\"97-user-edit-dynamic-roles.spec.ts\",[\"User edit — dynamic role dropdown @auth\"],\"user-new form contains admin role option\",\"chromium\",[\"auth\"],90000,\"passed\",[]]",
-  "[\"rbac.spec.ts\",[\"User new — Public role default @auth\"],\"user-new form defaults to Public and allows selecting Admin\",\"chromium\",[\"auth\"],90000,\"passed\",[]]",
   "[\"97-user-edit-dynamic-roles.spec.ts\",[\"User edit — dynamic role dropdown @auth\"],\"user-edit form contains admin role option\",\"chromium\",[\"auth\"],90000,\"passed\",[]]",
   "[\"97-user-edit-dynamic-roles.spec.ts\",[\"User edit — dynamic role dropdown @auth\"],\"custom role created in RBAC appears in user-edit dropdown\",\"chromium\",[\"auth\"],90000,\"passed\",[]]",
   "[\"97-user-edit-dynamic-roles.spec.ts\",[\"User edit — dynamic role dropdown @auth\"],\"custom role created in RBAC appears in user-edit dropdown for existing user\",\"chromium\",[\"auth\"],90000,\"passed\",[]]",

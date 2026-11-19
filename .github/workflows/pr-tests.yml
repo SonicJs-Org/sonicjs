@@ -367,9 +367,13 @@ jobs:
   #     (see plugin-core.spec.ts), which severs the edge and leaves
   #     plugin-multi-tenant genuinely independent.
   #
-  # Net result: 3 true-independent groups, not 5. Still a real win — the combined
-  # auth/plugin-catalog group, the multi-tenant group, and the query-trace group
-  # now run in parallel instead of strictly one after the other.
+  # Net result: 3 serial groups (from 5) — combined auth/plugin-catalog, multi-tenant,
+  # and query-trace. The auth and multi-tenant splits were verified against the
+  # lock-tag co-occurrence graph (see the analysis above). The query-trace group
+  # is isolated by tag (@lock-query-trace appears only in 127-query-trace-plugin.spec.ts)
+  # but its plugin install/uninstall mutations may share global plugin state with
+  # other specs — treat as a separate group for safety rather than a proven
+  # independent group until a full state-overlap check is done.
   #
   # Runs after e2e-shard; running locked tests concurrently with shards causes
   # registration-disabled failures in unrelated Better Auth signup specs.

@@ -47,10 +47,12 @@ async function batchWithRetry(
       const msg = (err as { message?: string })?.message ?? ''
       const isOverloaded = msg.includes('D1 DB is overloaded')
       if (!isOverloaded || attempt === maxAttempts) throw err
-      const delay = baseDelayMs * Math.pow(2, attempt - 1)
+      // Jitter spreads retries across concurrent ingest requests so they
+      // don't all retry at the same instant and re-collide on D1.
+      const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * baseDelayMs
       // eslint-disable-next-line no-console
       console.warn(
-        `[playwright] D1 overloaded — retrying batch (attempt ${attempt}/${maxAttempts}) in ${delay}ms`,
+        `[playwright] D1 overloaded — retrying batch (attempt ${attempt}/${maxAttempts}) in ${Math.round(delay)}ms`,
       )
       // Use globalThis.setTimeout — available in both Workers and Node/vitest.
       await new Promise<void>((r) => { (globalThis as any).setTimeout(r, delay) })
@@ -141,11 +143,15 @@ playwrightIngest.post('/', requirePlaywrightAuth(), async (c) => {
 
     const runTitle = `${runData.project} — ${runData.branch} — ${passed}/${total} passed`
 
-    await db.prepare(
-      `INSERT INTO documents
-         (id, root_id, type_id, is_published, status, title, data, published_at, created_at, updated_at)
-       VALUES (?, ?, 'playwright_runs', 1, 'published', ?, ?, ?, ?, ?)`
-    ).bind(runId, runId, runTitle, JSON.stringify(runData), now, now, now).run()
+    // Insert the run row (also retried on D1 overload so a dangling run-without-tests
+    // is less likely when the DB is under burst pressure from concurrent CI shards).
+    await batchWithRetry(db, [
+      db.prepare(
+        `INSERT INTO documents
+           (id, root_id, type_id, is_published, status, title, data, published_at, created_at, updated_at)
+         VALUES (?, ?, 'playwright_runs', 1, 'published', ?, ?, ?, ?, ?)`
+      ).bind(runId, runId, runTitle, JSON.stringify(runData), now, now, now)
+    ])
 
     // Insert test rows in small batches to stay within D1's per-10s resource budget.
     // The previous limit of 500 caused D1 overload when multiple CI shards ingested

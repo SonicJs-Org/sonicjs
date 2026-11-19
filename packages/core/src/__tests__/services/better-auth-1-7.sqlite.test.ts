@@ -9,7 +9,10 @@
  *   - organization writes match the drizzle schema (startup schema check, NOT NULL updatedAt),
  *     and users cannot create organizations (tenants belong to TenantService);
  *   - an enabled rate limiter has a real store (KV has no atomic increment) and actually limits;
- *   - GHSA-965c-763c-88jm: an OAuth `state` value cannot be redeemed as a magic-link token.
+ *   - GHSA-965c-763c-88jm: an OAuth `state` value cannot be redeemed as a magic-link token;
+ *   - GHSA-2f9c-7xj7-gh55 / GHSA-fvxx-76fc-893x (fixed in 1.7.16): the email OTP attempt limit
+ *     holds under concurrent guesses, and "revoke all sessions" ends a session missing from the
+ *     KV session list.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { hashPassword as baHashPassword } from 'better-auth/crypto'
@@ -297,5 +300,57 @@ describe('GHSA-965c-763c-88jm — OAuth state is not a magic-link token', () => 
     await req('GET', `/magic-link/verify?token=${encodeURIComponent(state!)}&callbackURL=%2Fadmin`, { env: github })
     const row = db.raw.prepare(`SELECT id FROM auth_user WHERE email = 'nobody@sonic.test'`).get()
     expect(row).toBeUndefined()
+  })
+})
+
+describe('GHSA-2f9c-7xj7-gh55 — the email OTP attempt limit holds under concurrent guesses', () => {
+  // Before 1.7.16 check-verification-otp read, compared and wrote the attempt count in separate
+  // steps, so every request in a burst compared its guess against a limit of 3.
+  it('a burst of guesses compares one code, not one per request', async () => {
+    await signUp('race@sonic.test')
+    await req('POST', '/email-otp/send-verification-otp', { body: { email: 'race@sonic.test', type: 'sign-in' } })
+    const otp = /letter-spacing:8px;color:#465FFF">(\d{6})</.exec(mails.at(-1) ?? '')?.[1]
+    expect(otp).toMatch(/^\d{6}$/)
+    const guesses = Array.from({ length: 9 }, (_, i) => String((Number(otp) + i + 1) % 1_000_000).padStart(6, '0'))
+    guesses.push(otp!)
+
+    const results = await Promise.all(
+      guesses.map((g) =>
+        req('POST', '/email-otp/check-verification-otp', { body: { email: 'race@sonic.test', type: 'sign-in', otp: g } }),
+      ),
+    )
+    expect(results.filter((r) => r.body?.success === true).length, 'guesses confirmed correct').toBe(0)
+    const outcomes = results.map((r) => `${r.status} ${r.body?.code}`)
+    for (const o of outcomes) expect(['400 INVALID_OTP', '403 TOO_MANY_ATTEMPTS']).toContain(o)
+    const row = db.raw.prepare(`SELECT value FROM auth_verification WHERE identifier = 'sign-in-otp-race@sonic.test'`).get() as
+      | { value: string }
+      | undefined
+    // The record is deleted only when a request finds the limit already reached.
+    if (row) expect(Number(row.value.split(':').at(-1)), 'guesses compared').toBeLessThanOrEqual(3)
+    else expect(outcomes).toContain('403 TOO_MANY_ATTEMPTS')
+  })
+})
+
+describe('GHSA-fvxx-76fc-893x — revoking all sessions ends every KV session', () => {
+  // KV writes are last-write-wins, so two sign-ins that update `active-sessions-<user>` together
+  // can drop a token from it. Before 1.7.16 revoke-sessions only ended the sessions in that list.
+  it('ends a session whose token was dropped from the KV session list', async () => {
+    await signUp('multi@sonic.test')
+    const a = await req('POST', '/sign-in/email', { body: { email: 'multi@sonic.test', password: PASSWORD } })
+    const b = await req('POST', '/sign-in/email', { body: { email: 'multi@sonic.test', password: PASSWORD } })
+    const tokenB = b.body?.token as string
+    expect(tokenB).toBeTruthy()
+
+    const listKey = [...kv.keys()].find((k) => k.startsWith('active-sessions-'))!
+    const list = JSON.parse(kv.get(listKey)!) as { token: string }[]
+    kv.set(listKey, JSON.stringify(list.filter((e) => e.token !== tokenB)))
+    const before = await req('GET', '/get-session', { cookies: b.cookies })
+    expect(before.body?.session?.token, 'session B valid before the revoke').toBe(tokenB)
+
+    const revoke = await req('POST', '/revoke-sessions', { body: {}, cookies: a.cookies })
+    expect(revoke.status, JSON.stringify(revoke.body)).toBe(200)
+    const after = await req('GET', '/get-session', { cookies: b.cookies })
+    expect(after.status).toBe(200)
+    expect(after.body, 'dropped session still valid after revoke-sessions').toBeNull()
   })
 })

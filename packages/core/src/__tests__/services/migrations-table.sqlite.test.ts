@@ -25,7 +25,7 @@ describe('MigrationService tracking table (real SQLite)', () => {
   it('preserves the default D1 ledger when no options are supplied', async () => {
     const service = new MigrationService(d1)
     const status = await service.getMigrationStatus()
-    expect(status).toMatchObject({ totalMigrations: 7, appliedMigrations: 1, pendingMigrations: 6, lastApplied: '2026-01-01 00:00:00' })
+    expect(status).toMatchObject({ totalMigrations: 8, appliedMigrations: 1, pendingMigrations: 7, lastApplied: '2026-01-01 00:00:00' })
     expect(await service.isMigrationApplied('0001')).toBe(true)
     expect(await service.isMigrationApplied('0002')).toBe(false)
   })
@@ -34,7 +34,7 @@ describe('MigrationService tracking table (real SQLite)', () => {
     const service = new MigrationService(d1, { tableName: 'custom_migration_history' })
     const before = db.raw.serialize()
     const status = await service.getMigrationStatus()
-    expect(status).toMatchObject({ totalMigrations: 7, appliedMigrations: 2, pendingMigrations: 5, lastApplied: '2026-02-02 00:00:00' })
+    expect(status).toMatchObject({ totalMigrations: 8, appliedMigrations: 2, pendingMigrations: 6, lastApplied: '2026-02-02 00:00:00' })
     expect(status.migrations.find(m => m.id === '0002')).toMatchObject({ applied: true, appliedAt: '2026-02-01 00:00:00' })
     expect(await service.isMigrationApplied('0001')).toBe(false)
     expect(await service.isMigrationApplied('0003')).toBe(true)
@@ -45,7 +45,7 @@ describe('MigrationService tracking table (real SQLite)', () => {
   it('does not fall back to another ledger or create a missing configured table', async () => {
     const before = db.raw.serialize()
     const status = await new MigrationService(d1, { tableName: 'missing_history' }).getMigrationStatus()
-    expect(status).toMatchObject({ appliedMigrations: 0, pendingMigrations: 7 })
+    expect(status).toMatchObject({ appliedMigrations: 0, pendingMigrations: 8 })
     expect(status.lastApplied).toBeUndefined()
     expect(db.raw.serialize()).toEqual(before)
   })

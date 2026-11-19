@@ -64,7 +64,7 @@ describe('Factory admin migration status options (real SQLite)', () => {
       expect(response.status).toBe(200)
       const body = await response.json()
       expect(body.success).toBe(true)
-      expect(body.data).toMatchObject({ totalMigrations: 7, appliedMigrations: 2, pendingMigrations: 5, lastApplied: '2026-02-02' })
+      expect(body.data).toMatchObject({ totalMigrations: 8, appliedMigrations: 2, pendingMigrations: 6, lastApplied: '2026-02-02' })
       expect(body.data.migrations.find((m: { id: string }) => m.id === '0001').applied).toBe(false)
       expect(body.data.migrations.filter((m: { applied: boolean }) => m.applied)).toMatchObject([
         { id: '0002', appliedAt: '2026-02-01' },
@@ -80,7 +80,7 @@ describe('Factory admin migration status options (real SQLite)', () => {
       expect(response.status).toBe(200)
       const body = await response.json()
       expect(body.success).toBe(true)
-      expect(body.data).toMatchObject({ totalMigrations: 7, appliedMigrations: 1, pendingMigrations: 6, lastApplied: '2026-01-01' })
+      expect(body.data).toMatchObject({ totalMigrations: 8, appliedMigrations: 1, pendingMigrations: 7, lastApplied: '2026-01-01' })
       expect(body.data.migrations.filter((m: { applied: boolean }) => m.applied)).toMatchObject([
         { id: '0001', appliedAt: '2026-01-01' },
       ])

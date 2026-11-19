@@ -162,7 +162,7 @@ export class DocumentProjection {
     ]
     if (doc.deletedAt == null && doc.visible) {
       const body = this.computeFtsBody(doc, queryableFields)
-      // R5: 10 columns / 10 binds — matches the 10-column documents_fts layout (migration 0003).
+      // R5: 10 columns / 10 binds — matches the 10-column documents_fts layout (migration 0009).
       statements.push(
         this.db
           .prepare(

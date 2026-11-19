@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { Bindings } from '../../../../app'
-import { requireAuth } from '../../../../middleware'
+import { requireAuth, requireRole } from '../../../../middleware'
 import { AISearchService } from '../services/ai-search'
 import { IndexManager } from '../services/indexer'
 import { renderSettingsPage } from '../components/settings-page'
@@ -34,8 +34,9 @@ adminRoutes.get('/fts-settings', async (c) => {
 /**
  * POST /admin/plugins/ai-search/fts-settings
  * Save lexical FTS5 settings and bust the result cache (ranking changed → cache is stale).
+ * Admin-only: settings changes affect all users globally.
  */
-adminRoutes.post('/fts-settings', async (c) => {
+adminRoutes.post('/fts-settings', requireRole(['admin']), async (c) => {
   const kv = (c.env as any).CACHE_KV
   if (!kv) return c.json({ success: false, error: 'CACHE_KV binding not configured' }, 500)
   const body = await c.req.json().catch(() => ({}) as Record<string, unknown>)

@@ -1,5 +1,5 @@
 /**
- * Lexical FTS5 query engine over `documents_fts` (migration 0003).
+ * Lexical FTS5 query engine over `documents_fts` (migration 0009).
  *
  * Ported from infowall's `fts5.service.ts` search path, re-pointed from `content_fts`/`content_id`/
  * `collection_id` to `documents_fts`/`document_id`/`type_id`. BM25 ranking with field boosts +

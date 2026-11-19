@@ -1,7 +1,7 @@
 /**
  * Backfill: populate `documents_fts` for documents written before the FTS projection seam existed,
  * or after an FTS schema rebuild (FTS5 has no ALTER TABLE — a column change drops + recreates the
- * table, see migration 0003). Idempotent: `reindexType` upserts (delete + insert) per row, so
+ * table, see migration 0009). Idempotent: `reindexType` upserts (delete + insert) per row, so
  * re-running is safe. New installs don't need this — the projection indexes from the first write.
  *
  * Run from my-sonicjs-app/:

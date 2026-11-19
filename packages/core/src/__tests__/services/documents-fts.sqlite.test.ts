@@ -1,10 +1,10 @@
 // @ts-nocheck
-// Real-SQLite coverage for the documents_fts FTS5 index (migration 0003).
+// Real-SQLite coverage for the documents_fts FTS5 index (migration 0009).
 // Validates the spike's 10-column layout and the bm25 arity that v1 got wrong.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createTestD1 } from '../utils/d1-sqlite'
 
-describe('documents_fts schema (migration 0003) — real SQLite', () => {
+describe('documents_fts schema (migration 0009) — real SQLite', () => {
   let db
   beforeEach(() => {
     db = createTestD1()

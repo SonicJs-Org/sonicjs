@@ -113,7 +113,7 @@ export class MigrationService {
   }
 
   /**
-   * Ensure the `documents_fts` FTS5 index exists (migration 0005).
+   * Ensure the `documents_fts` FTS5 index exists (migration 0009).
    *
    * Every DocumentsService write folds an unconditional `DELETE FROM documents_fts` into its batch, so
    * the table is a hard dependency of ALL document writes — not just search. An existing install that

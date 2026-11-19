@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 import { loginAsAdmin } from './utils/test-helpers'
 
 /**
@@ -9,7 +9,7 @@ import { loginAsAdmin } from './utils/test-helpers'
  * POST /api/search. This spec drives the full HTTP path: create → publish → search, and the
  * deindex paths (draft excluded, unpublish, delete).
  *
- * Prereq: the local D1 must have migration 0005 applied — `cd my-sonicjs-app && npm run setup:db`.
+ * Prereq: the local D1 must have migration 0009 applied — `cd my-sonicjs-app && npm run setup:db`.
  */
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }

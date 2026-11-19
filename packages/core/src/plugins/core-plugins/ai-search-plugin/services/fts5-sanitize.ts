@@ -21,7 +21,7 @@ const hasLatinLetter = (term: string): boolean => /\p{Script=Latin}/u.test(term)
  * Greek, Arabic, etc. — instead of the old `[a-zA-Z0-9]` ASCII whitelist that
  * reduced non-Latin queries to an empty string (zero lexical results). Diacritics
  * are folded (NFD decomposition + combining-mark removal) so query-side matches
- * the index tokenizer's `remove_diacritics 2` (migration 0003) — e.g. "café"
+ * the index tokenizer's `remove_diacritics 2` (migration 0009) — e.g. "café"
  * matches indexed "cafe" properly instead of by accidental `caf*` prefix.
  *
  * Stop-word + min-length filtering is applied to **Latin-script terms only**:
@@ -40,7 +40,7 @@ export function sanitizeFTS5Query(query: string): string {
   const sanitized = query
     .normalize('NFD')                            // decompose: é → e + ´; ジ → シ + ゙
     .replace(/(\p{Script=Latin})\p{M}+/gu, '$1') // fold diacritics on LATIN bases ONLY — matches the
-                                                 // index's remove_diacritics 2 (migration 0003) while
+                                                 // index's remove_diacritics 2 (migration 0009) while
                                                  // leaving non-Latin marks intact (e.g. the Japanese
                                                  // dakuten — stripping it turns ジ "ji" into シ "shi")
     .normalize('NFC')                            // recompose survivors (シ + ゙ → ジ) so they pass the

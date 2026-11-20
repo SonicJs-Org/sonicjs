@@ -320,7 +320,9 @@ test.describe("Source: 39-ai-search-plugin.spec.ts", () => {
 
       const hit = data.results.find((r) => r.slug === SEEDED.slug)
       expect(hit, `"${SEEDED.title}" was not returned`).toBeTruthy()
-      expect(hit!.title).toBe(SEEDED.title)
+      // FTS5 highlight() wraps matched terms in <mark> tags (consistent with 128-fts5-search.spec.ts).
+      // Strip them before comparing to the raw title.
+      expect(hit!.title.replace(/<\/?mark>/g, '')).toBe(SEEDED.title)
       expect(hit!.collection_id).toBe(SEEDED.collection)
       // Resolved from the collection registry now that there is no collections table to join.
       expect(hit!.collection_name).toBe('Blog Post')
@@ -332,7 +334,8 @@ test.describe("Source: 39-ai-search-plugin.spec.ts", () => {
       expect(hit!.updated_at).toBeGreaterThan(1_600_000_000_000)
 
       // The snippet is prose pulled from the document's string values — not its JSON envelope.
-      expect(hit!.snippet).toContain(SEEDED.title)
+      // FTS5 snippet() also inserts <mark> tags around matched terms; strip them before the plain-text check.
+      expect(hit!.snippet!.replace(/<\/?mark>/g, '')).toContain(SEEDED.title)
       expect(hit!.snippet).not.toContain('{"')
     })
 

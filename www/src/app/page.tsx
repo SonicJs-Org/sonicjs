@@ -2,6 +2,41 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { CopyCommand } from '@/components/CopyCommand'
 
+export const revalidate = 3600 // refresh community stats every hour
+
+async function getGitHubStars(): Promise<number> {
+  try {
+    const res = await fetch('https://api.github.com/repos/SonicJs-Org/sonicjs', {
+      next: { revalidate: 3600 },
+      headers: { Accept: 'application/vnd.github.v3+json' },
+    })
+    if (!res.ok) return 0
+    const data = (await res.json()) as { stargazers_count: number }
+    return data.stargazers_count ?? 0
+  } catch {
+    return 0
+  }
+}
+
+async function getDiscordMembers(): Promise<number> {
+  try {
+    const res = await fetch(
+      'https://discord.com/api/v9/invites/8bMy6bv3sZ?with_counts=true',
+      { next: { revalidate: 3600 } },
+    )
+    if (!res.ok) return 0
+    const data = (await res.json()) as { approximate_member_count: number }
+    return data.approximate_member_count ?? 0
+  } catch {
+    return 0
+  }
+}
+
+function formatStars(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
+}
+
 function GridBackdrop({ patternId }: { patternId: string }) {
   return (
     <svg
@@ -107,7 +142,10 @@ const ICONS = {
     'M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99',
 }
 
-export default function HomePage() {
+export default async function HomePage() {
+  const [stars, discordMembers] = await Promise.all([getGitHubStars(), getDiscordMembers()])
+  const starsLabel = stars > 0 ? formatStars(stars) : '1.8k'
+  const membersLabel = discordMembers > 0 ? `${discordMembers}+` : '270+'
   return (
     <div className="bg-gray-900">
       {/* ── Hero ── */}
@@ -165,8 +203,11 @@ export default function HomePage() {
                 href="https://github.com/SonicJs-Org/sonicjs"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm/6 font-semibold text-white no-underline"
+                className="inline-flex items-center gap-2 text-sm/6 font-semibold text-white no-underline"
               >
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium ring-1 ring-white/20">
+                  ⭐ {starsLabel}
+                </span>
                 Star on GitHub <span aria-hidden="true">→</span>
               </Link>
             </div>
@@ -829,7 +870,7 @@ GET /api/products?category=electronics&sort=-price&limit=20`}</pre>
                 d="M10 1.667c-4.605 0-8.334 3.823-8.334 8.544 0 3.78 2.385 6.974 5.698 8.106.417.075.573-.182.573-.406 0-.203-.011-.875-.011-1.592-2.093.397-2.635-.522-2.802-1.002-.094-.246-.5-1.005-.854-1.207-.291-.16-.708-.556-.01-.567.656-.01 1.124.62 1.281.876.75 1.292 1.948.93 2.427.705.073-.555.291-.93.531-1.143-1.854-.213-3.791-.95-3.791-4.218 0-.929.322-1.698.854-2.296-.083-.214-.375-1.09.083-2.265 0 0 .698-.224 2.292.876a7.576 7.576 0 0 1 2.083-.288c.709 0 1.417.096 2.084.288 1.593-1.11 2.291-.875 2.291-.875.459 1.174.167 2.05.084 2.263.53.599.854 1.357.854 2.297 0 3.278-1.948 4.005-3.802 4.219.302.266.563.78.563 1.58 0 1.143-.011 2.061-.011 2.35 0 .224.156.491.573.405a8.365 8.365 0 0 0 4.11-3.116 8.707 8.707 0 0 0 1.567-4.99c0-4.721-3.73-8.545-8.334-8.545Z"
               />
             </svg>
-            Open Source · MIT License
+            Open Source · MIT · ⭐ {starsLabel}
           </Link>
           <Link
             href="https://discord.gg/8bMy6bv3sZ"
@@ -837,7 +878,7 @@ GET /api/products?category=electronics&sort=-price&limit=20`}</pre>
             rel="noopener noreferrer"
             className="flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-gray-300 ring-1 ring-white/10 transition hover:bg-white/5 hover:text-white no-underline"
           >
-            Discord Community
+            Discord · {membersLabel} members
           </Link>
           <span className="flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-gray-300 ring-1 ring-white/10">
             Built on Cloudflare Workers

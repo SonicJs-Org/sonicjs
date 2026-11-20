@@ -61,28 +61,10 @@ adminRoutes.get('/', async (c) => {
   const db = c.env.DB
   const user = c.get('user')
 
-  const [
-    weeklyFunnelR,
-    eventTotalsR,
-    installTotalsR,
-    newInstallsR,
-    lifespanR,
-    osR,
-    nodeR,
-    templateR,
-    installFailR,
-    runtimeErrR,
-    snapshotCollectionsR,
-    snapshotPluginsR,
-    snapshotFieldTypesR,
-    snapshotVersionR,
-    snapshotDocVolumeR,
-    snapshotCountR,
-    countryR,
-    demoLoginDailyR,
-    demoLoginTotalR,
-    deployUrlsR,
-  ] = await Promise.all([
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let queryResults: any[]
+  try {
+    queryResults = await Promise.all([
     // 1. Weekly funnel: started/completed/failed counts per week (keyed to Monday date)
     db.prepare(
       `SELECT date(datetime(created_at, 'unixepoch'), '-' || CAST((strftime('%w', datetime(created_at, 'unixepoch')) + 6) % 7 AS TEXT) || ' days') AS week,
@@ -172,6 +154,7 @@ adminRoutes.get('/', async (c) => {
        FROM documents, json_each(json(json_extract(data,'$.properties.collection_names')))
        WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
          AND json_extract(data,'$.properties.collection_names') IS NOT NULL
+         AND created_at >= unixepoch('now', '-30 days')
        GROUP BY value ORDER BY snapshot_count DESC`
     ).all(),
     // 12. Top plugins from project_snapshot — latest snapshot per installation
@@ -181,6 +164,7 @@ adminRoutes.get('/', async (c) => {
                 json_extract(data,'$.properties.active_plugins') AS plugins_json
          FROM documents
          WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+           AND created_at >= unixepoch('now', '-30 days')
          GROUP BY json_extract(data,'$.properties.installation_id')
          HAVING created_at = MAX(created_at)
        )
@@ -193,6 +177,7 @@ adminRoutes.get('/', async (c) => {
       `SELECT key AS field_type, SUM(CAST(value AS INTEGER)) AS total_fields
        FROM documents, json_each(json(json_extract(data,'$.properties.field_type_histogram')))
        WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+         AND created_at >= unixepoch('now', '-30 days')
        GROUP BY key ORDER BY total_fields DESC`
     ).all(),
     // 14. SonicJS version distribution across reporting installations
@@ -200,6 +185,7 @@ adminRoutes.get('/', async (c) => {
       `SELECT COALESCE(json_extract(data,'$.properties.sonicjs_version'),'unknown') AS version,
               COUNT(DISTINCT json_extract(data,'$.properties.installation_id')) AS installations
        FROM documents WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+         AND created_at >= unixepoch('now', '-30 days')
        GROUP BY version ORDER BY installations DESC LIMIT 15`
     ).all(),
     // 15. Doc volume distribution (latest snapshot per installation, bucketed)
@@ -214,6 +200,7 @@ adminRoutes.get('/', async (c) => {
          FROM (
            SELECT CAST(json_extract(data,'$.properties.doc_total') AS INTEGER) AS n
            FROM documents WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+             AND created_at >= unixepoch('now', '-30 days')
            GROUP BY json_extract(data,'$.properties.installation_id')
            HAVING created_at = MAX(created_at)
          )
@@ -222,7 +209,8 @@ adminRoutes.get('/', async (c) => {
     // 16. Distinct installations reporting via project_snapshot
     db.prepare(
       `SELECT COUNT(DISTINCT json_extract(data,'$.properties.installation_id')) AS count
-       FROM documents WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'`
+       FROM documents WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
+         AND created_at >= unixepoch('now', '-30 days')`
     ).first(),
     // 17. Country distribution (CF-IPCountry) across all events
     db.prepare(
@@ -249,9 +237,54 @@ adminRoutes.get('/', async (c) => {
        FROM documents WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
          AND json_extract(data,'$.properties.deploy_url') IS NOT NULL
          AND json_extract(data,'$.properties.deploy_url') != 'null'
+         AND created_at >= unixepoch('now', '-30 days')
        GROUP BY url ORDER BY snapshots DESC`
     ).all(),
   ])
+  } catch (err) {
+    console.error('[stats-dashboard] DB error loading dashboard:', err)
+    return c.html(
+      renderAdminLayoutCatalyst({
+        title: 'Dashboard',
+        pageTitle: 'Stats Dashboard',
+        currentPath: '/admin/dashboard',
+        version: c.get('appVersion'),
+        user: user
+          ? { name: user.email.split('@')[0] || 'Admin', email: user.email, role: user.role }
+          : undefined,
+        content: `<div class="py-16 text-center">
+          <p class="text-lg font-semibold text-red-600 dark:text-red-400">Database temporarily unavailable</p>
+          <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Please refresh the page to try again.</p>
+          <button onclick="location.reload()" class="mt-4 inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">Refresh</button>
+        </div>`,
+        dynamicMenuItems: getMergedMenuItems(c),
+      }),
+      500
+    )
+  }
+
+  const [
+    weeklyFunnelR,
+    eventTotalsR,
+    installTotalsR,
+    newInstallsR,
+    lifespanR,
+    osR,
+    nodeR,
+    templateR,
+    installFailR,
+    runtimeErrR,
+    snapshotCollectionsR,
+    snapshotPluginsR,
+    snapshotFieldTypesR,
+    snapshotVersionR,
+    snapshotDocVolumeR,
+    snapshotCountR,
+    countryR,
+    demoLoginDailyR,
+    demoLoginTotalR,
+    deployUrlsR,
+  ] = queryResults
 
   // ── Funnel aggregation ──────────────────────────────────────────────────
   const funnelRows = rowsOf(weeklyFunnelR) as { week: string; event_type: string; count: number }[]
@@ -509,7 +542,7 @@ adminRoutes.get('/', async (c) => {
   <div class="flex items-center justify-between">
     <div>
       <h2 class="text-xl font-semibold text-zinc-950 dark:text-white">What People Build</h2>
-      <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">From <code>project_snapshot</code> heartbeats — emitted on every SonicJS cold start (v3.0.0-beta.8+)</p>
+      <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">From <code>project_snapshot</code> heartbeats — last 30 days (emitted on every SonicJS cold start, v3.0.0-beta.8+)</p>
     </div>
     <div class="text-right">
       <p class="text-2xl font-semibold text-indigo-600 dark:text-indigo-400">${snapshotInstallations.toLocaleString()}</p>

@@ -1,0 +1,41 @@
+name = "sonicjs-client-backend"
+main = "src/index.ts"
+compatibility_date = "2025-05-05"
+compatibility_flags = ["nodejs_compat"]
+
+account_id = "f9d6328dc3115e621758a741dda3d5c4"
+
+# Custom domain handled via Cloudflare DNS (client-backend.sonicjs.com → sonicjs-client-backend worker)
+workers_dev = false
+routes = [
+  { pattern = "client-backend.sonicjs.com/*", zone_name = "sonicjs.com" }
+]
+
+# D1 Database — shared with sonicjs-demo (same content, same schema)
+[[d1_databases]]
+binding = "DB"
+database_name = "sonicjs-demo"
+database_id = "dc87c94a-14e2-4bc1-a77c-ab382191e7a9"
+migrations_dir = "./migrations"
+
+# R2 Bucket for media storage — shared with sonicjs-demo
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "sonicjs-demo-media"
+
+# KV Cache — isolated from sonicjs-demo so caching can be tuned independently
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "fa15ce6927af43af9149e926631d7ad5"
+
+# Environment variables
+[vars]
+ENABLE_SEED_ADMIN = "true"
+ENVIRONMENT = "demo"
+CORS_ORIGINS = "https://client.sonicjs.com,https://client-backend.sonicjs.com"
+DEFAULT_FROM_EMAIL = "demo@sonicjs.com"
+BETTER_AUTH_SECRET = "sonicjs-demo-secret-not-for-prod!"
+
+# Observability
+[observability]
+enabled = true

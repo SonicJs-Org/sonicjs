@@ -40,10 +40,10 @@ jobs:
       - name: Build demo
         run: cd demos/employee-directory && npm run build
         env:
-          VITE_CMS_URL: ${{ secrets.DEMO_CMS_URL }}
+          VITE_CMS_URL: https://client-backend.sonicjs.com
 
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler pages deploy demos/employee-directory/dist --project-name sonicjs-sdk-demo --branch main
+        run: npx wrangler pages deploy demos/employee-directory/dist --project-name sonicjs-client-directory --branch main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

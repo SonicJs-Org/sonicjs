@@ -726,6 +726,13 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
   app.route('/api', apiRoutes)
+
+  // /api/v1/* — backwards-compat alias so older clients that hard-code the
+  // v1 prefix keep working.  Mirror the same sub-router ordering as /api/*.
+  app.route('/api/v1/media', apiMediaRoutes)
+  app.route('/api/v1/system', apiSystemRoutes)
+  app.route('/api/v1/documents', apiDocumentsRoutes)
+  app.route('/api/v1', apiRoutes)
   app.route('/admin/documents', adminDocumentsRoutes)
 
 

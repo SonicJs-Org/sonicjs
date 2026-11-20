@@ -74,13 +74,11 @@ adminRoutes.get('/', async (c) => {
          AND json_extract(data,'$.event_type') IN ('installation_started','installation_completed','installation_failed')
        GROUP BY week, event_type ORDER BY week DESC LIMIT 156`
     ).all(),
-    // 2. Event totals
+    // 2. Event totals — use separate subqueries so the new composite index is used per event_type
     db.prepare(
-      `SELECT COUNT(*) AS total_events,
-              COUNT(DISTINCT json_extract(data,'$.installation_id')) AS unique_installs,
-              SUM(CASE WHEN json_extract(data,'$.event_type')='installation_failed' THEN 1 ELSE 0 END) AS failures,
-              SUM(CASE WHEN json_extract(data,'$.event_type')='error_occurred' THEN 1 ELSE 0 END) AS runtime_errors
-       FROM documents WHERE ${EVENTS_WHERE}`
+      `SELECT
+         (SELECT COUNT(*) FROM documents WHERE type_id='events' AND tenant_id='default' AND is_published=1 AND deleted_at IS NULL AND json_extract(data,'$.event_type')='installation_failed') AS failures,
+         (SELECT COUNT(*) FROM documents WHERE type_id='events' AND tenant_id='default' AND is_published=1 AND deleted_at IS NULL AND json_extract(data,'$.event_type')='error_occurred') AS runtime_errors`
     ).first(),
     // 3. Install totals + active/churned (last_seen recency) + multi-session
     db.prepare(
@@ -212,10 +210,11 @@ adminRoutes.get('/', async (c) => {
        FROM documents WHERE ${EVENTS_WHERE} AND json_extract(data,'$.event_type')='project_snapshot'
          AND created_at >= unixepoch('now', '-30 days')`
     ).first(),
-    // 17. Country distribution (CF-IPCountry) across all events
+    // 17. Country distribution (CF-IPCountry) — last 30 days to avoid full table scan
     db.prepare(
       `SELECT COALESCE(json_extract(data,'$.country'),'unknown') AS country, COUNT(DISTINCT json_extract(data,'$.installation_id')) AS installs
        FROM documents WHERE ${EVENTS_WHERE}
+         AND created_at >= unixepoch('now', '-30 days')
        GROUP BY country ORDER BY installs DESC LIMIT 30`
     ).all(),
     // 18. Daily demo login counts (last 30 days)
@@ -430,7 +429,7 @@ adminRoutes.get('/', async (c) => {
 
   <!-- KPI row -->
   <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-    ${kpi('Total Installs', totalInstalls.toLocaleString(), `${Number(et.unique_installs ?? 0).toLocaleString()} unique IDs`)}
+    ${kpi('Total Installs', totalInstalls.toLocaleString(), `${multiSession.toLocaleString()} multi-session`)}
     ${kpi('Active (30d)', active30.toLocaleString(), `${active7.toLocaleString()} in last 7d`, 'text-emerald-600 dark:text-emerald-400')}
     ${kpi('Churned', churned.toLocaleString(), `${churnRate}% inactive >30d`, 'text-amber-600 dark:text-amber-400')}
     ${kpi('Completion', completionRate + '%', `${totCompleted.toLocaleString()} / ${totStarted.toLocaleString()} started`, completionRate >= 50 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400')}

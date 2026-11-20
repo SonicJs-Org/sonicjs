@@ -441,7 +441,7 @@ export class AISearchService {
         title: h.title || 'Untitled',
         slug: h.slug,
         collection_id: h.typeId,
-        collection_name: h.typeId,
+        collection_name: getCollectionRegistry().getById(h.typeId)?.displayName ?? h.typeId,
         snippet: h.snippet,
         relevance_score: h.score,
         status: h.status,

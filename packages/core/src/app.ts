@@ -725,14 +725,16 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/api/media', apiMediaRoutes)
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
-  app.route('/api', apiRoutes)
 
-  // /api/v1/* — backwards-compat alias so older clients that hard-code the
-  // v1 prefix keep working.  Mirror the same sub-router ordering as /api/*.
+  // /api/v1/* — backwards-compat alias.  MUST be registered before the bare
+  // /api router below, whose /:collection wildcard otherwise matches the path
+  // segment "v1" and returns 404 "Collection not found".
   app.route('/api/v1/media', apiMediaRoutes)
   app.route('/api/v1/system', apiSystemRoutes)
   app.route('/api/v1/documents', apiDocumentsRoutes)
   app.route('/api/v1', apiRoutes)
+
+  app.route('/api', apiRoutes)
   app.route('/admin/documents', adminDocumentsRoutes)
 
 

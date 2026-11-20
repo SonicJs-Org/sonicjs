@@ -38,7 +38,26 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy demo CMS to Cloudflare Workers
-        run: cd my-sonicjs-app && npx wrangler deploy --config wrangler.demo.toml
+        run: |
+          cd my-sonicjs-app
+          if ! OUTPUT=$(npx wrangler deploy --config wrangler.demo.toml 2>&1); then
+            echo "$OUTPUT"
+            # The token may lack Zone > Workers Routes > Edit permission, which causes wrangler
+            # to exit non-zero after a successful worker upload.  The route already exists, so
+            # the worker IS live — treat this specific error as a warning, not a failure.
+            # Only suppress the error when BOTH conditions hold:
+            #   1. The worker was actually uploaded ("Uploaded sonicjs-demo")
+            #   2. The only error is the route-registration permission failure
+            if echo "$OUTPUT" | grep -q "Uploaded sonicjs-demo" && \
+               echo "$OUTPUT" | grep -q "No access to the specified resource"; then
+              echo "⚠️  Worker uploaded successfully but route registration failed."
+              echo "   Grant 'Zone > Workers Routes > Edit' on the CLOUDFLARE_API_TOKEN secret to fully resolve."
+            else
+              exit 1
+            fi
+          else
+            echo "$OUTPUT"
+          fi
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

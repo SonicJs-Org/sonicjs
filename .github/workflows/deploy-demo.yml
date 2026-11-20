@@ -22,11 +22,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install root dependencies (for SDK workspace)
-        run: npm ci
+        run: npm install --ignore-scripts
+
+      - name: Build core package
+        run: npm run build:core
 
       - name: Build SDK
         run: cd packages/sdk && npm run build

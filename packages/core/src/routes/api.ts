@@ -200,7 +200,7 @@ function parseFieldsParam(raw: string | undefined): string[] {
   if (!raw) return []
   return raw.split(',').map(s => s.trim()).filter(Boolean)
 }
-import apiContentCrudRoutes, { resolveDocBacking, slugify } from './api-content-crud'
+import apiContentCrudRoutes, { resolveDocBacking, slugify, denyContentWrite } from './api-content-crud'
 import type { Bindings, Variables as AppVariables } from '../app'
 
 // Extend Variables with API-specific fields
@@ -1305,6 +1305,9 @@ apiRoutes.post('/:collection', requireAuth(), requireRole(['admin', 'editor', 'a
 
     const backing = await resolveDocBacking(db, collection!)
     if (!backing) return c.json({ error: 'Collection not found' }, 404)
+    const publishing = (status || 'draft') === 'published'
+    const denied = await denyContentWrite(c, db, backing.docType, '', publishing ? ['create', 'publish'] : ['create'], true)
+    if (denied) return denied
 
     let finalSlug = slugify(slug || title) || title.toLowerCase().replace(/\s+/g, '-')
 
@@ -1324,7 +1327,7 @@ apiRoutes.post('/:collection', requireAuth(), requireRole(['admin', 'editor', 'a
     }
 
     const svc = new DocumentsService(db, { queryableFields: backing.docType.queryableFields ?? [], typeSchemaVersion: backing.docType.schemaVersion ?? 1, maxVersionsPerRoot: backing.docType.settings?.maxVersionsPerRoot ?? 50, tenantId: 'default', versioning: backing.docType.settings?.versioning ?? false })
-    const doc = await svc.create(createDocumentSchema.parse({ typeId: backing.coll.name, tenantId: 'default', locale: 'default', title, slug: finalSlug, data: hookData, publishOnCreate: (status || 'draft') === 'published' }), user?.userId)
+    const doc = await svc.create(createDocumentSchema.parse({ typeId: backing.coll.name, tenantId: 'default', locale: 'default', title, slug: finalSlug, data: hookData, publishOnCreate: publishing }), user?.userId)
 
     const cache = getCacheService(CACHE_CONFIGS.api!)
     // Deliberately no SWR stash here — `getAndConsumeStale` would hand the value this write
@@ -1358,6 +1361,13 @@ apiRoutes.put('/:collection/:id', requireAuth(), requireRole(['admin', 'editor',
       .first() as any
     if (!docRow) return c.json({ error: 'Content not found' }, 404)
 
+    const docType = await new DocumentTypeRegistry(db).findById(docRow.type_id)
+    const pub = await db.prepare("SELECT id FROM documents WHERE root_id = ? AND is_published = 1 AND tenant_id = 'default'").bind(id).first() as any
+    // Republishing (no status on a published doc) and unpublishing both change the live row.
+    const publishing = body.status === 'published' || (body.status === undefined && !!pub) || (body.status === 'draft' && !!pub)
+    const denied = await denyContentWrite(c, db, docType, id!, publishing ? ['update', 'publish'] : ['update'], true)
+    if (denied) return denied
+
     const actor: HookActor | undefined = user ? { id: user.userId, email: user.email ?? '', role: user.role } : undefined
     let hookData = body.data
     try {
@@ -1367,14 +1377,12 @@ apiRoutes.put('/:collection/:id', requireAuth(), requireRole(['admin', 'editor',
       return c.json({ error: 'Write cancelled by plugin', details: String(err) }, 400)
     }
 
-    const docType = await new DocumentTypeRegistry(db).findById(docRow.type_id)
     const svc = new DocumentsService(db, { queryableFields: docType?.queryableFields ?? [], typeSchemaVersion: docType?.schemaVersion ?? 1, maxVersionsPerRoot: docType?.settings?.maxVersionsPerRoot ?? 50, tenantId: 'default', versioning: docType?.settings?.versioning ?? false })
     const input: any = {}
     if (body.title !== undefined) input.title = body.title
     if (body.slug !== undefined) input.slug = slugify(body.slug)
     if (hookData !== undefined) input.data = hookData
     const newDraft = await svc.saveDraft(id!, input, user?.userId)
-    const pub = await db.prepare("SELECT id FROM documents WHERE root_id = ? AND is_published = 1 AND tenant_id = 'default'").bind(id).first() as any
     const wasPublished = !!pub
     if (body.status === 'published' || (body.status === undefined && pub)) {
       await svc.publish(newDraft.id, user?.userId)
@@ -1414,6 +1422,8 @@ apiRoutes.delete('/:collection/:id', requireAuth(), requireRole(['admin', 'edito
     const typeName = collRecord?.name ?? collection!
     const docRow = await db.prepare("SELECT type_id FROM documents WHERE root_id = ? AND type_id = ? AND tenant_id = 'default' AND deleted_at IS NULL LIMIT 1").bind(id, typeName).first() as any
     if (!docRow) return c.json({ error: 'Content not found' }, 404)
+    const denied = await denyContentWrite(c, db, await new DocumentTypeRegistry(db).findById(docRow.type_id), id!, ['delete'], true)
+    if (denied) return denied
 
     const actor: HookActor | undefined = user ? { id: user.userId, email: user.email ?? '', role: user.role } : undefined
     try {

@@ -45,7 +45,11 @@ jobs:
             # The token may lack Zone > Workers Routes > Edit permission, which causes wrangler
             # to exit non-zero after a successful worker upload.  The route already exists, so
             # the worker IS live — treat this specific error as a warning, not a failure.
-            if echo "$OUTPUT" | grep -q "No access to the specified resource"; then
+            # Only suppress the error when BOTH conditions hold:
+            #   1. The worker was actually uploaded ("Uploaded sonicjs-demo")
+            #   2. The only error is the route-registration permission failure
+            if echo "$OUTPUT" | grep -q "Uploaded sonicjs-demo" && \
+               echo "$OUTPUT" | grep -q "No access to the specified resource"; then
               echo "⚠️  Worker uploaded successfully but route registration failed."
               echo "   Grant 'Zone > Workers Routes > Edit' on the CLOUDFLARE_API_TOKEN secret to fully resolve."
             else

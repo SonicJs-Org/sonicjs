@@ -32,7 +32,7 @@ id = "91de57b1e6af4cef8bb6a2786179bc14"
 [vars]
 ENABLE_SEED_ADMIN = "true"
 ENVIRONMENT = "demo"
-CORS_ORIGINS = "https://demo.sonicjs.com"
+CORS_ORIGINS = "https://demo.sonicjs.com,https://client.sonicjs.com"
 DEFAULT_FROM_EMAIL = "demo@sonicjs.com"
 BETTER_AUTH_SECRET = "sonicjs-demo-secret-not-for-prod!"
 

@@ -10,6 +10,7 @@ import { Filters } from './components/Filters'
 import { Pagination } from './components/Pagination'
 import { SpeedBadge } from './components/SpeedBadge'
 import { CodeSnippet } from './components/CodeSnippet'
+import { StatsBar } from './components/StatsBar'
 
 const PAGE_SIZE = 18
 
@@ -144,7 +145,7 @@ export function App() {
             </div>
             <div className="min-w-0">
               <h1 className="text-white font-semibold text-sm sm:text-base leading-tight">
-                SonicJS SDK Demo
+                SonicJS Speed Demo
               </h1>
               <p className="text-slate-500 text-xs hidden sm:block">
                 Employee Directory
@@ -155,6 +156,8 @@ export function App() {
           <SpeedBadge ms={responseMs} source={cacheSource} edgeMode={edgeMode} onToggle={handleEdgeToggle} onRefresh={() => fetchEmployees(page, filters, !edgeMode)} loading={loading} />
         </div>
       </header>
+
+      <StatsBar ms={responseMs} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
         {/* Sidebar */}

@@ -1,0 +1,16 @@
+name = "sonicjs-employee-directory-frontend"
+main = "src/frontend-proxy.ts"
+compatibility_date = "2025-05-05"
+
+account_id = "f9d6328dc3115e621758a741dda3d5c4"
+
+workers_dev = false
+routes = [
+  { pattern = "employee-directory.sonicjs.com/*", zone_name = "sonicjs.com" }
+]
+
+[vars]
+PAGES_URL = "https://edgecache-demo.pages.dev"
+
+[observability]
+enabled = true

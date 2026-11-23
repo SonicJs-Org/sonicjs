@@ -5,10 +5,10 @@ compatibility_flags = ["nodejs_compat"]
 
 account_id = "f9d6328dc3115e621758a741dda3d5c4"
 
-# Custom domain handled via Cloudflare DNS (client-backend.sonicjs.com → sonicjs-client-backend worker)
+# Custom domain handled via Cloudflare DNS
 workers_dev = false
 routes = [
-  { pattern = "client-backend.sonicjs.com/*", zone_name = "sonicjs.com" }
+  { pattern = "employee-directory-backend.sonicjs.com/*", zone_name = "sonicjs.com" }
 ]
 
 # D1 Database — shared with sonicjs-demo (same content, same schema)
@@ -32,7 +32,7 @@ id = "fa15ce6927af43af9149e926631d7ad5"
 [vars]
 ENABLE_SEED_ADMIN = "true"
 ENVIRONMENT = "demo"
-CORS_ORIGINS = "https://client.sonicjs.com,https://client-backend.sonicjs.com"
+CORS_ORIGINS = "https://employee-directory.sonicjs.com"
 DEFAULT_FROM_EMAIL = "demo@sonicjs.com"
 BETTER_AUTH_SECRET = "sonicjs-demo-secret-not-for-prod!"
 

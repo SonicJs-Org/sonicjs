@@ -5,6 +5,7 @@ interface Props {
   deptOptions: FilterOption[]
   regionOptions: FilterOption[]
   onChange: (f: FilterState) => void
+  horizontal?: boolean
 }
 
 function FilterGroup({ label, options, active, onSelect, renderLabel }: {
@@ -15,8 +16,8 @@ function FilterGroup({ label, options, active, onSelect, renderLabel }: {
   renderLabel: (o: FilterOption) => string
 }) {
   return (
-    <div>
-      <p className="text-xs text-slate-400 mb-2 uppercase tracking-wider">{label}</p>
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs text-slate-500 uppercase tracking-wider shrink-0">{label}:</span>
       <div className="flex flex-wrap gap-1.5">
         <button
           onClick={() => onSelect('')}
@@ -48,17 +49,14 @@ function FilterGroup({ label, options, active, onSelect, renderLabel }: {
 
 export function Filters({ filters, deptOptions, regionOptions, onChange }: Props) {
   return (
-    <div className="bg-slate-900 border border-white/10 rounded-xl p-4 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Filters</h2>
-
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
       <FilterGroup
-        label="Department"
+        label="Dept"
         options={deptOptions}
         active={filters.department}
         onSelect={(id) => onChange({ ...filters, department: id })}
         renderLabel={(o) => `${o.icon ? o.icon + ' ' : ''}${o.name}`}
       />
-
       <FilterGroup
         label="Region"
         options={regionOptions}
@@ -66,13 +64,12 @@ export function Filters({ filters, deptOptions, regionOptions, onChange }: Props
         onSelect={(id) => onChange({ ...filters, region: id })}
         renderLabel={(o) => `${o.flag ? o.flag + ' ' : ''}${o.name}`}
       />
-
       {(filters.department || filters.region) && (
         <button
           onClick={() => onChange({ department: '', region: '' })}
-          className="w-full text-xs text-slate-400 hover:text-white border border-white/10 rounded-lg py-1.5 transition-colors"
+          className="text-xs text-slate-400 hover:text-white border border-white/10 rounded-lg px-3 py-1 transition-colors"
         >
-          Clear filters
+          Clear
         </button>
       )}
     </div>

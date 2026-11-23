@@ -16,12 +16,18 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5199,
-      ...(backendUrl ? {
-        proxy: {
-          '/api': { target: backendUrl, changeOrigin: true },
-          '/v1': { target: backendUrl, changeOrigin: true },
+      proxy: {
+        // Proxy Payload API to avoid CORS in dev
+        '/payload-api': {
+          target: 'https://payload.sonicjs.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/payload-api/, '/api'),
         },
-      } : {}),
+        ...(backendUrl ? {
+          '/api': { target: backendUrl, changeOrigin: true },
+          '/v1':  { target: backendUrl, changeOrigin: true },
+        } : {}),
+      },
     },
   }
 })

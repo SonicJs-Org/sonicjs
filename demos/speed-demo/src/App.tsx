@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sonic, sonicOrigin, useMock } from './lib/client'
 import { fetchPayloadEmployees } from './lib/payload-client'
-import { toggleEdgeMode } from './lib/mock-data'
 import type {
   EmployeeRecord, DepartmentRecord, RegionRecord,
   DeptMap, RegionMap, FilterOption, FilterState,
@@ -53,7 +52,7 @@ export function App() {
   const [sonicLoading, setSonicLoading] = useState(false)
   const [sonicMs, setSonicMs] = useState<number | null>(null)
   const [cacheSource, setCacheSource] = useState<string | null>(null)
-  const [edgeMode, setEdgeMode] = useState(true)
+  const edgeMode = true  // always edge; no toggle in comparison view
   const [pageCount, setPageCount] = useState(0)
   const [hasNextPage, setHasNextPage] = useState(false)
   const [page, setPage] = useState(0)
@@ -105,10 +104,6 @@ export function App() {
     loadRefs().catch(console.error)
   }, [])
 
-  const handleEdgeToggle = (v: boolean) => {
-    setEdgeMode(v)
-    if (useMock) toggleEdgeMode(v)
-  }
   const fetchAllTimed = useCallback(
     async (currentPage: number, currentFilters: FilterState, bypassCache = false) => {
       setSonicMs(null)

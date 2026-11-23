@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'demos/employee-directory/**'
+      - 'demos/speed-demo/**'
       - 'packages/sdk/src/**'
       - '.github/workflows/deploy-demo.yml'
   workflow_dispatch:
@@ -35,15 +35,15 @@ jobs:
         run: cd packages/sdk && npm run build
 
       - name: Install demo dependencies
-        run: cd demos/employee-directory && npm ci
+        run: cd demos/speed-demo && npm ci
 
       - name: Build demo
-        run: cd demos/employee-directory && npm run build
+        run: cd demos/speed-demo && npm run build
         env:
           VITE_CMS_URL: https://employee-directory-backend.sonicjs.com
 
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler pages deploy demos/employee-directory/dist --project-name sonicjs-client-directory --branch main
+        run: npx wrangler pages deploy demos/speed-demo/dist --project-name sonicjs-client-directory --branch main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

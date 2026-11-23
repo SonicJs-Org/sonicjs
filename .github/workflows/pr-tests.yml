@@ -374,7 +374,7 @@ jobs:
   #     (see plugin-core.spec.ts), which severs the edge and leaves
   #     plugin-multi-tenant genuinely independent.
   #
-  # Net result: 3 serial groups (from 5) — combined auth/plugin-catalog, multi-tenant,
+  # Net result: 4 serial groups (from 5) — combined auth/plugin-catalog, multi-tenant,
   # and query-trace. The auth and multi-tenant splits were verified against the
   # lock-tag co-occurrence graph (see the analysis above). The query-trace group
   # is isolated by tag (@lock-query-trace appears only in 127-query-trace-plugin.spec.ts)
@@ -401,6 +401,8 @@ jobs:
             lock_grep: '@lock-plugin-multi-tenant'
           - lock_group: plugin-query-trace
             lock_grep: '@lock-query-trace'
+          - lock_group: plugin-core-cache
+            lock_grep: '@lock-core-cache'
     env:
       BASE_URL: ${{ needs.e2e-setup.outputs.base_url }}
       E2E_RUN_KEY: ${{ needs.e2e-setup.outputs.e2e_run_key }}

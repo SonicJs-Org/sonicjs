@@ -606,7 +606,7 @@ test.describe("Source: 1223-plugin-boolean-settings-persist.spec.ts", () => {
   // boolean toggle OFF was silently dropped — the backend merge then restored
   // the previous true value. The fix adds a second DOM pass that explicitly
   // captures every checkbox's .checked state regardless of FormData inclusion.
-  test.describe('Plugin boolean settings persist when toggled off (issue #1223) @plugins', () => {
+  test.describe('Plugin boolean settings persist when toggled off (issue #1223) @plugins @lock-core-cache', () => {
     test.beforeEach(async ({ page }) => {
       await loginAsAdmin(page)
       // Ensure core-cache is installed (it may not be in a fresh DB)
@@ -622,53 +622,68 @@ test.describe("Source: 1223-plugin-boolean-settings-persist.spec.ts", () => {
       await page.goto('/admin/plugins/core-cache')
       await page.waitForLoadState('domcontentloaded')
 
-      // Wait for the settings form
+      // The toggle is a visually styled label wrapping a hidden sr-only checkbox.
+      // Click the outer label (the visible toggle element) rather than the hidden
+      // input directly — this matches how a real user interacts with the control.
+      const toggleLabel = page.locator('label:has(input#setting_enableMemoryCache)')
       const memoryToggle = page.locator('input#setting_enableMemoryCache')
       await expect(memoryToggle).toBeAttached({ timeout: 10000 })
 
-      // Ensure it starts checked (default is true)
-      if (!(await memoryToggle.isChecked())) {
-        // If already unchecked from a prior run, re-enable it first so the test
-        // has a consistent starting state.
-        await memoryToggle.click()
-        await page.locator('button#save-button').click()
-        await expect(page.locator('text=Settings saved').first()).toBeVisible({ timeout: 10000 })
-        await page.waitForTimeout(1500)
+      // Capture the initial state so we can restore it in the finally block.
+      const initiallyChecked = await memoryToggle.isChecked()
+
+      try {
+        // Ensure the toggle starts ON for a consistent baseline.
+        if (!initiallyChecked) {
+          await toggleLabel.click()
+          await page.locator('button#save-button').click()
+          await expect(page.locator('text=Settings saved').first()).toBeVisible({ timeout: 10000 })
+          await page.waitForTimeout(1500)
+          await page.waitForLoadState('domcontentloaded')
+        }
+
+        // Toggle it OFF using the visible label element.
+        await toggleLabel.click()
+        await expect(memoryToggle).not.toBeChecked()
+
+        // Save and capture the request payload.
+        const [response] = await Promise.all([
+          page.waitForResponse(
+            (r) =>
+              r.url().includes('/admin/plugins/core-cache/settings') &&
+              r.request().method() === 'POST'
+          ),
+          page.locator('button#save-button').click(),
+        ])
+        expect(response.status()).toBe(200)
+        const body = await response.json()
+        expect(body.success).toBe(true)
+
+        // Confirm the submitted payload included enableMemoryCache: false.
+        // (Before the fix, the unchecked checkbox was silently omitted so this
+        // key was absent and the backend merge restored the old true value.)
+        const submitted = JSON.parse(response.request().postData() ?? '{}')
+        expect(submitted.enableMemoryCache).toBe(false)
+
+        // Reload and verify the toggle is still OFF.
+        await page.goto('/admin/plugins/core-cache')
         await page.waitForLoadState('domcontentloaded')
+        const reloadedToggle = page.locator('input#setting_enableMemoryCache')
+        await expect(reloadedToggle).toBeAttached({ timeout: 10000 })
+        await expect(reloadedToggle).not.toBeChecked()
+      } finally {
+        // Restore the original state regardless of test outcome.
+        await page.goto('/admin/plugins/core-cache')
+        await page.waitForLoadState('domcontentloaded')
+        const currentToggle = page.locator('input#setting_enableMemoryCache')
+        await expect(currentToggle).toBeAttached({ timeout: 10000 })
+        const currentlyChecked = await currentToggle.isChecked()
+        if (currentlyChecked !== initiallyChecked) {
+          await page.locator('label:has(input#setting_enableMemoryCache)').click()
+          await page.locator('button#save-button').click()
+          await expect(page.locator('text=Settings saved').first()).toBeVisible({ timeout: 10000 })
+        }
       }
-
-      // Now toggle it OFF
-      await memoryToggle.click()
-      await expect(memoryToggle).not.toBeChecked()
-
-      // Save
-      const [response] = await Promise.all([
-        page.waitForResponse(
-          (r) =>
-            r.url().includes('/admin/plugins/core-cache/settings') &&
-            r.request().method() === 'POST'
-        ),
-        page.locator('button#save-button').click(),
-      ])
-      expect(response.status()).toBe(200)
-      const body = await response.json()
-      expect(body.success).toBe(true)
-
-      // Confirm the submitted payload contained enableMemoryCache: false
-      const submitted = JSON.parse(response.request().postData() ?? '{}')
-      expect(submitted.enableMemoryCache).toBe(false)
-
-      // Reload and verify the toggle is still OFF (the regression: it used to flip back to true)
-      await page.goto('/admin/plugins/core-cache')
-      await page.waitForLoadState('domcontentloaded')
-      const reloadedToggle = page.locator('input#setting_enableMemoryCache')
-      await expect(reloadedToggle).toBeAttached({ timeout: 10000 })
-      await expect(reloadedToggle).not.toBeChecked()
-
-      // Restore: turn it back on so other tests are unaffected
-      await reloadedToggle.click()
-      await page.locator('button#save-button').click()
-      await expect(page.locator('text=Settings saved').first()).toBeVisible({ timeout: 10000 })
     })
   })
 })

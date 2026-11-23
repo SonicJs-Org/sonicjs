@@ -401,6 +401,8 @@ jobs:
             lock_grep: '@lock-plugin-multi-tenant'
           - lock_group: plugin-query-trace
             lock_grep: '@lock-query-trace'
+          - lock_group: plugin-core-cache
+            lock_grep: '@lock-core-cache'
     env:
       BASE_URL: ${{ needs.e2e-setup.outputs.base_url }}
       E2E_RUN_KEY: ${{ needs.e2e-setup.outputs.e2e_run_key }}

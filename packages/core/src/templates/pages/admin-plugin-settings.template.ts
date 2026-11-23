@@ -341,6 +341,40 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
               settings.registration[propName] = fieldValue;
             }
           }
+          // Unchecked checkboxes are omitted from FormData by the HTML spec.
+          // Mirror the prefix-routing logic from the loop above, but only
+          // fill in keys that the loop never reached (i.e. unchecked boxes).
+          form.querySelectorAll('input[type="checkbox"]').forEach(function(input) {
+            const key = input.name;
+            if (key.startsWith('requiredFields_')) {
+              const parts = key.replace('requiredFields_', '').split('_');
+              const fieldName = parts[0];
+              const propName = parts.slice(1).join('_');
+              if (!settings.requiredFields[fieldName]) {
+                settings.requiredFields[fieldName] = { type: 'text', label: '' };
+              }
+              if (!(propName in settings.requiredFields[fieldName])) {
+                settings.requiredFields[fieldName][propName] = input.checked;
+              }
+            } else if (key.startsWith('validation_passwordRequirements_')) {
+              const propName = key.replace('validation_passwordRequirements_', '');
+              if (!(propName in settings.validation.passwordRequirements)) {
+                settings.validation.passwordRequirements[propName] = input.checked;
+              }
+            } else if (key.startsWith('validation_')) {
+              const propName = key.replace('validation_', '');
+              if (!(propName in settings.validation)) {
+                settings.validation[propName] = propName === 'allowDuplicateUsernames'
+                  ? !input.checked
+                  : input.checked;
+              }
+            } else if (key.startsWith('registration_')) {
+              const propName = key.replace('registration_', '');
+              if (!(propName in settings.registration)) {
+                settings.registration[propName] = input.checked;
+              }
+            }
+          });
         } else {
           // Handle regular plugin settings
           for (let [key, value] of formData.entries()) {

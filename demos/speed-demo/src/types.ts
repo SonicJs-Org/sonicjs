@@ -71,3 +71,33 @@ export interface FilterOption {
   icon?: string
   flag?: string
 }
+
+// ── Payload CMS types (depth=1 response) ─────────────────────────────────────
+
+export interface PayloadDepartment {
+  id: number
+  name: string
+  icon: string
+  color: string
+  description?: string
+}
+
+export interface PayloadRegion {
+  id: number
+  name: string
+  displayName: string
+  flagEmoji: string
+  timezone?: string
+}
+
+export interface PayloadEmployee {
+  id: number
+  firstName: string
+  lastName: string
+  jobTitle: string
+  department: PayloadDepartment
+  region: PayloadRegion
+  email: string
+  phone: string
+  avatarSeed: string
+}

@@ -638,8 +638,12 @@ test.describe("Source: 1223-plugin-boolean-settings-persist.spec.ts", () => {
           await toggleLabel.click()
           await page.locator('button#save-button').click()
           await expect(page.locator('text=Settings saved').first()).toBeVisible({ timeout: 10000 })
-          await page.waitForTimeout(1500)
+          // The save handler calls location.reload() ~1 second after showing the
+          // success notification. waitForLoadState may return before the reload
+          // starts; the element-attachment assertion retries until the reloaded
+          // form is ready, eliminating the fixed sleep.
           await page.waitForLoadState('domcontentloaded')
+          await expect(toggleLabel).toBeAttached({ timeout: 10000 })
         }
 
         // Toggle it OFF using the visible label element.

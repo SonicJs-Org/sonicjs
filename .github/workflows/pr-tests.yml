@@ -374,7 +374,7 @@ jobs:
   #     (see plugin-core.spec.ts), which severs the edge and leaves
   #     plugin-multi-tenant genuinely independent.
   #
-  # Net result: 3 serial groups (from 5) — combined auth/plugin-catalog, multi-tenant,
+  # Net result: 4 serial groups (from 5) — combined auth/plugin-catalog, multi-tenant,
   # and query-trace. The auth and multi-tenant splits were verified against the
   # lock-tag co-occurrence graph (see the analysis above). The query-trace group
   # is isolated by tag (@lock-query-trace appears only in 127-query-trace-plugin.spec.ts)

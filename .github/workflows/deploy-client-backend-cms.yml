@@ -31,17 +31,15 @@ jobs:
       - name: Build core package
         run: npm run build:core
 
-      - name: Ensure DNS record exists for client-backend.sonicjs.com
+      - name: Ensure DNS record exists for employee-directory-backend.sonicjs.com
         run: |
           ZONE_ID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=sonicjs.com" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin)['result'][0]['id'])")
-          # Create a proxied placeholder record (100:: is Cloudflare-reserved; it routes via Workers)
-          # Silently succeeds if the record already exists (409 = duplicate, treated as ok)
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
             "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"type":"AAAA","name":"client-backend","content":"100::","ttl":1,"proxied":true}')
+            -d '{"type":"AAAA","name":"employee-directory-backend","content":"100::","ttl":1,"proxied":true}')
           if [ "$HTTP" = "200" ] || [ "$HTTP" = "409" ]; then
             echo "DNS record ready (HTTP $HTTP)"
           else

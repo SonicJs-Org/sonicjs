@@ -40,7 +40,7 @@ jobs:
       - name: Build demo
         run: cd demos/employee-directory && npm run build
         env:
-          VITE_CMS_URL: https://client-backend.sonicjs.com
+          VITE_CMS_URL: https://employee-directory-backend.sonicjs.com
 
       - name: Deploy to Cloudflare Pages
         run: npx wrangler pages deploy demos/employee-directory/dist --project-name sonicjs-client-directory --branch main

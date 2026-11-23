@@ -349,7 +349,7 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
             if (key.startsWith('requiredFields_')) {
               const parts = key.replace('requiredFields_', '').split('_');
               const fieldName = parts[0];
-              const propName = parts.slice(1).join('_');
+              const propName = parts[1];
               if (!settings.requiredFields[fieldName]) {
                 settings.requiredFields[fieldName] = { type: 'text', label: '' };
               }

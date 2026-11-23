@@ -117,4 +117,26 @@ describe('plugin mounting via createSonicJSApp', () => {
       expect(hasPathPrefix(paths, '/admin/plugins/ai-search')).toBe(false)
     })
   })
+
+  it('registers /api/events BEFORE the bare /api catch-all (#1289 regression guard)', () => {
+    // The /api/events handler must win over the /api/:collection wildcard.
+    // This is a route-TABLE order check: a pure behaviour test cannot distinguish
+    // "events handler won" from "events happened to be first by coincidence" when
+    // both are present.  Hono's app.routes reflects registration order, so the
+    // first occurrence of an /api/events-prefixed path must come before the first
+    // /api/:collection or bare /api path in the list.
+    //
+    // NOTE: this file is quarantined in vitest.config.ts (better-auth dep gap),
+    // so this assertion does not gate CI directly.  The behavioural proof that
+    // the fix is effective (and the order-sensitivity regression guard) lives in
+    // routes/api-events-route-order.integration.test.ts, which is not quarantined.
+    const paths = routePaths(createSonicJSApp())
+
+    const eventsIdx = paths.findIndex((p) => p === '/api/events' || p.startsWith('/api/events/'))
+    const catchAllIdx = paths.findIndex((p) => p === '/api/:collection' || p === '/api')
+
+    expect(eventsIdx).toBeGreaterThanOrEqual(0) // /api/events is registered at all
+    expect(catchAllIdx).toBeGreaterThanOrEqual(0) // /api catch-all is registered
+    expect(eventsIdx).toBeLessThan(catchAllIdx)   // events comes BEFORE catch-all
+  })
 })

@@ -357,6 +357,17 @@ export function renderPluginSettingsPage(data: PluginSettingsPageData): string {
               }
             }
           }
+          // Unchecked checkboxes are omitted from FormData by the HTML spec,
+          // so the loop above never sees them and their keys remain absent from
+          // settings. Explicitly capture every checkbox's current DOM state so
+          // that toggling a boolean OFF persists as false instead of being
+          // silently dropped and merged back to its previous (true) value.
+          form.querySelectorAll('input[type="checkbox"]').forEach(function(input) {
+            if (input.name.startsWith('setting_')) {
+              const settingKey = input.name.replace('setting_', '');
+              settings[settingKey] = input.checked;
+            }
+          });
         }
 
         const saveButton = document.getElementById('save-button');

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { sonic, sonicOrigin, useMock } from './lib/client'
 import { fetchPayloadEmployees } from './lib/payload-client'
 import { DEPT_MAP, REGION_MAP, DEPT_OPTIONS, REGION_OPTIONS } from './lib/static-data'
@@ -86,8 +86,12 @@ export function App() {
   const regionOptions = REGION_OPTIONS
 
 
+  // Monotonic counter — discard results from superseded fetches
+  const fetchSeqRef = useRef(0)
+
   const fetchAllTimed = useCallback(
     async (currentPage: number, currentFilters: FilterState, bypassCache = false) => {
+      const seq = ++fetchSeqRef.current
       setSonicMs(null)
       setPayloadMs(null)
       setSonicLoading(true)
@@ -111,6 +115,7 @@ export function App() {
               status: 'published',
               ...(Object.keys(where).length ? { where } : {}),
             })
+          if (seq !== fetchSeqRef.current) return
           setSonicMs(Math.round(performance.now() - t0))
           setCacheSource(headers.get('x-cache-source') ?? headers.get('sonicjs-source'))
           setEmployees(response.data as unknown as EmployeeRecord[])
@@ -119,20 +124,23 @@ export function App() {
         } catch (err) {
           console.error('SonicJS error:', err)
         } finally {
-          setSonicLoading(false)
+          if (seq === fetchSeqRef.current) setSonicLoading(false)
         }
       })()
 
       const payloadPromise = (async () => {
         try {
-          const { docs, ms, totalDocs: total } = await fetchPayloadEmployees(currentPage + 1, PAGE_SIZE)
+          const deptName = currentFilters.department ? DEPT_MAP.get(currentFilters.department)?.name : undefined
+          const regionName = currentFilters.region ? REGION_MAP.get(currentFilters.region)?.name : undefined
+          const { docs, ms, totalDocs: total } = await fetchPayloadEmployees(currentPage + 1, PAGE_SIZE, deptName, regionName)
+          if (seq !== fetchSeqRef.current) return
           setPayloadEmployees(docs)
           setPayloadMs(ms)
           if (total != null) setTotalDocs(total)
         } catch (err) {
           console.error('Payload error:', err)
         } finally {
-          setPayloadLoading(false)
+          if (seq === fetchSeqRef.current) setPayloadLoading(false)
         }
       })()
 
@@ -382,7 +390,7 @@ export function App() {
         {totalDocs != null && (
           <div className="mt-6 pt-4 border-t border-white/5 text-center">
             <span className="text-xs text-slate-600">
-              {totalDocs.toLocaleString()} total employees across both backends
+              {totalDocs.toLocaleString()} {filters.department || filters.region ? 'matching Payload employees' : 'total employees across both backends'}
             </span>
           </div>
         )}

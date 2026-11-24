@@ -47,9 +47,9 @@ export class CacheService {
   }
 
   generateKey(type: string, identifier?: string): string {
-    const parts = [this.config.keyPrefix, type]
-    if (identifier !== undefined && identifier !== '') parts.push(identifier)
-    return parts.join(':')
+    // Delegate to the plugin instance so the KV key-length hash (>512 bytes → cyrb53
+    // fingerprint) is applied consistently for both reads and writes.
+    return this.inner.generateKey(type, identifier ?? '')
   }
 
   async get<T>(key: string): Promise<T | null> {

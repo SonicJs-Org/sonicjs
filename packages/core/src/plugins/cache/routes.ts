@@ -63,15 +63,25 @@ app.get('/', async (c: Context) => {
   const catalogEntries = getCatalog({ limit: 100 })
   const catalogSummary = getCatalogStats()
 
+  // Cache stats are per-isolate in-memory; the admin dashboard often runs in a fresh
+  // isolate that hasn't processed any API requests, producing all-zero stats.
+  // The URL catalog is KV-backed and cross-isolate — use it as the source of truth
+  // for request/hit/miss counts, falling back to in-memory values when they're higher
+  // (same-isolate case where memory may be more up-to-date than the last KV write).
+  const effectiveHits = Math.max(totalHits, catalogSummary.totalHits)
+  const effectiveMisses = Math.max(totalMisses, catalogSummary.totalMisses)
+  const effectiveRequests = effectiveHits + effectiveMisses
+  const effectiveHitRate = effectiveRequests > 0 ? (effectiveHits / effectiveRequests) * 100 : 0
+
   const dashboardData: CacheDashboardData = {
     stats,
     totals: {
-      hits: totalHits,
-      misses: totalMisses,
-      requests: totalRequests,
-      hitRate: overallHitRate.toFixed(2),
+      hits: effectiveHits,
+      misses: effectiveMisses,
+      requests: effectiveRequests,
+      hitRate: effectiveHitRate.toFixed(2),
       memorySize: totalSize,
-      entryCount: totalEntries
+      entryCount: totalEntries > 0 ? totalEntries : catalogSummary.totalEntries
     },
     namespaces: Object.keys(stats),
     collections,

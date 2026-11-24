@@ -318,7 +318,7 @@ export async function prewarmFilterCombinations(
       for (const [field, value] of Object.entries(combo)) {
         params.set(`where[${field}][equals]`, value)
       }
-      urls.push(`${baseUrl}/api/v1/content/${collection}?${params.toString()}`)
+      urls.push(`${baseUrl}/api/${collection}?${params.toString()}`)
     }
   }
 

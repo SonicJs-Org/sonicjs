@@ -11,6 +11,14 @@ This page is currently under construction. We're working on comprehensive docume
 - **Performance optimization** - Best practices for maximum performance
 - **Cache invalidation strategies** - Managing cache updates effectively
 
+### See It in Action
+
+The [SonicJS Speed Demo](https://speed.sonicjs.com) races SonicJS (Cloudflare Workers + D1 + KV edge cache) against Payload CMS (Cloudflare Workers + D1, no cache) across 50,000 employee records — same runtime, same database engine, so the only variable is the caching layer.
+
+The demo shows the single-user latency advantage, but **that's just the tip of the iceberg**. The real benefit emerges at scale: when thousands of requests hit the same query simultaneously, every one is served from KV in parallel with zero database contention. An uncached backend serializes those hits against D1. The gap doesn't just hold under load — it widens.
+
+We're adding **k6 load tests** that will drive sustained concurrent traffic at both backends and publish the full results — throughput, p95/p99 latency, and error rates — along with all source code so you can reproduce the benchmark on your own Cloudflare account.
+
 ### In the Meantime
 
 Check out our other documentation sections:

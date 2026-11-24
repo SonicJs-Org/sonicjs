@@ -325,6 +325,19 @@ interface PayloadEmployee {
             >
               Read the full caching architecture ↗
             </a>
+            <div className="mt-4 pt-4 border-t border-white/5">
+              <p className="text-slate-300 font-medium mb-1.5">This is just the tip of the iceberg</p>
+              <p>
+                A single-user speed test shows the latency advantage, but the real benefit from edge caching shows up at scale.
+                When thousands of requests hit the same query simultaneously, every one of them is served from KV in parallel with no database contention — 
+                whereas an uncached backend serializes those hits against D1.
+                The gap doesn't just hold under load, it widens.
+              </p>
+              <p className="mt-2">
+                We're adding <span className="text-white">k6 load tests</span> that will drive sustained concurrent traffic at both backends and publish the full results — 
+                throughput, p95/p99 latency, and error rates — along with all source code so you can reproduce the benchmark yourself.
+              </p>
+            </div>
           </div>
           <div className="grid sm:grid-cols-2 gap-4 text-sm">
             <div className="bg-slate-900 border border-emerald-500/20 rounded-xl p-4">

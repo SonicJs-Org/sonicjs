@@ -60,6 +60,39 @@ describe('EmailService wiring via createSonicJSApp', () => {
   })
 })
 
+describe('CF Email binding auto-detect respects ENVIRONMENT', () => {
+  // A fake `send_email` binding — an object with `.send()`, same shape the
+  // real Cloudflare binding has. No RESEND/SENDGRID env, no explicit
+  // config.email, no DB settings: this is the pure "nobody configured
+  // anything, just happens to have an EMAIL binding" auto-detect path.
+  function fakeEnvWithBinding(environment?: string): Record<string, unknown> {
+    const base = fakeEnv(null)
+    return {
+      ...base,
+      EMAIL: { send: async () => {} },
+      ...(environment !== undefined ? { ENVIRONMENT: environment } : {}),
+    }
+  }
+
+  it('does NOT auto-send through the real binding in development', async () => {
+    const app = createSonicJSApp({})
+    await app.request('/health', {}, fakeEnvWithBinding('development') as never)
+
+    expect(hasEmailService()).toBe(true)
+    expect(getEmailService().getProviderName()).not.toBe('cloudflare')
+  })
+
+  it('still auto-detects the binding when ENVIRONMENT is not development', async () => {
+    const app = createSonicJSApp({})
+    // Unset is enough to exercise the "not development" branch without
+    // tripping the unrelated production JWT_SECRET security gate.
+    await app.request('/health', {}, fakeEnvWithBinding(undefined) as never)
+
+    expect(hasEmailService()).toBe(true)
+    expect(getEmailService().getProviderName()).toBe('cloudflare')
+  })
+})
+
 describe('password-reset no longer leaks the reset link (security regression)', () => {
   const user = { id: 'u1', email: 'user@example.com', first_name: 'Sam', last_name: 'Doe' }
 

@@ -399,7 +399,16 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
         defaultFrom = defaultFrom || dbSettingsFrom(dbSettings!)
         defaultReplyTo = dbSettings!.replyTo
         console.log('[email] provider: resend (DB resendApiKey)')
-      } else if (cfBinding && dbSettings?.provider !== 'resend') {
+      } else if (cfBinding && dbSettings?.provider !== 'resend' && env.ENVIRONMENT !== 'development') {
+        // Auto-detecting a real `send_email` binding and using it is right for
+        // production, but the binding isn't locally emulated — it proxies to the
+        // real Cloudflare Email API even under `wrangler dev` / local e2e runs.
+        // Nobody explicitly asked for delivery here (no DB setting, no env key),
+        // so in development we fall through to Console instead of silently
+        // emailing whatever address the request used (e.g. OTP e2e specs hitting
+        // a real seeded admin inbox). Deliberate opt-in still works: an explicit
+        // DB `provider: 'cloudflare'` setting (handled above) or RESEND_API_KEY /
+        // SENDGRID_API_KEY / config.email still send for real in development.
         provider = new CloudflareEmailProvider(cfBinding as never)
         defaultFrom = defaultFrom || (dbSettings ? dbSettingsFrom(dbSettings) : undefined)
         defaultReplyTo = dbSettings?.replyTo

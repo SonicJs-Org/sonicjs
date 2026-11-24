@@ -13,6 +13,29 @@ export const sections = [
 
 How SonicJS delivers sub-50ms API responses globally — and the three-tier cache that keeps them there. {{ className: 'lead' }}
 
+## See It Live
+
+The [SonicJS Speed Demo](https://speed.sonicjs.com) races SonicJS (Cloudflare Workers + D1 + KV edge cache) against Payload CMS (Cloudflare Workers + D1, no cache) across 50,000 employee records — same runtime, same database engine, so the only variable is the caching layer. Filter by department or region and watch the response timers update in real time.
+
+The demo shows the single-user latency advantage, but **that's just the tip of the iceberg**. The real benefit emerges at scale: when thousands of requests hit the same query simultaneously, every one is served from KV in parallel with zero database contention. An uncached backend serializes those hits against D1. The gap doesn't just hold under load — it widens.
+
+We're adding **k6 load tests** that will drive sustained concurrent traffic at both backends and publish the full results — throughput, p95/p99 latency, and error rates — along with all source code so you can reproduce the benchmark on your own Cloudflare account.
+
+<div className="not-prose my-8">
+  <a href="https://speed.sonicjs.com" target="_blank" rel="noopener noreferrer">
+    <img
+      src="/images/speed-demo-screenshot.png"
+      alt="SonicJS Speed Demo — SonicJS Edge at 47ms vs Payload CMS at 211ms, 4.5× faster"
+      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-lg hover:opacity-90 transition-opacity"
+    />
+  </a>
+  <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400 text-center">
+    Live benchmark: SonicJS Edge (47ms) vs Payload CMS (211ms) — <a href="https://speed.sonicjs.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-700 dark:hover:text-zinc-200">try it yourself →</a>
+  </p>
+</div>
+
+---
+
 ## Why SonicJS is Fast
 
 Most CMS platforms run on a single server in a single region. Your users in London wait for a round-trip to us-east-1. Your users everywhere wait for a cold boot after the process sat idle.

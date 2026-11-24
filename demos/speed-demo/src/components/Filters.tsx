@@ -8,7 +8,7 @@ interface Props {
   horizontal?: boolean
 }
 
-function FilterGroup({ label, options, active, onSelect, renderLabel }: {
+export function FilterGroup({ label, options, active, onSelect, renderLabel }: {
   label: string
   options: FilterOption[]
   active: string

@@ -8,7 +8,7 @@ import type {
 } from './types'
 import { EmployeeCard } from './components/EmployeeCard'
 import { PayloadCard } from './components/PayloadCard'
-import { Filters } from './components/Filters'
+import { FilterGroup } from './components/Filters'
 import { Pagination } from './components/Pagination'
 import { StatsBar } from './components/StatsBar'
 
@@ -207,18 +207,43 @@ export function App() {
         </div>
       </header>
 
-      {/* ── Filters (horizontal) ── */}
+      {/* ── Filters + Speed Boost (1 row, 3 cols) ── */}
       <div className="border-b border-white/5 bg-slate-950/60 px-4 sm:px-6 lg:px-8 py-3">
-        <Filters
-          filters={filters}
-          deptOptions={deptOptions}
-          regionOptions={regionOptions}
-          onChange={handleFilterChange}
-        />
-      </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
 
-      {/* ── Stats bar ── */}
-      <StatsBar sonicMs={sonicMs} payloadMs={payloadMs} sonicSource={cacheSource} />
+          {/* Col 1 — Dept */}
+          <FilterGroup
+            label="Dept"
+            options={deptOptions}
+            active={filters.department}
+            onSelect={(id) => handleFilterChange({ ...filters, department: id })}
+            renderLabel={(o) => `${o.icon ? o.icon + ' ' : ''}${o.name}`}
+          />
+
+          {/* Col 2 — Region */}
+          <FilterGroup
+            label="Region"
+            options={regionOptions}
+            active={filters.region}
+            onSelect={(id) => handleFilterChange({ ...filters, region: id })}
+            renderLabel={(o) => `${o.flag ? o.flag + ' ' : ''}${o.name}`}
+          />
+
+          {/* Col 3 — Speed Boost card */}
+          <div className="flex flex-col gap-2">
+            <StatsBar sonicMs={sonicMs} payloadMs={payloadMs} sonicSource={cacheSource} />
+            {(filters.department || filters.region) && (
+              <button
+                onClick={() => handleFilterChange({ department: '', region: '' })}
+                className="text-xs text-slate-400 hover:text-white border border-white/10 rounded-lg px-3 py-1 transition-colors self-start"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+
+        </div>
+      </div>
 
       {/* ── Race grid ── */}
       <div className="px-4 sm:px-6 lg:px-8 py-5">

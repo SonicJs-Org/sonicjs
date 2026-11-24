@@ -485,13 +485,13 @@ function renderUrlCatalogTab(catalog: CacheDashboardData['catalog']): string {
               <th class="px-4 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Last Seen</th>
             </tr>
           </thead>
-          <tbody id="url-catalog-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
+          <tbody id="url-catalog-tbody" data-total="${catalog.stats.totalEntries}" class="divide-y divide-zinc-950/5 dark:divide-white/10">
             ${rows}
           </tbody>
         </table>
       </div>
       <div class="px-4 py-3 border-t border-zinc-950/5 dark:border-white/10 flex items-center justify-between">
-        <p class="text-sm text-zinc-500 dark:text-zinc-400">
+        <p role="status" aria-atomic="true" class="text-sm text-zinc-500 dark:text-zinc-400">
           Showing <span id="url-catalog-page-info">—</span>
         </p>
         <div class="flex items-center gap-2">
@@ -546,7 +546,10 @@ function renderUrlCatalogTab(catalog: CacheDashboardData['catalog']): string {
     if (info) {
       var start = (currentPage - 1) * PAGE_SIZE + 1;
       var end = Math.min(currentPage * PAGE_SIZE, rows.length);
-      info.textContent = start + '\u2013' + end + ' of ' + rows.length;
+      var tbody = document.getElementById('url-catalog-tbody');
+      var total = tbody && tbody.dataset.total ? parseInt(tbody.dataset.total, 10) : rows.length;
+      var suffix = total > rows.length ? ' (top ' + rows.length + ' of ' + total + ' tracked)' : ' of ' + rows.length;
+      info.textContent = start + '\u2013' + end + suffix;
     }
     if (prevBtn) prevBtn.disabled = currentPage <= 1;
     if (nextBtn) nextBtn.disabled = currentPage >= totalPages;

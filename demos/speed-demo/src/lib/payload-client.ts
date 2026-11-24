@@ -17,11 +17,19 @@ const PAYLOAD_BASE = import.meta.env.DEV
 export async function fetchPayloadEmployees(
   page = 1,
   limit = 10,
+  department?: string,
+  region?: string,
 ): Promise<PayloadListResult> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    depth: '1',
+    page: String(page),
+  })
+  if (department) params.set('where[department.name][equals]', department)
+  if (region) params.set('where[region.name][equals]', region)
+
   const t0 = performance.now()
-  const res = await fetch(
-    `${PAYLOAD_BASE}/employees?limit=${limit}&depth=1&page=${page}`,
-  )
+  const res = await fetch(`${PAYLOAD_BASE}/employees?${params}`)
   const json = await res.json()
   return {
     ...json,

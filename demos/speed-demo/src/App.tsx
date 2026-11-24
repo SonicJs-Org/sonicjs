@@ -210,7 +210,7 @@ export function App() {
       <div className="px-4 sm:px-6 lg:px-8 py-5">
 
         {/* Column labels */}
-        <div className="grid grid-cols-2 gap-6 mb-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-3">
           <div className="flex items-center gap-2 px-1">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">⚡ SonicJS Edge</span>
@@ -227,12 +227,12 @@ export function App() {
           </div>
         </div>
 
-        {/* 4-column layout: 2 cols SonicJS | divider | 2 cols Payload */}
-        <div className="grid grid-cols-[1fr_1px_1fr] gap-x-6">
+        {/* Layout: stacked + 1 col on mobile, side-by-side + 2 cols from lg up */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr] gap-x-6 gap-y-6">
 
           {/* SonicJS side */}
           <div
-            className="grid grid-cols-2 gap-3 content-start"
+            className="grid grid-cols-1 sm:grid-cols-2 gap-3 content-start"
             style={{ opacity: sonicLoading && employees.length > 0 ? 0.5 : 1, transition: 'opacity 150ms' }}
           >
             {sonicLoading && employees.length === 0
@@ -244,11 +244,11 @@ export function App() {
           </div>
 
           {/* Divider */}
-          <div className="bg-white/5 self-stretch" />
+          <div className="bg-white/5 self-stretch hidden lg:block" />
 
           {/* Payload side */}
           <div
-            className="grid grid-cols-2 gap-3 content-start"
+            className="grid grid-cols-1 sm:grid-cols-2 gap-3 content-start"
             style={{ opacity: payloadLoading && payloadEmployees.length > 0 ? 0.5 : 1, transition: 'opacity 150ms' }}
           >
             {payloadLoading && payloadEmployees.length === 0

@@ -28,6 +28,10 @@ bucket_name = "sonicjs-demo-media"
 binding = "CACHE_KV"
 id = "fa15ce6927af43af9149e926631d7ad5"
 
+# Cron triggers — keep in sync with crons declared in cachePrwarmPlugin
+[triggers]
+crons = ["0 */6 * * *"]
+
 # Environment variables
 [vars]
 ENABLE_SEED_ADMIN = "true"
@@ -35,6 +39,7 @@ ENVIRONMENT = "demo"
 CORS_ORIGINS = "https://employee-directory.sonicjs.com,https://speed.sonicjs.com"
 DEFAULT_FROM_EMAIL = "demo@sonicjs.com"
 BETTER_AUTH_SECRET = "sonicjs-demo-secret-not-for-prod!"
+CACHE_PREWARM_BASE_URL = "https://speed-backend.sonicjs.com"
 
 # Observability
 [observability]

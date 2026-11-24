@@ -283,6 +283,33 @@ export function renderCacheDashboard(data: CacheDashboardData): string {
         }
       }
 
+      async function prewarmCombinations() {
+        const btn = document.getElementById('prewarm-btn')
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ Warming…' }
+        try {
+          const response = await fetch('/admin/cache/warm-combinations', { method: 'POST' })
+          const result = await response.json()
+          if (result.success) {
+            const dimSummary = (result.dimensions || [])
+              .map(d => \`\${d.count} \${d.field.split('.').pop()}s\`)
+              .join(' × ')
+            alert(
+              \`✅ Prewarmed \${result.warmed}/\${result.total} URLs\\n\` +
+              \`\${result.combinations} combos × \${result.pages} pages\` +
+              (dimSummary ? \` (\${dimSummary})\` : '') +
+              (result.errors > 0 ? \`\\n⚠️ \${result.errors} errors\` : '')
+            )
+          } else {
+            alert('Prewarm error: ' + (result.error || result.details || 'Unknown'))
+          }
+        } catch (error) {
+          alert('Prewarm error: ' + error.message)
+        } finally {
+          if (btn) { btn.disabled = false; btn.textContent = '🔥 Prewarm Combos' }
+          window.location.reload()
+        }
+      }
+
       let namespaceToDelete = null
 
       async function clearNamespaceCache(namespace) {
@@ -373,6 +400,15 @@ function renderUrlCatalogTab(catalog: CacheDashboardData['catalog']): string {
           </svg>
           <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100">No entries yet</p>
           <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Cache-eligible API requests will appear here after the first page load.</p>
+          <div class="mt-4">
+            <button
+              id="prewarm-btn"
+              onclick="prewarmCombinations()"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 dark:bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              🔥 Prewarm All Combos Now
+            </button>
+          </div>
         </div>
       </div>
     `
@@ -419,12 +455,21 @@ function renderUrlCatalogTab(catalog: CacheDashboardData['catalog']): string {
             Ranked by total requests. Resets on isolate eviction. Scoped to public/privileged (non-ACL) requests only.
           </p>
         </div>
-        <button
-          onclick="clearUrlCatalog()"
-          class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-        >
-          Clear
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            id="prewarm-btn"
+            onclick="prewarmCombinations()"
+            class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 dark:bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            🔥 Prewarm Combos
+          </button>
+          <button
+            onclick="clearUrlCatalog()"
+            class="inline-flex items-center gap-2 rounded-lg bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+          >
+            Clear
+          </button>
+        </div>
       </div>
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">

@@ -485,10 +485,28 @@ function renderUrlCatalogTab(catalog: CacheDashboardData['catalog']): string {
               <th class="px-4 py-3 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Last Seen</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-zinc-950/5 dark:divide-white/10">
+          <tbody id="url-catalog-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10">
             ${rows}
           </tbody>
         </table>
+      </div>
+      <div class="px-4 py-3 border-t border-zinc-950/5 dark:border-white/10 flex items-center justify-between">
+        <p class="text-sm text-zinc-500 dark:text-zinc-400">
+          Showing <span id="url-catalog-page-info">—</span>
+        </p>
+        <div class="flex items-center gap-2">
+          <button
+            id="url-catalog-prev"
+            onclick="urlCatalogPrevPage()"
+            disabled
+            class="inline-flex items-center gap-1 rounded-lg bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed"
+          >&#8592; Prev</button>
+          <button
+            id="url-catalog-next"
+            onclick="urlCatalogNextPage()"
+            class="inline-flex items-center gap-1 rounded-lg bg-white dark:bg-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 ring-1 ring-inset ring-zinc-950/10 dark:ring-white/10 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed"
+          >Next &#8594;</button>
+        </div>
       </div>
     </div>
 
@@ -503,6 +521,43 @@ function renderUrlCatalogTab(catalog: CacheDashboardData['catalog']): string {
         </ul>
       </div>
     </div>
+
+    <script>
+(function () {
+  var PAGE_SIZE = 25;
+  var currentPage = 1;
+
+  function getRows() {
+    var tbody = document.getElementById('url-catalog-tbody');
+    return tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
+  }
+
+  function renderPage(page) {
+    var rows = getRows();
+    if (rows.length === 0) return;
+    var totalPages = Math.ceil(rows.length / PAGE_SIZE);
+    currentPage = Math.max(1, Math.min(page, totalPages));
+    rows.forEach(function (row, i) {
+      row.style.display = (i >= (currentPage - 1) * PAGE_SIZE && i < currentPage * PAGE_SIZE) ? '' : 'none';
+    });
+    var info = document.getElementById('url-catalog-page-info');
+    var prevBtn = document.getElementById('url-catalog-prev');
+    var nextBtn = document.getElementById('url-catalog-next');
+    if (info) {
+      var start = (currentPage - 1) * PAGE_SIZE + 1;
+      var end = Math.min(currentPage * PAGE_SIZE, rows.length);
+      info.textContent = start + '\u2013' + end + ' of ' + rows.length;
+    }
+    if (prevBtn) prevBtn.disabled = currentPage <= 1;
+    if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+  }
+
+  window.urlCatalogPrevPage = function () { renderPage(currentPage - 1); };
+  window.urlCatalogNextPage = function () { renderPage(currentPage + 1); };
+
+  document.addEventListener('DOMContentLoaded', function () { renderPage(1); });
+})();
+    </script>
   `
 }
 

@@ -36,12 +36,16 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DRY_RUN = process.argv.includes('--dry-run')
 const INLINE = process.argv.includes('--inline')
+const START_CHUNK = parseInt(
+  process.argv.find(a => a.startsWith('--start-chunk='))?.split('=')[1] ?? '1',
+  10,
+)
 
 // D1 database name as configured in wrangler.client-backend.toml
 const DB_NAME = 'sonicjs-demo'
 const WRANGLER_CONFIG = 'wrangler.client-backend.toml'
 
-const ROWS_PER_INSERT = 500
+const ROWS_PER_INSERT = 50
 const EMPLOYEES_PER_CHUNK = 5_000
 const TENANT = 'default'
 const NOW_UNIX = `unixepoch()`
@@ -272,14 +276,19 @@ async function main() {
   fs.mkdirSync(tmpDir, { recursive: true })
 
   try {
-    console.log('\n[1/2] Seeding document_types, departments & regions…')
-    const deptFile = path.join(tmpDir, 'sonic-seed-depts-regions.sql')
-    fs.writeFileSync(deptFile, buildDeptRegionSql())
-    runSqlFile(deptFile, 'document_types + departments + regions')
+    if (START_CHUNK <= 1) {
+      console.log('\n[1/2] Seeding document_types, departments & regions…')
+      const deptFile = path.join(tmpDir, 'sonic-seed-depts-regions.sql')
+      fs.writeFileSync(deptFile, buildDeptRegionSql())
+      runSqlFile(deptFile, 'document_types + departments + regions')
+    } else {
+      console.log('\n[1/2] Skipping departments & regions (resuming mid-seed)…')
+    }
 
     const totalChunks = Math.ceil(employees.length / EMPLOYEES_PER_CHUNK)
-    console.log(`\n[2/2] Seeding ${employees.length.toLocaleString()} employees in ${totalChunks} chunks…`)
-    for (let c = 0; c < totalChunks; c++) {
+    const resuming = START_CHUNK > 1
+    console.log(`\n[2/2] Seeding ${employees.length.toLocaleString()} employees in ${totalChunks} chunks${resuming ? ` (resuming from chunk ${START_CHUNK})` : ''}…`)
+    for (let c = START_CHUNK - 1; c < totalChunks; c++) {
       const chunk = employees.slice(c * EMPLOYEES_PER_CHUNK, (c + 1) * EMPLOYEES_PER_CHUNK) as EmpRecord[]
       const sql = buildEmployeeChunkSql(chunk, c + 1, totalChunks)
       const chunkFile = path.join(tmpDir, `sonic-seed-employees-${String(c + 1).padStart(2, '0')}.sql`)

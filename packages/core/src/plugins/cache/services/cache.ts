@@ -349,9 +349,11 @@ export class CacheService {
     // Store in KV cache (Tier 2)
     if (config.kvEnabled && this.kvNamespace) {
       try {
+        // Cloudflare KV requires minimum 60s TTL and enforces a maximum of 30 days
+        // (2,592,000s). Clamp to both bounds silently.
+        const KV_MAX_TTL = 2_592_000
         await this.kvNamespace.put(key, JSON.stringify(value), {
-          // Cloudflare KV requires minimum 60s TTL in production; clamp silently.
-          expirationTtl: Math.max(config.ttl, 60)
+          expirationTtl: Math.min(Math.max(config.ttl, 60), KV_MAX_TTL)
         })
         await this.rememberKvWrite(key)
       } catch (error) {

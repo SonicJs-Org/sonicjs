@@ -9,7 +9,8 @@ import type { Context } from 'hono'
 import { getAllCacheStats, clearAllCaches, getCacheService } from './services/cache.js'
 import { CACHE_CONFIGS, parseCacheKey } from './services/cache-config.js'
 import { getRecentInvalidations, getCacheInvalidationStats } from './services/cache-invalidation.js'
-import { warmCommonCaches, warmNamespace } from './services/cache-warming.js'
+import { warmCommonCaches, warmNamespace, prewarmFilterCombinations } from './services/cache-warming.js'
+import type { FilterDimension } from './services/cache-warming.js'
 import { getCatalog, getCatalogStats, clearCatalog, loadKvCatalog, clearKvCatalog } from './services/catalog.js'
 import { swrStats } from './services/swr.js'
 import { renderCacheDashboard, CacheDashboardData, CollectionCacheConfig } from '../../templates/pages/admin-cache.template'
@@ -563,6 +564,59 @@ app.post('/warm/:namespace', async (c: Context) => {
       success: false,
       error: 'Namespace warming failed',
       details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500)
+  }
+})
+
+/**
+ * POST /admin/cache/warm-combinations
+ * Pre-warm all filter-combo pages for a collection by self-fetching its
+ * public content API endpoint.  Defaults are tuned for the speed demo
+ * (employees × departments × regions, 3 pages of 10 each = 210 requests).
+ *
+ * Request body (all optional):
+ *   collection        string                      – default 'employees'
+ *   filterDimensions  {field, typeId}[]           – default dept + region
+ *   pages             number (1–10)               – default 3
+ *   pageSize          number (1–100)              – default 10
+ */
+app.post('/warm-combinations', async (c: Context) => {
+  const db = c.env.DB as D1Database
+  const baseUrl = new URL(c.req.url).origin
+
+  let body: any = {}
+  try { body = await c.req.json() } catch { /* empty body is fine */ }
+
+  const collection: string                = body.collection ?? 'employees'
+  const filterDimensions: FilterDimension[] = body.filterDimensions ?? [
+    { field: 'data.department', typeId: 'departments' },
+    { field: 'data.region',     typeId: 'regions'     },
+  ]
+  const pages:    number = body.pages    ?? 3
+  const pageSize: number = body.pageSize ?? 10
+
+  try {
+    const result = await prewarmFilterCombinations({
+      db,
+      baseUrl,
+      collection,
+      filterDimensions,
+      pages,
+      pageSize,
+    })
+
+    return c.json({
+      success: result.errors === 0 || result.warmed > 0,
+      message: `Prewarmed ${result.warmed}/${result.total} URLs`,
+      ...result,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error('[warm-combinations] error:', error)
+    return c.json({
+      success: false,
+      error: 'Prewarm failed',
+      details: error instanceof Error ? error.message : 'Unknown error',
     }, 500)
   }
 })

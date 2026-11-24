@@ -407,3 +407,7 @@ export const VERSION = packageJson.version
 // Request tracing (query-trace plugin): wrap your own middleware / report cache ops
 export { traceSpan, getCurrentTrace } from './utils/request-trace'
 export type { TraceEntry, CacheOutcome } from './utils/request-trace'
+
+// Cache warming utilities (prewarm filter-combo pages from cron or scripts)
+export { prewarmFilterCombinations } from './plugins/cache/services/cache-warming'
+export type { FilterDimension, PrewarmCombinationsOpts, PrewarmCombinationsResult } from './plugins/cache/services/cache-warming'

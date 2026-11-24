@@ -25,6 +25,8 @@ import { moodsCollection } from './plugins/example/collections/moods.collection'
 // User profile model — uncomment defineUserProfile() in this file to add custom fields
 import './user-profile.model';
 
+import { cachePrwarmPlugin } from './plugins/cache-prewarm'
+
 // Import code-defined collections
 import { siteSettingsCollection } from '@sonicjs-cms/core';
 import blogPostsCollection from './collections/blog-posts.collection';
@@ -42,7 +44,7 @@ const config: SonicJSConfig = {
   plugins: {
     // Add plugins to this array to activate them. Each plugin's register()
     // runs synchronously at startup; onBoot() runs async on first request.
-    register: [redirectPlugin, examplePlugin, mcpPlugin(), graphqlPlugin(), versioningPlugin],
+    register: [redirectPlugin, examplePlugin, mcpPlugin(), graphqlPlugin(), versioningPlugin, cachePrwarmPlugin],
     disableAll: false,
   },
 };

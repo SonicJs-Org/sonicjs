@@ -88,22 +88,22 @@ function StatPill({ value, label }: { value: string; label: string }) {
 
 export function FAQ() {
   const sonicCurlExample = `# Fetch first page of employees (10 per page)
-curl 'https://employee-directory-backend.sonicjs.com/api/employees?limit=10&offset=0&status=published' \\
+curl 'https://speed-backend.sonicjs.com/api/employees?limit=10&offset=0&status=published' \\
   -H 'x-api-key: YOUR_API_KEY'
 
 # Filter by department
-curl 'https://employee-directory-backend.sonicjs.com/api/employees?limit=10&offset=0&status=published&where%5Bdata.department%5D%5Bequals%5D=DEPT_ID' \\
+curl 'https://speed-backend.sonicjs.com/api/employees?limit=10&offset=0&status=published&where%5Bdata.department%5D%5Bequals%5D=DEPT_ID' \\
   -H 'x-api-key: YOUR_API_KEY'
 
 # Bypass edge cache (force origin)
-curl 'https://employee-directory-backend.sonicjs.com/api/employees?limit=10&offset=0&status=published' \\
+curl 'https://speed-backend.sonicjs.com/api/employees?limit=10&offset=0&status=published' \\
   -H 'x-api-key: YOUR_API_KEY' \\
   -H 'Cache-Control: no-cache'`
 
   const sonicFetchExample = `import { createClient } from '@sonicjs-cms/sdk'
 
 const sonic = createClient({
-  url: 'https://employee-directory-backend.sonicjs.com',
+  url: 'https://speed-backend.sonicjs.com',
   apiKey: process.env.SONIC_API_KEY,
 })
 

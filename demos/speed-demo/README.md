@@ -17,7 +17,7 @@ The stats bar updates on every fetch. Toggle **Edge Cache off** in the UI to for
 ## Stack
 
 - **Frontend:** React + Vite + Tailwind CSS, deployed to Cloudflare Pages via [`sonicjs-client-directory`](https://edgecache-demo.pages.dev)
-- **Backend:** SonicJS CMS worker (`sonicjs-client-backend`) at [`employee-directory-backend.sonicjs.com`](https://employee-directory-backend.sonicjs.com), sharing the `sonicjs-demo` D1 database with its own isolated KV cache namespace for independent tuning
+- **Backend:** SonicJS CMS worker (`sonicjs-client-backend`) at [`speed-backend.sonicjs.com`](https://speed-backend.sonicjs.com), sharing the `sonicjs-demo` D1 database with its own isolated KV cache namespace for independent tuning
 - **SDK:** [`@sonicjs-cms/sdk`](../../packages/sdk) — the same SDK your app would use
 
 ## Local development
@@ -28,7 +28,7 @@ npm run build:core
 
 # Then start the dev server (proxies /api through to the live backend)
 cd demos/speed-demo
-VITE_DEV_BACKEND=https://employee-directory-backend.sonicjs.com \
+VITE_DEV_BACKEND=https://speed-backend.sonicjs.com \
 VITE_CMS_URL=http://localhost:5173 \
 npm run dev
 ```

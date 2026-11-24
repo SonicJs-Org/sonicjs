@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sonic, sonicOrigin, useMock } from './lib/client'
 import { fetchPayloadEmployees } from './lib/payload-client'
+import { DEPT_MAP, REGION_MAP, DEPT_OPTIONS, REGION_OPTIONS } from './lib/static-data'
 import type {
-  EmployeeRecord, DepartmentRecord, RegionRecord,
-  DeptMap, RegionMap, FilterOption, FilterState,
+  EmployeeRecord,
+  FilterState,
   PayloadEmployee,
 } from './types'
 import { EmployeeCard } from './components/EmployeeCard'
@@ -14,18 +15,6 @@ import { StatsBar } from './components/StatsBar'
 import { FAQ } from './components/FAQ'
 
 const PAGE_SIZE = 10
-
-const DEPT_TAILWIND: Record<string, string> = {
-  Engineering: 'bg-blue-500/20 text-blue-300',
-  Product:     'bg-purple-500/20 text-purple-300',
-  Design:      'bg-pink-500/20 text-pink-300',
-  Marketing:   'bg-orange-500/20 text-orange-300',
-  Sales:       'bg-green-500/20 text-green-300',
-  HR:          'bg-teal-500/20 text-teal-300',
-  Finance:     'bg-yellow-500/20 text-yellow-300',
-  Legal:       'bg-red-500/20 text-red-300',
-  Operations:  'bg-slate-500/20 text-slate-300',
-}
 
 function Dots({ color }: { color: string }) {
   return (
@@ -90,46 +79,12 @@ export function App() {
   const [payloadMs, setPayloadMs] = useState<number | null>(null)
   const [totalDocs, setTotalDocs] = useState<number | null>(null)
 
-  // ── Reference data ─────────────────────────────────────────────────────────
-  const [deptMap, setDeptMap] = useState<DeptMap>(new Map())
-  const [regionMap, setRegionMap] = useState<RegionMap>(new Map())
-  const [deptOptions, setDeptOptions] = useState<FilterOption[]>([])
-  const [regionOptions, setRegionOptions] = useState<FilterOption[]>([])
+  // ── Reference data (hardcoded — fixed seed records, no API calls needed) ────
+  const deptMap = DEPT_MAP
+  const regionMap = REGION_MAP
+  const deptOptions = DEPT_OPTIONS
+  const regionOptions = REGION_OPTIONS
 
-  useEffect(() => {
-    const loadRefs = async () => {
-      const [deptsRes, regionsRes] = await Promise.all([
-        sonic.collection('departments').list({ limit: 50, status: 'published' }),
-        sonic.collection('regions').list({ limit: 50, status: 'published' }),
-      ])
-
-      const newDeptMap: DeptMap = new Map()
-      const newDeptOptions: FilterOption[] = []
-      for (const rec of deptsRes.data as unknown as DepartmentRecord[]) {
-        const name = rec.data.name
-        newDeptMap.set(rec.id, {
-          name,
-          icon: rec.data.icon ?? '',
-          color: rec.data.color ?? '#64748B',
-          tailwindClass: DEPT_TAILWIND[name] ?? 'bg-slate-500/20 text-slate-300',
-        })
-        newDeptOptions.push({ id: rec.id, name, icon: rec.data.icon })
-      }
-
-      const newRegionMap: RegionMap = new Map()
-      const newRegionOptions: FilterOption[] = []
-      for (const rec of regionsRes.data as unknown as RegionRecord[]) {
-        newRegionMap.set(rec.id, rec.data)
-        newRegionOptions.push({ id: rec.id, name: rec.data.name, flag: rec.data.flag_emoji })
-      }
-
-      setDeptMap(newDeptMap)
-      setRegionMap(newRegionMap)
-      setDeptOptions(newDeptOptions)
-      setRegionOptions(newRegionOptions)
-    }
-    loadRefs().catch(console.error)
-  }, [])
 
   const fetchAllTimed = useCallback(
     async (currentPage: number, currentFilters: FilterState, bypassCache = false) => {

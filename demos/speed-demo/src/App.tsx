@@ -26,6 +26,20 @@ const DEPT_TAILWIND: Record<string, string> = {
   Operations:  'bg-slate-500/20 text-slate-300',
 }
 
+function Dots({ color }: { color: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {[0, 150, 300].map((delay) => (
+        <span
+          key={delay}
+          className={`w-2 h-2 rounded-full animate-bounce ${color}`}
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </span>
+  )
+}
+
 function Skeleton({ variant }: { variant: 'sonic' | 'payload' }) {
   const border = variant === 'sonic' ? 'border-white/10' : 'border-orange-500/10'
   return (
@@ -251,7 +265,7 @@ export function App() {
                 : sonicMs < 200 ? 'text-yellow-400'
                 : 'text-red-400'
               }`}>
-                {sonicMs !== null ? `${sonicMs}ms` : '…'}
+                {sonicMs !== null ? `${sonicMs}ms` : <Dots color="bg-emerald-400" />}
               </div>
               <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
                 <div
@@ -292,7 +306,7 @@ export function App() {
                 : payloadMs < 300 ? 'text-yellow-400'
                 : 'text-red-400'
               }`}>
-                {payloadMs !== null ? `${payloadMs}ms` : '…'}
+                {payloadMs !== null ? `${payloadMs}ms` : <Dots color="bg-orange-400" />}
               </div>
               <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
                 <div

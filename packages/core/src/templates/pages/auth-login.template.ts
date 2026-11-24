@@ -66,6 +66,18 @@ export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = 
             ${data.error ? `<div class="mb-6">${renderAlert({ type: 'error', message: data.error })}</div>` : ''}
             ${data.message ? `<div class="mb-6">${renderAlert({ type: 'success', message: data.message })}</div>` : ''}
 
+            <!-- View-only public access banner (always shown) -->
+            <div class="mb-6 rounded-lg bg-blue-500/10 p-4 ring-1 ring-blue-500/20 cursor-pointer viewer-prefill-btn" title="Click to prefill">
+              <div class="flex items-start gap-x-3">
+                <svg class="h-5 w-5 shrink-0 text-blue-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                <div>
+                  <h3 class="text-sm font-semibold text-blue-300">View-Only Access</h3>
+                  <p class="mt-1 text-xs text-blue-400">Read-only demo account — click to prefill</p>
+                  <p class="mt-1 text-xs text-blue-300 font-mono">viewer@sonicjs.com &nbsp;/&nbsp; sonicjs-view!</p>
+                </div>
+              </div>
+            </div>
+
             <!-- Form Response (HTMX target) -->
             <div id="form-response" class="mb-6"></div>
 
@@ -180,6 +192,20 @@ export function renderLoginPage(data: LoginPageData, demoLoginActive: boolean = 
         })();
       </script>
       ` : ''}
+      <script>
+        // Viewer prefill — click the banner to fill viewer credentials
+        document.addEventListener('DOMContentLoaded', function() {
+          var btn = document.querySelector('.viewer-prefill-btn');
+          if (btn) {
+            btn.addEventListener('click', function() {
+              var e = document.getElementById('email');
+              var p = document.getElementById('password');
+              if (e) e.value = 'viewer@sonicjs.com';
+              if (p) p.value = 'sonicjs-view!';
+            });
+          }
+        });
+      </script>
     </body>
     </html>
   `

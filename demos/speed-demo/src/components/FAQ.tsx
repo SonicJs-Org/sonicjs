@@ -472,6 +472,40 @@ interface PayloadEmployee {
 
         {/* ── Source links ── */}
         <Section id="repos" title="Source Code">
+
+          {/* Live backend card */}
+          <a
+            href="https://speed-backend.sonicjs.com/admin"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group bg-slate-900 border border-emerald-500/30 hover:border-emerald-400/60 rounded-xl p-5 transition-colors block mb-4"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-8 h-8 bg-emerald-500/20 border border-emerald-500/40 rounded-lg flex items-center justify-center flex-shrink-0">
+                <span className="text-emerald-400 font-bold text-sm">⚡</span>
+              </div>
+              <span className="font-semibold text-white group-hover:text-emerald-300 transition-colors">Live SonicJS Admin</span>
+              <span className="text-slate-600 text-xs ml-auto group-hover:text-emerald-500 transition-colors">↗</span>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed mb-3">
+              Browse the live backend powering this demo. Log in with the view-only account to explore collections, content, and settings.
+            </p>
+            <div className="bg-slate-800/60 rounded-lg px-3 py-2 text-xs font-mono space-y-1">
+              <div className="flex gap-3">
+                <span className="text-slate-500 w-16">URL</span>
+                <span className="text-emerald-400">speed-backend.sonicjs.com/admin</span>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-slate-500 w-16">Email</span>
+                <span className="text-slate-300">viewer@sonicjs.com</span>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-slate-500 w-16">Password</span>
+                <span className="text-slate-300">sonicjs-view!</span>
+              </div>
+            </div>
+          </a>
+
           <div className="grid sm:grid-cols-2 gap-4">
             <a
               href="https://github.com/SonicJs-Org/sonicjs"

@@ -8,7 +8,7 @@ account_id = "f9d6328dc3115e621758a741dda3d5c4"
 # Custom domain handled via Cloudflare DNS
 workers_dev = false
 routes = [
-  { pattern = "employee-directory-backend.sonicjs.com/*", zone_name = "sonicjs.com" }
+  { pattern = "speed-backend.sonicjs.com/*", zone_name = "sonicjs.com" }
 ]
 
 # D1 Database — shared with sonicjs-demo (same content, same schema)

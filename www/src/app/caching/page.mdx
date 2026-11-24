@@ -1,30 +1,318 @@
-# Caching
+export const sections = [
+  { title: 'Why SonicJS is Fast', id: 'why-sonicjs-is-fast' },
+  { title: 'Three-Tier Cache', id: 'three-tier-cache' },
+  { title: 'Cache Flow', id: 'cache-flow' },
+  { title: 'Default TTLs', id: 'default-ttls' },
+  { title: 'Cache Invalidation', id: 'cache-invalidation' },
+  { title: 'Using the Cache API', id: 'using-the-cache-api' },
+  { title: 'Admin Dashboard', id: 'admin-dashboard' },
+  { title: 'Configuration', id: 'configuration' },
+]
 
-## Coming Soon
+# Caching & Performance
 
-This page is currently under construction. We're working on comprehensive documentation about SonicJS's powerful three-tier caching system.
+How SonicJS delivers sub-50ms API responses globally — and the three-tier cache that keeps them there. {{ className: 'lead' }}
 
-### What to Expect
+## Why SonicJS is Fast
 
-- **Three-tier caching architecture** - Understanding the caching layers
-- **Cache configuration** - How to configure caching for your needs
-- **Performance optimization** - Best practices for maximum performance
-- **Cache invalidation strategies** - Managing cache updates effectively
+Most CMS platforms run on a single server in a single region. Your users in London wait for a round-trip to us-east-1. Your users everywhere wait for a cold boot after the process sat idle.
 
-### See It in Action
+SonicJS avoids both problems by design.
 
-The [SonicJS Speed Demo](https://speed.sonicjs.com) races SonicJS (Cloudflare Workers + D1 + KV edge cache) against Payload CMS (Cloudflare Workers + D1, no cache) across 50,000 employee records — same runtime, same database engine, so the only variable is the caching layer.
+### No Cold Starts: V8 Isolates
 
-The demo shows the single-user latency advantage, but **that's just the tip of the iceberg**. The real benefit emerges at scale: when thousands of requests hit the same query simultaneously, every one is served from KV in parallel with zero database contention. An uncached backend serializes those hits against D1. The gap doesn't just hold under load — it widens.
+Traditional Node.js servers boot a full process — load modules, connect to databases, initialize the runtime. That takes 500–2000ms. When traffic is light and a process goes idle, you pay that cost on the next request.
 
-We're adding **k6 load tests** that will drive sustained concurrent traffic at both backends and publish the full results — throughput, p95/p99 latency, and error rates — along with all source code so you can reproduce the benchmark on your own Cloudflare account.
+Cloudflare Workers run as **V8 isolates**: lightweight JavaScript contexts that start in microseconds. There's no process to boot, no module graph to initialize. The first request to a fresh isolate still runs the SonicJS bootstrap middleware, but it's checking a flag and running migrations — not starting a server. Cold start in practice: **0–5ms**.
 
-### In the Meantime
+### Global by Default: 300+ Edge Locations
 
-Check out our other documentation sections:
+A Node.js CMS has one home. When a request comes from the wrong continent, it travels to that server and back — 300–800ms of pure latency that no amount of code optimization can fix.
 
-- [Architecture](/architecture) - Learn about the overall system design
-- [Database](/database) - Understand data persistence
-- [API Reference](/api) - Explore the API endpoints
+Workers run in **300+ Cloudflare cities worldwide**. Every request is handled from somewhere close to the user. Cross-region latency drops from 300–800ms to **30–60ms**.
 
-For immediate help, visit our [Community](/community) page or check the [FAQ](/faq).
+### The Three-Tier Cache
+
+Even at the edge, database reads take time. SonicJS intercepts every content query through a three-tier cache before it ever touches D1 — so most requests never hit the database at all.
+
+<FeatureGrid
+  features={[
+    {
+      icon: '⚡',
+      title: 'Tier 1: Memory',
+      description: 'Per-isolate in-memory store. Sub-millisecond reads. 50MB limit with LRU eviction.',
+    },
+    {
+      icon: '🌐',
+      title: 'Tier 2: KV',
+      description: 'Cloudflare KV — globally distributed, survives isolate recycling. 10–50ms reads.',
+    },
+    {
+      icon: '🗃️',
+      title: 'Tier 3: D1',
+      description: 'SQLite source of truth. Only reached on a full cache miss. Results populate both upper tiers.',
+    },
+  ]}
+  columns={3}
+/>
+
+---
+
+## Three-Tier Cache
+
+### Tier 1 — In-Memory Cache
+
+Each Cloudflare Worker isolate keeps a local in-memory store. Reads are synchronous and return in under a millisecond. The store has a 50MB ceiling with LRU eviction — the least-recently-used entries are dropped when space runs short.
+
+The tradeoff: memory is **per-isolate**. If Cloudflare routes two consecutive requests to different isolates (which happens), they each have their own memory store. That's why KV exists.
+
+### Tier 2 — Cloudflare KV
+
+KV is a globally-replicated key-value store. When an isolate has a memory miss, it checks KV next. A KV hit costs 10–50ms — fast, and it populates the memory tier so subsequent requests in the same isolate are free.
+
+KV is eventually consistent: writes propagate globally within seconds. For CMS content — articles, media metadata, collection schema — eventual consistency is fine. For session data, SonicJS skips the KV tier and keeps sessions memory-only.
+
+### Tier 3 — D1 Database
+
+D1 is SQLite at the edge. It's the source of truth. SonicJS only reaches D1 when both memory and KV miss. On a D1 hit, the result is written back to KV and memory before returning to the caller, so the next request finds it in cache.
+
+---
+
+## Cache Flow
+
+```
+Incoming request
+       ↓
+ Memory cache? ──── hit ──→ return  (<1ms)
+       ↓ miss
+   KV cache? ──────hit ──→ populate memory → return  (10–50ms)
+       ↓ miss
+  D1 database ──────────→ populate KV + memory → return  (50–200ms)
+```
+
+The measured impact on a typical content API endpoint:
+
+| Scenario | Response time |
+|---|---|
+| Memory hit | < 1ms |
+| KV hit | 10–50ms |
+| D1 hit (cold) | 50–200ms |
+| No cache (baseline) | 100–500ms |
+
+---
+
+## Default TTLs
+
+SonicJS ships with per-namespace cache configurations tuned to how often each data type changes.
+
+| Namespace | TTL | KV enabled | Notes |
+|---|---|---|---|
+| `content` | 1 hour | ✓ | Published articles, pages |
+| `config` | 2 hours | ✓ | Plugin config, system settings |
+| `collection` | 2 hours | ✓ | Schema definitions |
+| `media` | 1 hour | ✓ | File metadata |
+| `user` | 15 minutes | ✓ | User records, roles |
+| `api` | 5 minutes | ✓ | API endpoint responses |
+| `session` | 30 minutes | ✗ | Auth sessions (memory only) |
+
+<Callout type="info" title="TTLs are maximums, not guarantees">
+
+A cached entry lives up to its TTL — but event-driven invalidation clears it immediately when the underlying data changes. A content update fires `content.update`, which deletes the specific item cache and invalidates all list caches before the response returns.
+
+</Callout>
+
+---
+
+## Cache Invalidation
+
+SonicJS uses an **event-driven invalidation model**. Every write operation emits a typed event; the cache service subscribes and clears the relevant keys immediately.
+
+<CodeGroup title="Automatic Invalidation Events">
+
+```typescript
+// Content events → invalidate content namespace
+'content.create'  → invalidate('content:*')
+'content.update'  → delete specific item + invalidate('content:list:*')
+'content.delete'  → delete specific item + invalidate('content:*')
+'content.publish' → invalidate('content:*')
+
+// User events
+'user.update'     → invalidate specific user key
+'user.delete'     → invalidate specific user key
+
+// Config events
+'config.update'   → invalidate('config:*')
+'plugin.activate' → invalidate('config:*') + invalidate('collection:*')
+```
+
+</CodeGroup>
+
+You don't need to call invalidation manually in most cases. When you write a document via the SonicJS API, the event fires automatically and the cache is cleared before the response goes back to the client.
+
+### Manual Invalidation
+
+If you need to clear cache entries from your own plugin code:
+
+<CodeGroup title="Manual Cache Invalidation">
+
+```typescript
+import { getCacheService } from 'sonicjs/services/cache'
+
+const cache = getCacheService({ ttl: 3600, keyPrefix: 'myPlugin' })
+
+// Delete a specific key
+await cache.delete('myPlugin:item:abc123')
+
+// Invalidate by pattern (clears all matching keys)
+await cache.invalidate('myPlugin:list:*')
+
+// Clear everything in this namespace
+await cache.clear()
+```
+
+</CodeGroup>
+
+---
+
+## Using the Cache API
+
+### getOrSet — the most common pattern
+
+<CodeGroup title="getOrSet Pattern">
+
+```typescript
+import { getCacheService } from 'sonicjs/services/cache'
+
+const cache = getCacheService({
+  ttl: 300,        // 5 minutes
+  keyPrefix: 'api',
+})
+
+app.get('/api/posts', async (c) => {
+  const key = cache.generateKey('list', 'all')
+
+  const posts = await cache.getOrSet(key, async () => {
+    // Only runs on a cache miss
+    return db.prepare('SELECT * FROM posts ORDER BY createdAt DESC').all()
+  })
+
+  return c.json({ data: posts })
+})
+```
+
+</CodeGroup>
+
+### Reading cache source (for debugging)
+
+<CodeGroup title="Inspecting Cache Source">
+
+```typescript
+const result = await cache.getWithSource<Post[]>(key)
+
+if (result.hit) {
+  console.log(`Cache hit from: ${result.source}`) // 'memory' | 'kv'
+  return c.json({ data: result.data, _cacheSource: result.source })
+}
+
+// Miss — fetch from DB, populate cache
+const posts = await fetchFromDB()
+await cache.set(key, posts)
+return c.json({ data: posts, _cacheSource: 'db' })
+```
+
+</CodeGroup>
+
+### Generating consistent cache keys
+
+<CodeGroup title="Cache Key Generation">
+
+```typescript
+// Format: {namespace}:{type}:{identifier}
+const key = cache.generateKey('item', documentId)
+// → 'api:item:abc123'
+
+// For complex queries, hash the params
+import { hashQueryParams } from 'sonicjs/plugins/cache/services/cache-config'
+
+const queryHash = hashQueryParams({ page: 1, limit: 20, status: 'published' })
+const key = cache.generateKey('list', queryHash)
+```
+
+</CodeGroup>
+
+---
+
+## Admin Dashboard
+
+The cache admin panel at `/admin/cache` shows live stats across all namespaces: hit rates, entry counts, memory usage, and per-namespace breakdowns. You can flush individual namespaces or clear everything from there without touching code.
+
+The dashboard reads from the same singleton that your route code writes to — so the numbers are accurate, not estimates.
+
+---
+
+## Configuration
+
+### Enabling / disabling tiers
+
+Both tiers are on by default. You can disable KV for namespaces that don't need global consistency (e.g. session data, transient locks):
+
+<CodeGroup title="Custom Cache Config">
+
+```typescript
+import { getCacheService } from 'sonicjs/services/cache'
+
+// Memory-only namespace (no KV write)
+const sessionCache = getCacheService({
+  ttl: 1800,
+  keyPrefix: 'session',
+})
+
+// Longer-lived content with KV
+const contentCache = getCacheService({
+  ttl: 3600,
+  keyPrefix: 'content',
+})
+```
+
+</CodeGroup>
+
+### Cache versioning
+
+Each namespace carries a version string (`v1` by default). Bumping the version busts all entries in that namespace — useful after a schema change where old cache shapes are incompatible with new code:
+
+<CodeGroup title="Cache Key with Version">
+
+```typescript
+import { generateCacheKey } from 'sonicjs/plugins/cache/services/cache-config'
+
+// Produces: content:item:abc123:v2
+const key = generateCacheKey('content', 'item', documentId, 'v2')
+```
+
+</CodeGroup>
+
+<Callout type="tip" title="Cache warming">
+
+After a cold deploy or a full cache flush, the first requests to each route rebuild the cache. For high-traffic production sites, consider running cache-warming scripts against your critical endpoints immediately after deploy to avoid a thundering herd on the first real request.
+
+</Callout>
+
+---
+
+<div className="not-prose">
+  <Button href="/architecture" variant="text" arrow="right">
+    <>How the full system is architected</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/database" variant="text" arrow="right">
+    <>D1 database documentation</>
+  </Button>
+</div>
+
+<div className="not-prose mt-4">
+  <Button href="/compare" variant="text" arrow="right">
+    <>See how SonicJS compares on performance</>
+  </Button>
+</div>

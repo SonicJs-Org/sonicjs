@@ -62,7 +62,16 @@ function Skeleton({ variant }: { variant: 'sonic' | 'payload' }) {
 }
 
 export function App() {
-  const [showFAQ, setShowFAQ] = useState(false)
+  const [showFAQ, setShowFAQ] = useState(() => window.location.hash === '#how-it-works')
+
+  useEffect(() => {
+    const onHash = () => setShowFAQ(window.location.hash === '#how-it-works')
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  const goFAQ  = () => { window.location.hash = 'how-it-works' }
+  const goDemo = () => { window.location.hash = '' }
 
   // ── SonicJS state ──────────────────────────────────────────────────────────
   const [employees, setEmployees] = useState<EmployeeRecord[]>([])
@@ -211,7 +220,7 @@ export function App() {
 
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
-              onClick={() => setShowFAQ((v) => !v)}
+              onClick={() => showFAQ ? goDemo() : goFAQ()}
               className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
                 showFAQ
                   ? 'bg-emerald-400/10 border-emerald-500/40 text-emerald-300'

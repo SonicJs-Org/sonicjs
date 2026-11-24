@@ -270,7 +270,7 @@ interface PayloadEmployee {
             The comparison is apples-to-apples: same data, different architecture.
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatPill value="50 000" label="Employees" />
+            <StatPill value="50,000" label="Employees" />
             <StatPill value="9" label="Departments" />
             <StatPill value="6" label="Regions" />
             <StatPill value="10" label="Records / page" />

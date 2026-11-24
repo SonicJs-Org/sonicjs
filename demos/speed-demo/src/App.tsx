@@ -11,6 +11,7 @@ import { PayloadCard } from './components/PayloadCard'
 import { FilterGroup } from './components/Filters'
 import { Pagination } from './components/Pagination'
 import { StatsBar } from './components/StatsBar'
+import { FAQ } from './components/FAQ'
 
 const PAGE_SIZE = 10
 
@@ -61,6 +62,17 @@ function Skeleton({ variant }: { variant: 'sonic' | 'payload' }) {
 }
 
 export function App() {
+  const [showFAQ, setShowFAQ] = useState(() => window.location.hash === '#how-it-works')
+
+  useEffect(() => {
+    const onHash = () => setShowFAQ(window.location.hash === '#how-it-works')
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  const goFAQ  = () => { window.location.hash = 'how-it-works' }
+  const goDemo = () => { window.location.hash = '' }
+
   // ── SonicJS state ──────────────────────────────────────────────────────────
   const [employees, setEmployees] = useState<EmployeeRecord[]>([])
   const [sonicLoading, setSonicLoading] = useState(false)
@@ -76,6 +88,7 @@ export function App() {
   const [payloadEmployees, setPayloadEmployees] = useState<PayloadEmployee[]>([])
   const [payloadLoading, setPayloadLoading] = useState(false)
   const [payloadMs, setPayloadMs] = useState<number | null>(null)
+  const [totalDocs, setTotalDocs] = useState<number | null>(null)
 
   // ── Reference data ─────────────────────────────────────────────────────────
   const [deptMap, setDeptMap] = useState<DeptMap>(new Map())
@@ -157,9 +170,10 @@ export function App() {
 
       const payloadPromise = (async () => {
         try {
-          const { docs, ms } = await fetchPayloadEmployees(currentPage + 1, PAGE_SIZE)
+          const { docs, ms, totalDocs: total } = await fetchPayloadEmployees(currentPage + 1, PAGE_SIZE)
           setPayloadEmployees(docs)
           setPayloadMs(ms)
+          if (total != null) setTotalDocs(total)
         } catch (err) {
           console.error('Payload error:', err)
         } finally {
@@ -204,8 +218,45 @@ export function App() {
             </div>
           </div>
 
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              onClick={() => showFAQ ? goDemo() : goFAQ()}
+              className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                showFAQ
+                  ? 'bg-emerald-400/10 border-emerald-500/40 text-emerald-300'
+                  : 'bg-transparent border-white/10 text-slate-400 hover:text-white hover:border-white/20'
+              }`}
+            >
+              {showFAQ ? '← Demo' : 'How it works'}
+            </button>
+
+            {!showFAQ && (
+              <button
+                onClick={() => fetchAllTimed(page, filters)}
+                disabled={sonicLoading || payloadLoading}
+                title="Refresh data"
+                className="w-7 h-7 flex items-center justify-center rounded-lg border border-white/10 text-slate-400 hover:text-white hover:border-white/20 transition-colors disabled:opacity-30"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  className={`w-3.5 h-3.5 ${sonicLoading || payloadLoading ? 'animate-spin' : ''}`}
+                >
+                  <path fillRule="evenodd" d="M13.836 2.477a.75.75 0 0 1 .75.75v3.182a.75.75 0 0 1-.75.75h-3.182a.75.75 0 0 1 0-1.5h1.37l-.84-.841a4.5 4.5 0 0 0-7.08.932.75.75 0 0 1-1.3-.75 6 6 0 0 1 9.44-1.242l.842.84V3.227a.75.75 0 0 1 .75-.75Zm-.911 7.5A.75.75 0 0 1 13.199 11a6 6 0 0 1-9.44 1.241l-.84-.84v1.371a.75.75 0 0 1-1.5 0V9.591a.75.75 0 0 1 .75-.75H5.35a.75.75 0 0 1 0 1.5H3.98l.841.841a4.5 4.5 0 0 0 7.08-.932.75.75 0 0 1 1.025-.273Z" clipRule="evenodd" />
+                </svg>
+              </button>
+            )}
+          </div>
+
         </div>
       </header>
+
+      {/* ── FAQ page ── */}
+      {showFAQ && <FAQ />}
+
+      {/* ── Main demo content (hidden when FAQ is open) ── */}
+      {!showFAQ && <>
 
       {/* ── Filters + Speed Boost (1 row, 3 cols) ── */}
       <div className="border-b border-white/5 bg-slate-950/60 px-4 sm:px-6 lg:px-8 py-3">
@@ -339,7 +390,7 @@ export function App() {
                   style={{ width: payloadMs !== null ? `${Math.max((payloadMs / Math.max(sonicMs ?? 0, payloadMs ?? 0, 400)) * 100, 2)}%` : '0%' }}
                 />
               </div>
-              <p className="text-xs text-slate-600 mt-1">Cloudflare Workers + PostgreSQL</p>
+              <p className="text-xs text-slate-600 mt-1">Cloudflare Workers + D1 (no cache)</p>
             </div>
 
             {/* Employee cards */}
@@ -371,7 +422,18 @@ export function App() {
             />
           </div>
         )}
+
+        {/* Total record count */}
+        {totalDocs != null && (
+          <div className="mt-6 pt-4 border-t border-white/5 text-center">
+            <span className="text-xs text-slate-600">
+              {totalDocs.toLocaleString()} total employees across both backends
+            </span>
+          </div>
+        )}
       </div>
+
+      </>}
     </div>
   )
 }

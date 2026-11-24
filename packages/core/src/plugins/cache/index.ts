@@ -34,7 +34,7 @@ export class CachePlugin {
 
     console.log('✅ Cache plugin activated', {
       memoryEnabled: settings.memoryEnabled ?? true,
-      kvEnabled: settings.kvEnabled ?? false,
+      kvEnabled: settings.kvEnabled ?? true,
       defaultTTL: settings.defaultTTL ?? 3600
     })
 

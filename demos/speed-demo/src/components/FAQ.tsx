@@ -546,6 +546,35 @@ interface PayloadEmployee {
             </a>
           </div>
 
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="bg-slate-900 border border-orange-500/20 rounded-xl p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-orange-400 text-lg">🔐</span>
+                <span className="font-semibold text-white text-sm">Payload Admin — View Only</span>
+              </div>
+              <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                Log in to browse the live Payload admin. Read-only access — you can explore collections and records but cannot create, edit, or delete.
+              </p>
+              <div className="space-y-1.5 text-xs font-mono">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 w-16">URL</span>
+                  <a href="https://payload.sonicjs.com/admin" target="_blank" rel="noopener noreferrer"
+                    className="text-orange-400 hover:text-orange-300 transition-colors">
+                    payload.sonicjs.com/admin ↗
+                  </a>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 w-16">Email</span>
+                  <span className="text-slate-300">viewer@sonicjs.com</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 w-16">Password</span>
+                  <span className="text-slate-300">ViewSonic1!</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="bg-slate-900 border border-white/10 rounded-xl p-4 text-xs text-slate-500">
             <p className="text-slate-400 font-medium mb-1">This demo app</p>
             <p>

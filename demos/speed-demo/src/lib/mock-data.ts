@@ -28,19 +28,38 @@ export const MOCK_REGIONS: RegionRecord[] = [
 // ── Employee generation ───────────────────────────────────────────────────────
 
 const FIRST = [
+  // Gender-neutral / modern
   'Alex', 'Jordan', 'Morgan', 'Taylor', 'Casey', 'Riley', 'Avery', 'Drew', 'Blake', 'Cameron',
   'Quinn', 'Peyton', 'Skyler', 'Reese', 'Logan', 'Parker', 'Hayden', 'Sydney', 'Jamie', 'Devon',
+  // Classic English
   'Emma', 'Liam', 'Olivia', 'Noah', 'Ava', 'Elijah', 'Sophia', 'Lucas', 'Isabella', 'Mason',
   'Charlotte', 'Ethan', 'Amelia', 'Aiden', 'Mia', 'James', 'Harper', 'Sebastian', 'Evelyn', 'Michael',
+  'Daniel', 'Grace', 'Henry', 'Lily', 'Owen', 'Nora', 'Jack', 'Claire', 'Ryan', 'Zoey',
+  'Nathan', 'Violet', 'Dylan', 'Hannah', 'Isaac', 'Stella', 'Aaron', 'Penelope', 'Adam', 'Chloe',
+  'Caleb', 'Layla', 'Connor', 'Aurora', 'Ian', 'Savannah', 'Tyler', 'Bella', 'Evan', 'Lucy',
+  'Andrew', 'Eleanor', 'Brandon', 'Scarlett', 'Jason', 'Victoria', 'Kevin', 'Natalie', 'Matthew', 'Aubrey',
+  // International
   'Priya', 'Kai', 'Zara', 'Noa', 'Ravi', 'Sasha', 'Mika', 'Ling', 'Jin', 'Aria',
+  'Amir', 'Fatima', 'Yuki', 'Diego', 'Lena', 'Hamid', 'Yuna', 'Rafael', 'Nadia', 'Tariq',
+  'Meera', 'Kenji', 'Leila', 'Carlos', 'Ingrid', 'Kofi', 'Hana', 'Marco', 'Ananya', 'Lukas',
+  'Chiara', 'Emre', 'Sakura', 'Mateus', 'Soraya', 'Tobias', 'Yara', 'Ivan', 'Freya', 'Alejandro',
 ]
 
 const LAST = [
+  // Common US
   'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Wilson', 'Moore',
   'Taylor', 'Anderson', 'Thomas', 'Jackson', 'White', 'Harris', 'Martin', 'Thompson', 'Young', 'Lewis',
   'Walker', 'Hall', 'Allen', 'King', 'Wright', 'Scott', 'Torres', 'Nguyen', 'Hill', 'Flores',
   'Green', 'Adams', 'Nelson', 'Baker', 'Carter', 'Mitchell', 'Perez', 'Roberts', 'Turner', 'Phillips',
+  'Campbell', 'Parker', 'Evans', 'Edwards', 'Collins', 'Stewart', 'Sanchez', 'Morris', 'Rogers', 'Reed',
+  'Cook', 'Morgan', 'Bell', 'Murphy', 'Bailey', 'Rivera', 'Cooper', 'Richardson', 'Cox', 'Howard',
+  'Ward', 'Peterson', 'Gray', 'Ramirez', 'James', 'Watson', 'Brooks', 'Kelly', 'Sanders', 'Price',
+  'Bennett', 'Wood', 'Barnes', 'Ross', 'Henderson', 'Coleman', 'Jenkins', 'Perry', 'Powell', 'Long',
+  // International
   'Patel', 'Kumar', 'Chen', 'Zhang', 'Kim', 'Park', 'Nakamura', 'Santos', 'Silva', 'Müller',
+  'Sharma', 'Gupta', 'Wang', 'Liu', 'Lee', 'Tanaka', 'Yamamoto', 'Oliveira', 'Costa', 'Ferreira',
+  'Schneider', 'Fischer', 'Weber', 'Meyer', 'Okonkwo', 'Mensah', 'Diallo', 'Hassan', 'Ali', 'Khan',
+  'Petrov', 'Ivanov', 'Novak', 'Kowalski', 'Reyes', 'Morales', 'Gomez', 'Herrera', 'Medina', 'Castillo',
 ]
 
 const DEPT_IDS = MOCK_DEPARTMENTS.map(d => d.id)

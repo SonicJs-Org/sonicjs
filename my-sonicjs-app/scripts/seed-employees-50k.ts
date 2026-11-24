@@ -36,10 +36,12 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DRY_RUN = process.argv.includes('--dry-run')
 const INLINE = process.argv.includes('--inline')
-const START_CHUNK = parseInt(
-  process.argv.find(a => a.startsWith('--start-chunk='))?.split('=')[1] ?? '1',
-  10,
-)
+const _startChunkRaw = process.argv.find(a => a.startsWith('--start-chunk='))?.split('=')[1] ?? '1'
+const START_CHUNK = parseInt(_startChunkRaw, 10)
+if (!Number.isInteger(START_CHUNK) || START_CHUNK < 1 || String(START_CHUNK) !== _startChunkRaw.trim()) {
+  console.error(`Error: --start-chunk must be a positive integer, got: ${_startChunkRaw}`)
+  process.exit(1)
+}
 
 // D1 database name as configured in wrangler.client-backend.toml
 const DB_NAME = 'sonicjs-demo'
@@ -286,6 +288,10 @@ async function main() {
     }
 
     const totalChunks = Math.ceil(employees.length / EMPLOYEES_PER_CHUNK)
+    if (START_CHUNK > totalChunks) {
+      console.error(`Error: --start-chunk=${START_CHUNK} exceeds total chunk count (${totalChunks} chunks for ${employees.length.toLocaleString()} employees)`)
+      process.exit(1)
+    }
     const resuming = START_CHUNK > 1
     console.log(`\n[2/2] Seeding ${employees.length.toLocaleString()} employees in ${totalChunks} chunks${resuming ? ` (resuming from chunk ${START_CHUNK})` : ''}…`)
     for (let c = START_CHUNK - 1; c < totalChunks; c++) {

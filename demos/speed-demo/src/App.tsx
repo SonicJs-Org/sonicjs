@@ -231,32 +231,90 @@ export function App() {
         <div className="grid grid-cols-2 lg:grid-cols-[1fr_1px_1fr] gap-x-3 sm:gap-x-6 gap-y-6">
 
           {/* SonicJS side */}
-          <div
-            className="grid grid-cols-1 sm:grid-cols-2 gap-3 content-start"
-            style={{ opacity: sonicLoading && employees.length > 0 ? 0.5 : 1, transition: 'opacity 150ms' }}
-          >
+          <div className="flex flex-col gap-3">
+            {/* SonicJS stat card */}
+            <div className="bg-slate-900 border border-emerald-500/20 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-emerald-400 text-sm">⚡</span>
+                  <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">SonicJS</span>
+                </div>
+                {cacheSource && (
+                  <span className="text-xs text-emerald-500/70 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                    {cacheSource}
+                  </span>
+                )}
+              </div>
+              <div className={`text-2xl font-bold font-mono tracking-tight mb-2 ${
+                sonicMs === null ? 'text-slate-400'
+                : sonicMs < 50 ? 'text-emerald-400'
+                : sonicMs < 200 ? 'text-yellow-400'
+                : 'text-red-400'
+              }`}>
+                {sonicMs !== null ? `${sonicMs}ms` : '…'}
+              </div>
+              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-400 rounded-full transition-all duration-700 ease-out"
+                  style={{ width: sonicMs !== null ? `${Math.max((sonicMs / Math.max(sonicMs ?? 0, payloadMs ?? 0, 400)) * 100, 2)}%` : '0%' }}
+                />
+              </div>
+              <p className="text-xs text-slate-600 mt-1">Cloudflare Workers + D1</p>
+            </div>
+
+            {/* Employee cards */}
+            <div
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3 content-start"
+              style={{ opacity: sonicLoading && employees.length > 0 ? 0.5 : 1, transition: 'opacity 150ms' }}
+            >
             {sonicLoading && employees.length === 0
               ? skeletons.map((_, i) => <Skeleton key={i} variant="sonic" />)
               : employees.map((emp) => (
                   <EmployeeCard key={emp.id} employee={emp} deptMap={deptMap} regionMap={regionMap} />
                 ))
             }
+            </div>
           </div>
 
           {/* Divider */}
           <div className="bg-white/5 self-stretch hidden lg:block" />
 
           {/* Payload side */}
-          <div
-            className="grid grid-cols-1 sm:grid-cols-2 gap-3 content-start"
-            style={{ opacity: payloadLoading && payloadEmployees.length > 0 ? 0.5 : 1, transition: 'opacity 150ms' }}
-          >
+          <div className="flex flex-col gap-3">
+            {/* Payload stat card */}
+            <div className="bg-slate-900 border border-orange-500/20 rounded-xl p-4">
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-orange-400 text-sm">🐢</span>
+                <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Payload</span>
+              </div>
+              <div className={`text-2xl font-bold font-mono tracking-tight mb-2 ${
+                payloadMs === null ? 'text-slate-400'
+                : payloadMs < 300 ? 'text-yellow-400'
+                : 'text-red-400'
+              }`}>
+                {payloadMs !== null ? `${payloadMs}ms` : '…'}
+              </div>
+              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-orange-400 rounded-full transition-all duration-700 ease-out"
+                  style={{ width: payloadMs !== null ? `${Math.max((payloadMs / Math.max(sonicMs ?? 0, payloadMs ?? 0, 400)) * 100, 2)}%` : '0%' }}
+                />
+              </div>
+              <p className="text-xs text-slate-600 mt-1">Cloudflare Workers + PostgreSQL</p>
+            </div>
+
+            {/* Employee cards */}
+            <div
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3 content-start"
+              style={{ opacity: payloadLoading && payloadEmployees.length > 0 ? 0.5 : 1, transition: 'opacity 150ms' }}
+            >
             {payloadLoading && payloadEmployees.length === 0
               ? skeletons.map((_, i) => <Skeleton key={i} variant="payload" />)
               : payloadEmployees.map((emp) => (
                   <PayloadCard key={emp.id} employee={emp} />
                 ))
             }
+            </div>
           </div>
 
         </div>

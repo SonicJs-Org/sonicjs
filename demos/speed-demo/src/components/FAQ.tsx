@@ -255,7 +255,7 @@ interface PayloadEmployee {
         <div className="max-w-4xl mx-auto">
           <h1 className="text-2xl font-bold text-white mb-2">How This Demo Works</h1>
           <p className="text-slate-400 text-sm leading-relaxed max-w-2xl">
-            A live employee directory racing two CMS backends — SonicJS on Cloudflare's edge vs. Payload CMS on a traditional server.
+            A live employee directory racing two CMS backends — both on Cloudflare Workers + D1, but only SonicJS adds a KV edge cache.
             Everything below is real: the API calls, the schema, the data counts — and the source code is fully open so you can run this yourself.
           </p>
         </div>

@@ -162,7 +162,7 @@ export { CACHE_CONFIGS, getCacheConfig, generateCacheKey } from './services/cach
 export type { CacheConfig, CacheStats } from './services/cache-config'
 export { emitEvent, onEvent, getEventBus } from './services/event-bus'
 export { getCacheInvalidationStats, getRecentInvalidations } from './services/cache-invalidation'
-export { warmCommonCaches, warmNamespace, preloadCache } from './services/cache-warming'
+export { warmCommonCaches, warmNamespace, preloadCache, warmMemoryOnFirstRequest } from './services/cache-warming'
 
 // Create and export plugin instance
 const plugin = new CachePlugin()

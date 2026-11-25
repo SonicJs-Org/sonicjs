@@ -8,6 +8,65 @@ import { getCacheService } from './cache.js'
 import { CACHE_CONFIGS } from './cache-config.js'
 import { getCollectionRegistry, collectionRecordToRow } from '../../../services/collection-registry'
 
+// ── Memory warm on first request ────────────────────────────────────────────
+
+/**
+ * Per-isolate guard: set to true once warming has been scheduled so we never
+ * fire more than once per isolate lifetime (memory is per-isolate anyway).
+ */
+let _isolateMemoryWarmed = false
+
+/**
+ * Warm the in-memory cache tier once per isolate.
+ *
+ * Reads the `warmMemoryOnBoot` flag from the `core-cache` plugin settings in
+ * D1; if enabled, calls {@link warmCommonCaches} to pre-populate collections,
+ * recent content, and media into memory.  The function is idempotent — it
+ * no-ops on every call after the first on this isolate.
+ *
+ * Designed to be called via `ctx.waitUntil()` in the bootstrap middleware so
+ * it runs off the request critical path.
+ */
+export async function warmMemoryOnFirstRequest(db: D1Database): Promise<void> {
+  if (_isolateMemoryWarmed) return
+  _isolateMemoryWarmed = true
+
+  try {
+    // Lightweight settings read — avoids importing the full PluginService.
+    const row = await db
+      .prepare(
+        `SELECT json_extract(data, '$.settings') AS settings
+         FROM documents
+         WHERE slug = 'core-cache' AND type_id = 'plugin'
+           AND tenant_id = 'default' AND is_current_draft = 1
+           AND deleted_at IS NULL
+         LIMIT 1`
+      )
+      .first<{ settings: string | null }>()
+
+    if (!row?.settings) return
+
+    let settings: Record<string, unknown>
+    try {
+      settings = JSON.parse(row.settings)
+    } catch {
+      return
+    }
+
+    if (settings.warmMemoryOnBoot !== true) return
+
+    console.log('[cache] Warming memory cache for new region/isolate…')
+    const result = await warmCommonCaches(db)
+    console.log(
+      `[cache] Memory warm complete: ${result.warmed} entries` +
+      ` (${result.details.map(d => `${d.namespace}:${d.count}`).join(', ')})`
+    )
+  } catch (err) {
+    // Non-fatal — a cold start without DB or a missing plugin row is fine.
+    console.warn('[cache] warmMemoryOnFirstRequest failed (non-fatal):', err)
+  }
+}
+
 /**
  * Warm cache with common queries
  */

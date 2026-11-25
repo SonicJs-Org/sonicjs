@@ -366,6 +366,11 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
               setGlobalCatalogKv(kv)
               c.executionCtx.waitUntil(loadKvCatalog())
             } catch { /* KV wiring optional */ }
+            // Memory warm on first request (feature-flagged via core-cache plugin settings).
+            try {
+              const { warmMemoryOnFirstRequest } = await import("../plugins/cache/services/cache-warming")
+              c.executionCtx.waitUntil(warmMemoryOnFirstRequest(c.env.DB as D1Database))
+            } catch { /* optional */ }
             try {
               const configs = await loadCollectionConfigs()
               getCollectionRegistry().register(configs)
@@ -478,6 +483,11 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       } catch (error) {
         console.error("[Bootstrap] Error wiring CACHE_KV namespace:", error);
       }
+      // Memory warm on first request (feature-flagged via core-cache plugin settings).
+      try {
+        const { warmMemoryOnFirstRequest } = await import("../plugins/cache/services/cache-warming")
+        c.executionCtx.waitUntil(warmMemoryOnFirstRequest(c.env.DB as D1Database))
+      } catch { /* optional */ }
 
       // 2. Populate the in-memory collection registry from code-defined configs.
       // This is the source of truth going forward; the DB `collections` table is

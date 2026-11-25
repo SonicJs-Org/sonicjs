@@ -41,6 +41,12 @@
       "label": "Max Memory Size (MB)",
       "description": "Maximum size of in-memory cache in megabytes",
       "default": 50
+    },
+    "warmMemoryOnBoot": {
+      "type": "boolean",
+      "label": "Warm Memory Cache on First Request",
+      "description": "Pre-populate the in-memory cache when a new region/isolate starts (first request to that region). Runs in the background after the first response — subsequent requests benefit from the warm cache.",
+      "default": false
     }
   },
   "hooks": {

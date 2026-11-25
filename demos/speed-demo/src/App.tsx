@@ -122,7 +122,12 @@ export function App() {
             })
           if (seq !== fetchSeqRef.current) return
           setSonicMs(Math.round(performance.now() - t0))
-          setCacheSource(headers.get('x-cache-source') ?? headers.get('sonicjs-source'))
+          setCacheSource(
+            // CF Cache Rule hit: Worker never ran, response came from CF's CDN cache
+            headers.get('cf-cache-status') === 'HIT'
+              ? 'edge'
+              : (headers.get('x-cache-source') ?? headers.get('sonicjs-source'))
+          )
           setEmployees(response.data as unknown as EmployeeRecord[])
           setPageCount(response.meta.count)
           setHasNextPage(response.meta.count === PAGE_SIZE)

@@ -500,7 +500,11 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     const path = new URL(c.req.url).pathname
     if (path.startsWith('/api/') && (c.req.method === 'GET' || c.req.method === 'HEAD')) {
       // Fixed '*' string (not a function) → Hono does NOT append Vary:Origin or aac:true.
-      return cors({ origin: '*', maxAge: 86400 })(c, next)
+      return cors({ 
+        origin: '*', 
+        maxAge: 86400,
+        exposeHeaders: ['X-Cache-Status', 'X-Cache-Source', 'X-Cache-TTL', 'X-Response-Time'],
+      })(c, next)
     }
 
     // Credential-aware CORS for all other routes (auth, admin, write operations).

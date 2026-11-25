@@ -9,7 +9,7 @@ import { loginAsAdmin } from './utils/test-helpers'
  * client-side at 25 rows per page. These tests verify the pager behaviour by
  * injecting a known number of rows into the DOM then driving the controls.
  */
-test.describe('Admin Cache → URL catalog pagination', () => {
+test.describe('Admin Cache → URL catalog pagination @plugins @content', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
     await page.goto('/admin/cache#url-catalog', { waitUntil: 'domcontentloaded' })

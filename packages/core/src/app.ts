@@ -499,12 +499,35 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.use('*', async (c, next) => {
     const path = new URL(c.req.url).pathname
     if (path.startsWith('/api/') && (c.req.method === 'GET' || c.req.method === 'HEAD')) {
-      // Fixed '*' string (not a function) → Hono does NOT append Vary:Origin or aac:true.
-      return cors({ 
+      // Check Worker Cache first — CF CDN caches the Worker Cache responses, giving
+      // global cf-cache-status: HIT. The cached response already has acao:* set.
+      const workerCache = await (caches as any).open('sonicjs:api:v2')
+      const cacheKey = new Request(c.req.url)
+      const cached = await workerCache.match(cacheKey)
+      if (cached) {
+        return new Response(cached.body, cached)
+      }
+
+      // Cache MISS — run handler with fixed-* CORS (no Vary:Origin, no aac).
+      await cors({ 
         origin: '*', 
         maxAge: 86400,
         exposeHeaders: ['X-Cache-Status', 'X-Cache-Source', 'X-Cache-TTL', 'X-Response-Time'],
       })(c, next)
+
+      // Store successful responses in Worker Cache so CF CDN caches them too.
+      if (c.res.status === 200) {
+        const toStore = c.res.clone()
+        const storeHeaders = new Headers(toStore.headers)
+        storeHeaders.set('Cache-Control', 'public, max-age=7776000')
+        const storeRes = new Response(toStore.body, { status: 200, headers: storeHeaders })
+        try {
+          c.executionCtx.waitUntil(workerCache.put(cacheKey, storeRes))
+        } catch {
+          await workerCache.put(cacheKey, storeRes)
+        }
+      }
+      return
     }
 
     // Credential-aware CORS for all other routes (auth, admin, write operations).

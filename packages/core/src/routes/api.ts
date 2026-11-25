@@ -218,6 +218,12 @@ apiRoutes.use('*', async (c, next) => {
   await next()
   const totalTime = Date.now() - startTime
   c.header('X-Response-Time', `${totalTime}ms`)
+  // For GET requests, tell CF Cache Rule it may cache this response.
+  // The CF Cache Rule already overrides TTL (90 days) but CF requires a
+  // Cache-Control: public header on Worker responses to enable caching.
+  if (c.req.method === 'GET' && c.res.status === 200) {
+    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400')
+  }
 })
 
 // Check if cache plugin is active; honour Cache-Control: no-cache bypass

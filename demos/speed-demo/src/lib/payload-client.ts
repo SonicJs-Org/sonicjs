@@ -24,6 +24,8 @@ export async function fetchPayloadEmployees(
     limit: String(limit),
     depth: '1',
     page: String(page),
+    // Match SonicJS's explicit sort so both sides render employees in the same order.
+    sort: 'firstName,lastName',
   })
   if (department) params.set('where[department.name][equals]', department)
   if (region) params.set('where[region.name][equals]', region)

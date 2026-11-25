@@ -114,9 +114,9 @@ export function App() {
               offset: currentPage * PAGE_SIZE,
               status: 'published',
               // Match Payload's explicit sort so both sides render employees in the same order.
+              // Sort by phone (unique per employee) — first/last name had too many duplicates.
               sort: JSON.stringify([
-                { field: 'data.first_name', order: 'asc' },
-                { field: 'data.last_name', order: 'asc' },
+                { field: 'data.phone', order: 'asc' },
               ]),
               ...(Object.keys(where).length ? { where } : {}),
             })

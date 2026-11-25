@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { sonic, sonicOrigin, useMock } from './lib/client'
 import { fetchPayloadEmployees } from './lib/payload-client'
+import { DEPT_MAP, REGION_MAP, DEPT_OPTIONS, REGION_OPTIONS } from './lib/static-data'
 import type {
-  EmployeeRecord, DepartmentRecord, RegionRecord,
-  DeptMap, RegionMap, FilterOption, FilterState,
+  EmployeeRecord,
+  FilterState,
   PayloadEmployee,
 } from './types'
 import { EmployeeCard } from './components/EmployeeCard'
@@ -14,18 +15,6 @@ import { StatsBar } from './components/StatsBar'
 import { FAQ } from './components/FAQ'
 
 const PAGE_SIZE = 10
-
-const DEPT_TAILWIND: Record<string, string> = {
-  Engineering: 'bg-blue-500/20 text-blue-300',
-  Product:     'bg-purple-500/20 text-purple-300',
-  Design:      'bg-pink-500/20 text-pink-300',
-  Marketing:   'bg-orange-500/20 text-orange-300',
-  Sales:       'bg-green-500/20 text-green-300',
-  HR:          'bg-teal-500/20 text-teal-300',
-  Finance:     'bg-yellow-500/20 text-yellow-300',
-  Legal:       'bg-red-500/20 text-red-300',
-  Operations:  'bg-slate-500/20 text-slate-300',
-}
 
 function Dots({ color }: { color: string }) {
   return (
@@ -90,49 +79,19 @@ export function App() {
   const [payloadMs, setPayloadMs] = useState<number | null>(null)
   const [totalDocs, setTotalDocs] = useState<number | null>(null)
 
-  // ── Reference data ─────────────────────────────────────────────────────────
-  const [deptMap, setDeptMap] = useState<DeptMap>(new Map())
-  const [regionMap, setRegionMap] = useState<RegionMap>(new Map())
-  const [deptOptions, setDeptOptions] = useState<FilterOption[]>([])
-  const [regionOptions, setRegionOptions] = useState<FilterOption[]>([])
+  // ── Reference data (hardcoded — fixed seed records, no API calls needed) ────
+  const deptMap = DEPT_MAP
+  const regionMap = REGION_MAP
+  const deptOptions = DEPT_OPTIONS
+  const regionOptions = REGION_OPTIONS
 
-  useEffect(() => {
-    const loadRefs = async () => {
-      const [deptsRes, regionsRes] = await Promise.all([
-        sonic.collection('departments').list({ limit: 50, status: 'published' }),
-        sonic.collection('regions').list({ limit: 50, status: 'published' }),
-      ])
 
-      const newDeptMap: DeptMap = new Map()
-      const newDeptOptions: FilterOption[] = []
-      for (const rec of deptsRes.data as unknown as DepartmentRecord[]) {
-        const name = rec.data.name
-        newDeptMap.set(rec.id, {
-          name,
-          icon: rec.data.icon ?? '',
-          color: rec.data.color ?? '#64748B',
-          tailwindClass: DEPT_TAILWIND[name] ?? 'bg-slate-500/20 text-slate-300',
-        })
-        newDeptOptions.push({ id: rec.id, name, icon: rec.data.icon })
-      }
-
-      const newRegionMap: RegionMap = new Map()
-      const newRegionOptions: FilterOption[] = []
-      for (const rec of regionsRes.data as unknown as RegionRecord[]) {
-        newRegionMap.set(rec.id, rec.data)
-        newRegionOptions.push({ id: rec.id, name: rec.data.name, flag: rec.data.flag_emoji })
-      }
-
-      setDeptMap(newDeptMap)
-      setRegionMap(newRegionMap)
-      setDeptOptions(newDeptOptions)
-      setRegionOptions(newRegionOptions)
-    }
-    loadRefs().catch(console.error)
-  }, [])
+  // Monotonic counter — discard results from superseded fetches
+  const fetchSeqRef = useRef(0)
 
   const fetchAllTimed = useCallback(
     async (currentPage: number, currentFilters: FilterState, bypassCache = false) => {
+      const seq = ++fetchSeqRef.current
       setSonicMs(null)
       setPayloadMs(null)
       setSonicLoading(true)
@@ -154,8 +113,14 @@ export function App() {
               limit: PAGE_SIZE,
               offset: currentPage * PAGE_SIZE,
               status: 'published',
+              // Match Payload's explicit sort so both sides render employees in the same order.
+              // Sort by phone (unique per employee) — first/last name had too many duplicates.
+              sort: JSON.stringify([
+                { field: 'data.phone', order: 'asc' },
+              ]),
               ...(Object.keys(where).length ? { where } : {}),
             })
+          if (seq !== fetchSeqRef.current) return
           setSonicMs(Math.round(performance.now() - t0))
           setCacheSource(headers.get('x-cache-source') ?? headers.get('sonicjs-source'))
           setEmployees(response.data as unknown as EmployeeRecord[])
@@ -164,20 +129,23 @@ export function App() {
         } catch (err) {
           console.error('SonicJS error:', err)
         } finally {
-          setSonicLoading(false)
+          if (seq === fetchSeqRef.current) setSonicLoading(false)
         }
       })()
 
       const payloadPromise = (async () => {
         try {
-          const { docs, ms, totalDocs: total } = await fetchPayloadEmployees(currentPage + 1, PAGE_SIZE)
+          const deptName = currentFilters.department ? DEPT_MAP.get(currentFilters.department)?.name : undefined
+          const regionName = currentFilters.region ? REGION_MAP.get(currentFilters.region)?.name : undefined
+          const { docs, ms, totalDocs: total } = await fetchPayloadEmployees(currentPage + 1, PAGE_SIZE, deptName, regionName)
+          if (seq !== fetchSeqRef.current) return
           setPayloadEmployees(docs)
           setPayloadMs(ms)
           if (total != null) setTotalDocs(total)
         } catch (err) {
           console.error('Payload error:', err)
         } finally {
-          setPayloadLoading(false)
+          if (seq === fetchSeqRef.current) setPayloadLoading(false)
         }
       })()
 
@@ -427,7 +395,7 @@ export function App() {
         {totalDocs != null && (
           <div className="mt-6 pt-4 border-t border-white/5 text-center">
             <span className="text-xs text-slate-600">
-              {totalDocs.toLocaleString()} total employees across both backends
+              {totalDocs.toLocaleString()} {filters.department || filters.region ? 'matching Payload employees' : 'total employees across both backends'}
             </span>
           </div>
         )}

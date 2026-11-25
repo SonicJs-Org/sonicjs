@@ -128,6 +128,26 @@ export function getCacheConfig(namespace: string): CacheConfig {
  * Generate a cache key with consistent format
  * Format: {namespace}:{type}:{identifier}:{version}
  */
+/** Maximum KV key length enforced by Cloudflare (bytes). */
+const KV_MAX_KEY_LENGTH = 512
+
+/**
+ * Fast non-cryptographic 53-bit hash of a string (cyrb53 by bryc).
+ * Used to shorten cache keys that would exceed the KV 512-byte limit while
+ * remaining effectively collision-free for the identifier values we store.
+ */
+function hashIdentifier(str: string): string {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(14, '0')
+}
+
 export function generateCacheKey(
   namespace: string,
   type: string,
@@ -135,7 +155,11 @@ export function generateCacheKey(
   version?: string
 ): string {
   const v = version || getCacheConfig(namespace).version || 'v1'
-  return `${namespace}:${type}:${identifier}:${v}`
+  const full = `${namespace}:${type}:${identifier}:${v}`
+  if (full.length <= KV_MAX_KEY_LENGTH) return full
+  // Identifier exceeds KV key limit — hash it to a 14-hex-char digest.
+  // Short keys are unchanged so existing KV entries are not invalidated.
+  return `${namespace}:${type}:h:${hashIdentifier(identifier)}:${v}`
 }
 
 /**

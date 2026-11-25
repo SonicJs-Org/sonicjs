@@ -164,10 +164,31 @@ export function mockFetch(input: string | URL | Request, _init?: RequestInit): P
   const offset = parseInt(params.get('offset') ?? '0')
   const deptFilter = params.get('where[department][equals]')
   const regionFilter = params.get('where[region][equals]')
+  const sortParam = params.get('sort')
 
   let employees = ALL_EMPLOYEES
   if (deptFilter) employees = employees.filter(e => e.data.department === deptFilter)
   if (regionFilter) employees = employees.filter(e => e.data.region === regionFilter)
+
+  if (sortParam) {
+    try {
+      const sortSpec = JSON.parse(sortParam) as { field: string; order: 'asc' | 'desc' }[]
+      if (Array.isArray(sortSpec) && sortSpec.length) {
+        employees = [...employees].sort((a, b) => {
+          for (const { field, order } of sortSpec) {
+            const key = field.replace(/^data\./, '') as keyof typeof a.data
+            const av = String(a.data[key] ?? '')
+            const bv = String(b.data[key] ?? '')
+            const cmp = av.localeCompare(bv)
+            if (cmp !== 0) return order === 'desc' ? -cmp : cmp
+          }
+          return 0
+        })
+      }
+    } catch {
+      // ignore malformed sort param, fall back to natural order
+    }
+  }
 
   const page = employees.slice(offset, offset + limit)
   return respond({ data: page, meta: { count: page.length, timestamp: Date.now() } })

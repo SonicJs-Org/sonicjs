@@ -215,6 +215,11 @@ export class CacheService {
     }
   }
 
+  /** Wire (or re-wire) the KV namespace — called by setGlobalKVNamespace to backfill instances created before bootstrap ran. */
+  setKvNamespace(kv: KVNamespace): void {
+    this.kvNamespace = kv
+  }
+
   /**
    * Get value from cache (tries memory first, then KV)
    */
@@ -344,9 +349,11 @@ export class CacheService {
     // Store in KV cache (Tier 2)
     if (config.kvEnabled && this.kvNamespace) {
       try {
+        // Cloudflare KV requires minimum 60s TTL and enforces a maximum of 30 days
+        // (2,592,000s). Clamp to both bounds silently.
+        const KV_MAX_TTL = 2_592_000
         await this.kvNamespace.put(key, JSON.stringify(value), {
-          // Cloudflare KV requires minimum 60s TTL in production; clamp silently.
-          expirationTtl: Math.max(config.ttl, 60)
+          expirationTtl: Math.min(Math.max(config.ttl, 60), KV_MAX_TTL)
         })
         await this.rememberKvWrite(key)
       } catch (error) {
@@ -698,6 +705,12 @@ let globalKVNamespace: KVNamespace | undefined
  */
 export function setGlobalKVNamespace(kvNamespace: KVNamespace): void {
   globalKVNamespace = kvNamespace
+  // Backfill any instances that were created before KV was wired (e.g. because
+  // getCacheService was called during module initialisation, before the first
+  // request reached the bootstrap middleware that calls this function).
+  for (const instance of cacheInstances.values()) {
+    instance.setKvNamespace(kvNamespace)
+  }
 }
 
 /**

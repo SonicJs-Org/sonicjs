@@ -34,16 +34,18 @@ export class CachePlugin {
 
     console.log('✅ Cache plugin activated', {
       memoryEnabled: settings.memoryEnabled ?? true,
-      kvEnabled: settings.kvEnabled ?? false,
+      kvEnabled: settings.kvEnabled ?? true,
       defaultTTL: settings.defaultTTL ?? 3600
     })
 
     // Initialize default cache services
+    // Note: kvEnabled is intentionally NOT overridden by plugin settings — it is a
+    // per-namespace system concern governed by CACHE_CONFIGS, not a plugin toggle.
+    // memoryEnabled and defaultTTL remain user-configurable.
     for (const [_namespace, config] of Object.entries(CACHE_CONFIGS)) {
       getCacheService({
         ...config,
         memoryEnabled: settings.memoryEnabled ?? config.memoryEnabled,
-        kvEnabled: settings.kvEnabled ?? config.kvEnabled,
         ttl: settings.defaultTTL ?? config.ttl
       })
     }

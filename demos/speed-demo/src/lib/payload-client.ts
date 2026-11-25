@@ -25,7 +25,8 @@ export async function fetchPayloadEmployees(
     depth: '1',
     page: String(page),
     // Match SonicJS's explicit sort so both sides render employees in the same order.
-    sort: 'firstName,lastName',
+    // Sort by phone (unique per employee) — first/last name had too many duplicates.
+    sort: 'phone',
   })
   if (department) params.set('where[department.name][equals]', department)
   if (region) params.set('where[region.name][equals]', region)

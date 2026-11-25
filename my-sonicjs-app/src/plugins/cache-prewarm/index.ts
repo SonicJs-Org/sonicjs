@@ -47,6 +47,9 @@ export const cachePrwarmPlugin = definePlugin({
       const result = await prewarmFilterCombinations({
         db,
         baseUrl,
+        // Sort must match the demo client's sort so cache keys align:
+        // JSON.stringify([{ field: 'data.phone', order: 'asc' }])
+        sort: JSON.stringify([{ field: 'data.phone', order: 'asc' }]),
         // defaults: employees × departments × regions, 3 pages of 10
       })
       console.log(

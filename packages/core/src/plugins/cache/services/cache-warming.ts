@@ -227,6 +227,12 @@ export interface PrewarmCombinationsOpts {
   pageSize?: number
   /** Parallel fetch concurrency, default 10 */
   concurrency?: number
+  /**
+   * Optional sort parameter to include in every prewarmed URL.
+   * Must match what the front-end client sends so the cache keys align.
+   * Example: JSON.stringify([{ field: 'data.phone', order: 'asc' }])
+   */
+  sort?: string
 }
 
 export interface PrewarmCombinationsResult {
@@ -268,6 +274,7 @@ export async function prewarmFilterCombinations(
     pages      = 3,
     pageSize   = 10,
     concurrency = 10,
+    sort,
   } = opts
 
   const cappedPages = Math.min(pages, 10)
@@ -315,6 +322,7 @@ export async function prewarmFilterCombinations(
       params.set('limit',  String(pageSize))
       params.set('offset', String(page * pageSize))
       params.set('status', 'published')
+      if (sort) params.set('sort', sort)
       for (const [field, value] of Object.entries(combo)) {
         params.set(`where[${field}][equals]`, value)
       }

@@ -604,6 +604,7 @@ app.post('/warm-combinations', async (c: Context) => {
   ]
   const pages:    number = body.pages    ?? 3
   const pageSize: number = body.pageSize ?? 10
+  const sort: string | undefined = body.sort ?? JSON.stringify([{ field: 'data.phone', order: 'asc' }])
 
   try {
     const result = await prewarmFilterCombinations({
@@ -613,6 +614,7 @@ app.post('/warm-combinations', async (c: Context) => {
       filterDimensions,
       pages,
       pageSize,
+      sort,
     })
 
     return c.json({

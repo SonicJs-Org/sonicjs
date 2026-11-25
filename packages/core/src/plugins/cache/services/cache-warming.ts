@@ -11,60 +11,171 @@ import { getCollectionRegistry, collectionRecordToRow } from '../../../services/
 // ── Memory warm on first request ────────────────────────────────────────────
 
 /**
- * Per-isolate guard: set to true once warming has been scheduled so we never
- * fire more than once per isolate lifetime (memory is per-isolate anyway).
+ * Per-isolate guard: only set after a successful warm so transient D1 failures
+ * allow a retry on the next request rather than permanently leaving the isolate cold.
  */
 let _isolateMemoryWarmed = false
 
 /**
- * Warm the in-memory cache tier once per isolate.
+ * Warm the in-memory cache tier once per isolate, memory tier only.
  *
- * Reads the `warmMemoryOnBoot` flag from the `core-cache` plugin settings in
- * D1; if enabled, calls {@link warmCommonCaches} to pre-populate collections,
- * recent content, and media into memory.  The function is idempotent — it
- * no-ops on every call after the first on this isolate.
+ * Reads `warmMemoryOnBoot` from the `core-cache` plugin settings in D1.
+ * Only fires when the plugin is active AND the flag is true.  Uses a
+ * memory-only write path (`kvEnabled: false`) so each cold-isolate start does
+ * not add redundant KV writes on top of the existing cron-based KV prewarm.
  *
- * Designed to be called via `ctx.waitUntil()` in the bootstrap middleware so
- * it runs off the request critical path.
+ * The per-isolate guard is set only after a successful warm, allowing retries
+ * on transient D1 failures.
+ *
+ * Call via `runInBackground(c, warmMemoryOnFirstRequest(db))` after the
+ * collection registry is populated so collections are available to warm.
  */
 export async function warmMemoryOnFirstRequest(db: D1Database): Promise<void> {
   if (_isolateMemoryWarmed) return
-  _isolateMemoryWarmed = true
 
   try {
-    // Lightweight settings read — avoids importing the full PluginService.
+    // Single query: read status + settings together.
     const row = await db
       .prepare(
-        `SELECT json_extract(data, '$.settings') AS settings
+        `SELECT
+           json_extract(data, '$.status')   AS status,
+           json_extract(data, '$.settings') AS settings
          FROM documents
          WHERE slug = 'core-cache' AND type_id = 'plugin'
            AND tenant_id = 'default' AND is_current_draft = 1
            AND deleted_at IS NULL
          LIMIT 1`
       )
-      .first<{ settings: string | null }>()
+      .first<{ status: string | null; settings: string | null }>()
 
-    if (!row?.settings) return
+    // Respect plugin active/inactive status.
+    if (row?.status !== 'active') return
 
-    let settings: Record<string, unknown>
+    let pluginSettings: Record<string, unknown>
     try {
-      settings = JSON.parse(row.settings)
+      pluginSettings = row?.settings ? JSON.parse(row.settings) : {}
     } catch {
       return
     }
 
-    if (settings.warmMemoryOnBoot !== true) return
+    if (pluginSettings.warmMemoryOnBoot !== true) return
+
+    // Guard after the enabled check — a disabled flag is not a "failure", so
+    // we avoid retrying the D1 read on every request when warming is off.
+    _isolateMemoryWarmed = true
 
     console.log('[cache] Warming memory cache for new region/isolate…')
-    const result = await warmCommonCaches(db)
+    const result = await warmCommonCachesMemoryOnly(db)
     console.log(
       `[cache] Memory warm complete: ${result.warmed} entries` +
       ` (${result.details.map(d => `${d.namespace}:${d.count}`).join(', ')})`
     )
   } catch (err) {
     // Non-fatal — a cold start without DB or a missing plugin row is fine.
+    // Guard intentionally NOT set so the next request can retry.
     console.warn('[cache] warmMemoryOnFirstRequest failed (non-fatal):', err)
   }
+}
+
+/**
+ * Memory-only variant of {@link warmCommonCaches}.
+ *
+ * Passes `{ kvEnabled: false }` to every cache write so isolate boot warming
+ * never duplicates the KV entries already maintained by the cron prewarm.
+ */
+async function warmCommonCachesMemoryOnly(db: D1Database): Promise<{
+  warmed: number
+  errors: number
+  details: Array<{ namespace: string; count: number }>
+}> {
+  const MEM_ONLY: Partial<import('./cache-config.js').CacheConfig> = { kvEnabled: false }
+  let totalWarmed = 0
+  let totalErrors = 0
+  const details: Array<{ namespace: string; count: number }> = []
+
+  try {
+    const collectionCount = await warmCollectionsMemOnly(MEM_ONLY)
+    totalWarmed += collectionCount
+    details.push({ namespace: 'collection', count: collectionCount })
+
+    const contentCount = await warmRecentContentMemOnly(db, MEM_ONLY)
+    totalWarmed += contentCount
+    details.push({ namespace: 'content', count: contentCount })
+
+    const mediaCount = await warmRecentMediaMemOnly(db, MEM_ONLY)
+    totalWarmed += mediaCount
+    details.push({ namespace: 'media', count: mediaCount })
+  } catch (error) {
+    console.error('[cache] Error during memory-only warm:', error)
+    totalErrors++
+  }
+
+  return { warmed: totalWarmed, errors: totalErrors, details }
+}
+
+import type { CacheConfig } from './cache-config.js'
+
+async function warmCollectionsMemOnly(override: Partial<CacheConfig>): Promise<number> {
+  const config = CACHE_CONFIGS.collection
+  if (!config) return 0
+  const cache = getCacheService(config)
+  let count = 0
+  try {
+    const results = getCollectionRegistry().listActive().map(collectionRecordToRow)
+    for (const collection of results) {
+      await cache.set(cache.generateKey('item', collection.id), collection, override)
+      count++
+    }
+    await cache.set(cache.generateKey('list', 'all'), results, override)
+    count++
+  } catch (err) {
+    console.error('[cache] Error warming collections (memory-only):', err)
+  }
+  return count
+}
+
+async function warmRecentContentMemOnly(db: D1Database, override: Partial<CacheConfig>, limit = 50): Promise<number> {
+  const config = CACHE_CONFIGS.content
+  if (!config) return 0
+  const cache = getCacheService(config)
+  let count = 0
+  try {
+    const { results } = await db
+      .prepare(`SELECT * FROM documents WHERE tenant_id = ? AND type_id != 'media_asset' AND is_current_draft = 1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${limit}`)
+      .bind('default')
+      .all()
+    for (const content of results as any[]) {
+      await cache.set(cache.generateKey('item', (content as any).root_id ?? content.id), content, override)
+      count++
+    }
+    await cache.set(cache.generateKey('list', 'recent'), results, override)
+    count++
+  } catch (err) {
+    console.error('[cache] Error warming content (memory-only):', err)
+  }
+  return count
+}
+
+async function warmRecentMediaMemOnly(db: D1Database, override: Partial<CacheConfig>, limit = 50): Promise<number> {
+  const config = CACHE_CONFIGS.media
+  if (!config) return 0
+  const cache = getCacheService(config)
+  let count = 0
+  try {
+    const { results } = await db
+      .prepare(`SELECT * FROM documents WHERE tenant_id = ? AND type_id = 'media_asset' AND is_current_draft = 1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${limit}`)
+      .bind('default')
+      .all()
+    for (const media of results as any[]) {
+      await cache.set(cache.generateKey('item', (media as any).root_id ?? media.id), media, override)
+      count++
+    }
+    await cache.set(cache.generateKey('list', 'recent'), results, override)
+    count++
+  } catch (err) {
+    console.error('[cache] Error warming media (memory-only):', err)
+  }
+  return count
 }
 
 /**

@@ -91,6 +91,7 @@
     "enableMemoryCache": true,
     "enableKVCache": true,
     "enableDatabaseCache": true,
-    "defaultTTL": 3600
+    "defaultTTL": 3600,
+    "warmMemoryOnBoot": false
   }
 }

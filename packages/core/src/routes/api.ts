@@ -1150,6 +1150,20 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
     const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql, includeCollection })}`)
 
     if (cacheEnabled) {
+      // Layer 0 — CF Workers edge cache (per-PoP HTTP cache, fastest possible).
+      // Stored as a full Response with Cache-Control so each PoP retains it for 90 days
+      // without any KV round-trip.  Gracefully absent in local dev.
+      const edgeCache: Cache | undefined = typeof caches !== 'undefined' ? (caches as any).default : undefined
+      if (edgeCache) {
+        const edgeHit = await edgeCache.match(c.req.raw)
+        if (edgeHit) {
+          const h = new Headers(edgeHit.headers)
+          h.set('X-Cache-Source', 'edge')
+          h.set('X-Cache-Status', 'HIT')
+          return new Response(edgeHit.body, { status: edgeHit.status, headers: h })
+        }
+      }
+
       const cacheResult = await cache.getWithSource<any>(cacheKey)
       if (cacheResult.hit && cacheResult.data) {
         c.header('X-Cache-Status', 'HIT')
@@ -1218,6 +1232,24 @@ scheduleKvWrite(cacheKey, () => c.executionCtx)
       const customTtl = typeof collectionCache?.ttl === 'number' ? collectionCache.ttl : undefined
       await cache.set(cacheKey, responseData, customTtl)
       if (customTtl) c.header('X-Cache-TTL', customTtl.toString())
+
+      // Also store in CF Workers edge cache (per-PoP, 90-day TTL, zero round-trip on next hit).
+      const edgeCache: Cache | undefined = typeof caches !== 'undefined' ? (caches as any).default : undefined
+      if (edgeCache && c.executionCtx) {
+        const edgeTtl = Math.min(customTtl ?? 300, 2_592_000)
+        c.executionCtx.waitUntil(
+          edgeCache.put(
+            c.req.raw,
+            new Response(JSON.stringify(responseData), {
+              headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': `public, max-age=${edgeTtl}`,
+                'Access-Control-Allow-Origin': '*',
+              },
+            })
+          )
+        )
+      }
     }
     return c.json(responseData)
   } catch (error) {

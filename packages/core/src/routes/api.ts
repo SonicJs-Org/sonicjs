@@ -1171,6 +1171,21 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
         if (cacheResult.ttl) c.header('X-Cache-TTL', Math.floor(cacheResult.ttl).toString())
         recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: cacheResult.source as 'memory' | 'kv' })
 scheduleKvWrite(cacheKey, () => c.executionCtx)
+        // Backfill edge cache from KV so this PoP serves future requests instantly.
+        const edgeFill: Cache | undefined = typeof caches !== 'undefined' ? (caches as any).default : undefined
+        if (edgeFill && c.executionCtx) {
+          const customTtl = typeof collectionCache?.ttl === 'number' ? collectionCache.ttl : undefined
+          const edgeTtl = Math.min(customTtl ?? 300, 2_592_000)
+          c.executionCtx.waitUntil(
+            edgeFill.put(c.req.raw, new Response(JSON.stringify(cacheResult.data), {
+              headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': `public, max-age=${edgeTtl}`,
+                'Access-Control-Allow-Origin': '*',
+              },
+            }))
+          )
+        }
         return c.json({ ...cacheResult.data, meta: addTimingMeta(c, { ...cacheResult.data.meta, cache: { hit: true, source: cacheResult.source, ttl: cacheResult.ttl ? Math.floor(cacheResult.ttl) : undefined } }, executionStart) })
       }
 

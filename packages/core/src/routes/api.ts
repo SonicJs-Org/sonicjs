@@ -1150,23 +1150,9 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
     const cacheKey = cache.generateKey('collection-content-filtered', `${collection}:${JSON.stringify({ filter: normalizedFilter, query: queryResult.sql, includeCollection })}`)
 
     if (cacheEnabled) {
-      // Layer 0 — CF Workers edge cache (per-PoP HTTP cache, fastest possible).
-      // Stored as a full Response with Cache-Control so each PoP retains it for 90 days
-      // without any KV round-trip.  Gracefully absent in local dev.
-      // Named namespace avoids tiered-caching incompatibility with caches.default.
-      const edgeCache: Cache | undefined = typeof caches !== 'undefined'
-        ? await (caches as any).open?.('sonicjs:api:v1').catch(() => undefined) ?? (caches as any).default
-        : undefined
-      if (edgeCache) {
-        const edgeKey = new Request(c.req.raw.url)  // normalise to GET for cache key
-        const edgeHit = await edgeCache.match(edgeKey).catch(() => null)
-        if (edgeHit) {
-          const h = new Headers(edgeHit.headers)
-          h.set('X-Cache-Source', 'edge')
-          h.set('X-Cache-Status', 'HIT')
-          return new Response(edgeHit.body, { status: edgeHit.status, headers: h })
-        }
-      }
+      // Note: caches.open() Worker Cache removed — it stored acao:* which CF Cache Rule
+      // then cached without Vary:Origin, causing CORS errors for browser requests.
+      // CF Cache Rule + KV are the cache layers; Worker memory cache is the in-process layer.
 
       const cacheResult = await cache.getWithSource<any>(cacheKey)
       if (cacheResult.hit && cacheResult.data) {
@@ -1175,23 +1161,6 @@ apiRoutes.get('/:collection', optionalAuth(), async (c) => {
         if (cacheResult.ttl) c.header('X-Cache-TTL', Math.floor(cacheResult.ttl).toString())
         recordCatalogRequest({ cacheKey, collection: collection ?? null, path: c.req.path, queryString: c.req.raw.url.split('?')[1] ?? '', source: cacheResult.source as 'memory' | 'kv' })
 scheduleKvWrite(cacheKey, () => c.executionCtx)
-        // Backfill edge cache from KV so this PoP serves future requests instantly.
-        const edgeFill: Cache | undefined = typeof caches !== 'undefined'
-          ? await (caches as any).open?.('sonicjs:api:v1').catch(() => undefined) ?? (caches as any).default
-          : undefined
-        if (edgeFill && c.executionCtx) {
-          const customTtl = typeof collectionCache?.ttl === 'number' ? collectionCache.ttl : undefined
-          const edgeTtl = Math.min(customTtl ?? 300, 2_592_000)
-          c.executionCtx.waitUntil(
-            edgeFill.put(new Request(c.req.raw.url), new Response(JSON.stringify(cacheResult.data), {
-              headers: {
-                'Content-Type': 'application/json',
-                'Cache-Control': `public, max-age=${edgeTtl}`,
-                'Access-Control-Allow-Origin': '*',
-              },
-            }))
-          )
-        }
         return c.json({ ...cacheResult.data, meta: addTimingMeta(c, { ...cacheResult.data.meta, cache: { hit: true, source: cacheResult.source, ttl: cacheResult.ttl ? Math.floor(cacheResult.ttl) : undefined } }, executionStart) })
       }
 
@@ -1253,26 +1222,6 @@ scheduleKvWrite(cacheKey, () => c.executionCtx)
       const customTtl = typeof collectionCache?.ttl === 'number' ? collectionCache.ttl : undefined
       await cache.set(cacheKey, responseData, customTtl)
       if (customTtl) c.header('X-Cache-TTL', customTtl.toString())
-
-      // Also store in CF Workers edge cache (per-PoP, 90-day TTL, zero round-trip on next hit).
-      const edgeCache2: Cache | undefined = typeof caches !== 'undefined'
-        ? await (caches as any).open?.('sonicjs:api:v1').catch(() => undefined) ?? (caches as any).default
-        : undefined
-      if (edgeCache2 && c.executionCtx) {
-        const edgeTtl = Math.min(customTtl ?? 300, 2_592_000)
-        c.executionCtx.waitUntil(
-          edgeCache2.put(
-            new Request(c.req.raw.url),
-            new Response(JSON.stringify(responseData), {
-              headers: {
-                'Content-Type': 'application/json',
-                'Cache-Control': `public, max-age=${edgeTtl}`,
-                'Access-Control-Allow-Origin': '*',
-              },
-            })
-          )
-        )
-      }
     }
     return c.json(responseData)
   } catch (error) {

@@ -524,6 +524,7 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'Cache-Control'],
     exposeHeaders: ['X-Cache-Status', 'X-Cache-Source', 'X-Cache-TTL', 'X-Response-Time'],
     credentials: true,
+    maxAge: 86400, // browsers cache the preflight result for 24h — eliminates cold-start penalty on repeated visits
   }))
 
   // Security middleware

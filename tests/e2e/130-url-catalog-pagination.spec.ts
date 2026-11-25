@@ -37,57 +37,47 @@ test.describe('Admin Cache → URL catalog pagination @plugins @content', () => 
    * Inject N fake rows into the tbody and re-render page 1.
    *
    * On a fresh CI database the URL catalog has no real entries, so the template
-   * renders an empty-state card WITHOUT the pagination DOM elements. When that
-   * happens, scaffold the minimal structure first (the pagination JS is always
-   * loaded regardless of catalog size), then inject the fake rows.
+   * renders an empty-state card WITHOUT the table/pagination DOM. The pagination
+   * script IS always present (after the template fix that hoisted it outside the
+   * early-return), so we only need to scaffold the missing HTML structure before
+   * calling window.urlCatalogRenderPage().
    */
   async function injectRows(page: Page, count: number, totalEntries = count) {
     await page.evaluate(({ count, totalEntries }: { count: number; totalEntries: number }) => {
       let tbody = document.getElementById('url-catalog-tbody') as HTMLTableSectionElement | null
 
-      // On a fresh DB the empty-state card renders instead of the table — scaffold it.
+      // On a fresh DB the empty-state card renders without the table — scaffold it.
       if (!tbody) {
         const tabPanel = document.getElementById('tab-panel-url-catalog')
         if (!tabPanel) return  // The URL catalog tab itself is missing; nothing to do.
 
         const scaffold = document.createElement('div')
         scaffold.innerHTML = [
-          '<div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">',
-          '  <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">',
-          '    <tbody id="url-catalog-tbody" data-total-entries="0"></tbody>',
-          '  </table>',
-          '  <div class="px-4 py-3 border-t border-zinc-950/5 dark:border-white/10 flex items-center justify-between">',
-          '    <span class="text-xs text-zinc-500 dark:text-zinc-400">Showing <span id="url-catalog-page-info">\u2014</span></span>',
-          '    <div class="flex gap-2">',
-          '      <button id="url-catalog-prev" onclick="urlCatalogPrevPage()" class="rounded px-2 py-1 text-xs" disabled>Prev</button>',
-          '      <button id="url-catalog-next" onclick="urlCatalogNextPage()" class="rounded px-2 py-1 text-xs" disabled>Next</button>',
-          '    </div>',
+          '<table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">',
+          '  <tbody id="url-catalog-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10" data-total-entries="0"></tbody>',
+          '</table>',
+          '<div class="px-4 py-3 border-t border-zinc-950/5 dark:border-white/10 flex items-center justify-between">',
+          '  <p class="text-sm text-zinc-500">Showing <span id="url-catalog-page-info">\u2014</span></p>',
+          '  <div class="flex items-center gap-2">',
+          '    <button id="url-catalog-prev" disabled onclick="urlCatalogPrevPage()">Prev</button>',
+          '    <button id="url-catalog-next" disabled onclick="urlCatalogNextPage()">Next</button>',
           '  </div>',
           '</div>',
         ].join('\n')
-
-        // Replace the empty-state content (keep any stat cards above it).
-        const emptyCard = tabPanel.querySelector('.p-12') as HTMLElement | null
-        if (emptyCard?.parentElement) {
-          emptyCard.parentElement.replaceWith(scaffold)
-        } else {
-          tabPanel.appendChild(scaffold)
-        }
+        tabPanel.appendChild(scaffold)
         tbody = document.getElementById('url-catalog-tbody') as HTMLTableSectionElement | null
         if (!tbody) return
       }
 
-      // Clear any existing rows
+      // Clear any existing rows and stamp the total-entries attribute.
       tbody.innerHTML = ''
-      // Stamp the total-entries attribute (may differ from loaded count)
       tbody.setAttribute('data-total-entries', String(totalEntries))
-      // Add `count` fake rows
       for (let i = 1; i <= count; i++) {
         const tr = document.createElement('tr')
         tr.innerHTML = `<td class="px-4 py-3 text-sm">/api/fake-url-${i}</td>`
         tbody.appendChild(tr)
       }
-      // Re-render page 1 using the exposed helper
+      // Re-render page 1 using the template's exposed pagination helper.
       if (typeof (window as any).urlCatalogRenderPage === 'function') {
         ;(window as any).urlCatalogRenderPage(1)
       }

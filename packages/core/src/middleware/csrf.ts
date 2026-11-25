@@ -197,7 +197,11 @@ export function csrfProtection(options: CsrfOptions = {}) {
 
     // Safe methods — just ensure cookie, then pass through
     if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
-      await ensureCsrfCookie(c, secret)
+      // Skip CSRF cookie for public API routes — they're stateless/cacheable and
+      // the Set-Cookie header would prevent CF Cache Rule from caching responses.
+      if (!path.startsWith('/api/')) {
+        await ensureCsrfCookie(c, secret)
+      }
       await next()
       return
     }

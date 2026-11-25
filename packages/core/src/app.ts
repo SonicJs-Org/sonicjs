@@ -492,40 +492,41 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
     await next()
   })
 
-  // Global CORS middleware — covers /auth/*, /v1/*, and all other routes.
-  // Set CORS_ORIGINS in wrangler.toml (comma-separated) to allow cross-origin requests.
-  // Supports wildcard prefix: "*.example.com" matches any subdomain of example.com.
-  app.use('*', cors({
-    origin: (origin, c) => {
-      // The app's own origin is always allowed. A same-origin request is not subject to CORS in
-      // the first place, so echoing the header back grants nothing — but it does mean the app
-      // keeps working wherever it happens to be served from (a dev port, a preview deployment)
-      // without every host having to be enumerated in CORS_ORIGINS.
+  // Single CORS middleware that dispatches to the right strategy per request.
+  // Public API GET/HEAD routes use fixed '*' origin (no Vary:Origin, no aac:true) so CF
+  // Cache Rule can cache without per-origin variation. All other routes use the standard
+  // credential-aware CORS with the CORS_ORIGINS allow-list.
+  app.use('*', async (c, next) => {
+    const path = new URL(c.req.url).pathname
+    if (path.startsWith('/api/') && (c.req.method === 'GET' || c.req.method === 'HEAD')) {
+      // Fixed '*' string (not a function) → Hono does NOT append Vary:Origin or aac:true.
+      return cors({ origin: '*', maxAge: 86400 })(c, next)
+    }
+
+    // Credential-aware CORS for all other routes (auth, admin, write operations).
+    const originFn = (origin: string, c: any) => {
       try {
         if (origin && origin === new URL(c.req.url).origin) return origin
-      } catch {
-        // Non-absolute request URL — fall through to the allowlist.
-      }
-
+      } catch { /* fall through */ }
       const allowed = (c.env as any)?.CORS_ORIGINS as string | undefined
       if (!allowed) return null
       const list = allowed.split(',').map((s: string) => s.trim())
       const match = list.some((pattern: string) => {
         if (pattern === origin) return true
-        if (pattern.startsWith('*.')) {
-          const suffix = pattern.slice(1) // e.g. ".pages.dev" from "*.pages.dev"
-          return origin.endsWith(suffix)
-        }
+        if (pattern.startsWith('*.')) return origin.endsWith(pattern.slice(1))
         return false
       })
       return match ? origin : null
-    },
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'Cache-Control'],
-    exposeHeaders: ['X-Cache-Status', 'X-Cache-Source', 'X-Cache-TTL', 'X-Response-Time'],
-    credentials: true,
-    maxAge: 86400, // browsers cache the preflight result for 24h — eliminates cold-start penalty on repeated visits
-  }))
+    }
+    return cors({
+      origin: originFn,
+      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'Cache-Control'],
+      exposeHeaders: ['X-Cache-Status', 'X-Cache-Source', 'X-Cache-TTL', 'X-Response-Time'],
+      credentials: true,
+      maxAge: 86400,
+    })(c, next)
+  })
 
   // Security middleware
   app.use('*', securityHeadersMiddleware())

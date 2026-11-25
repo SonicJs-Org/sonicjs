@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures'
 import type { Page } from './fixtures'
-import { loginAsAdmin } from './utils/test-helpers'
+import { loginAsAdmin, isFeatureAvailable } from './utils/test-helpers'
+import { ensurePluginActive } from './fixtures/plugin-fixtures'
 
 /**
  * URL Catalog Pagination
@@ -8,26 +9,74 @@ import { loginAsAdmin } from './utils/test-helpers'
  * The admin cache page renders at most 100 catalog entries and paginates them
  * client-side at 25 rows per page. These tests verify the pager behaviour by
  * injecting a known number of rows into the DOM then driving the controls.
+ *
+ * Requires core-cache to be active so the /admin/cache page renders.
  */
 test.describe('Admin Cache → URL catalog pagination @plugins @content', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/admin/cache')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
+    // core-cache must be active for the /admin/cache page (and the URL catalog tab) to render.
+    await ensurePluginActive(page, 'core-cache')
     await page.goto('/admin/cache#url-catalog', { waitUntil: 'domcontentloaded' })
     // Activate the URL catalog tab (hash triggers it on load; wait for the panel)
     await page.waitForSelector('#tab-panel-url-catalog:not(.hidden)', { timeout: 10000 }).catch(() => {
       // Fallback: click the tab explicitly
       return page.locator('#tab-url-catalog').click()
     })
+    // Ensure the tab panel is now visible before each test.
+    await page.waitForSelector('#tab-panel-url-catalog:not(.hidden)', { timeout: 5000 }).catch(() => {})
   })
 
   /**
    * Inject N fake rows into the tbody and re-render page 1.
-   * Returns the total rows injected.
+   *
+   * On a fresh CI database the URL catalog has no real entries, so the template
+   * renders an empty-state card WITHOUT the pagination DOM elements. When that
+   * happens, scaffold the minimal structure first (the pagination JS is always
+   * loaded regardless of catalog size), then inject the fake rows.
    */
   async function injectRows(page: Page, count: number, totalEntries = count) {
     await page.evaluate(({ count, totalEntries }: { count: number; totalEntries: number }) => {
-      const tbody = document.getElementById('url-catalog-tbody')
-      if (!tbody) return
+      let tbody = document.getElementById('url-catalog-tbody') as HTMLTableSectionElement | null
+
+      // On a fresh DB the empty-state card renders instead of the table — scaffold it.
+      if (!tbody) {
+        const tabPanel = document.getElementById('tab-panel-url-catalog')
+        if (!tabPanel) return  // The URL catalog tab itself is missing; nothing to do.
+
+        const scaffold = document.createElement('div')
+        scaffold.innerHTML = [
+          '<div class="overflow-hidden rounded-xl bg-white dark:bg-zinc-900 ring-1 ring-zinc-950/5 dark:ring-white/10">',
+          '  <table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">',
+          '    <tbody id="url-catalog-tbody" data-total-entries="0"></tbody>',
+          '  </table>',
+          '  <div class="px-4 py-3 border-t border-zinc-950/5 dark:border-white/10 flex items-center justify-between">',
+          '    <span class="text-xs text-zinc-500 dark:text-zinc-400">Showing <span id="url-catalog-page-info">\u2014</span></span>',
+          '    <div class="flex gap-2">',
+          '      <button id="url-catalog-prev" onclick="urlCatalogPrevPage()" class="rounded px-2 py-1 text-xs" disabled>Prev</button>',
+          '      <button id="url-catalog-next" onclick="urlCatalogNextPage()" class="rounded px-2 py-1 text-xs" disabled>Next</button>',
+          '    </div>',
+          '  </div>',
+          '</div>',
+        ].join('\n')
+
+        // Replace the empty-state content (keep any stat cards above it).
+        const emptyCard = tabPanel.querySelector('.p-12') as HTMLElement | null
+        if (emptyCard?.parentElement) {
+          emptyCard.parentElement.replaceWith(scaffold)
+        } else {
+          tabPanel.appendChild(scaffold)
+        }
+        tbody = document.getElementById('url-catalog-tbody') as HTMLTableSectionElement | null
+        if (!tbody) return
+      }
+
       // Clear any existing rows
       tbody.innerHTML = ''
       // Stamp the total-entries attribute (may differ from loaded count)

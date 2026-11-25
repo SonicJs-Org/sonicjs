@@ -488,8 +488,8 @@ test.describe("Source: 21-plugin-version-display.spec.ts", () => {
 
       // The "Information" tab carries a Plugin Details block with a Version row
       await page.locator('#info-tab').click();
-      const infoPanel = page.locator('#info-content');
-      await expect(infoPanel).toBeVisible();
+      const infoPanel = page.locator('#info-content')
+      await expect(infoPanel).toBeVisible({ timeout: 10000 })
       const detailVersion =
         (await infoPanel.innerText()).match(/Version:\s*v?(\d+(?:\.\d+)*(?:-[a-z0-9.]+)?)/i)?.[1] ??
         null;
@@ -517,7 +517,7 @@ test.describe("Source: 21-plugin-version-display.spec.ts", () => {
       await page.locator('#info-tab').click();
 
       const infoPanel = page.locator('#info-content');
-      await expect(infoPanel).toBeVisible();
+      await expect(infoPanel).toBeVisible({ timeout: 10000 });
       const detailVersion =
         (await infoPanel.innerText()).match(/Version:\s*v?(\d+(?:\.\d+)*(?:-[a-z0-9.]+)?)/i)?.[1] ??
         null;

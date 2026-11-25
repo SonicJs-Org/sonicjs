@@ -491,7 +491,7 @@ function renderUrlCatalogTab(catalog: CacheDashboardData['catalog']): string {
         </table>
       </div>
       <div class="px-4 py-3 border-t border-zinc-950/5 dark:border-white/10 flex items-center justify-between">
-        <p class="text-sm text-zinc-500 dark:text-zinc-400">
+        <p role="status" aria-atomic="true" class="text-sm text-zinc-500 dark:text-zinc-400">
           Showing <span id="url-catalog-page-info">—</span>
         </p>
         <div class="flex items-center gap-2">

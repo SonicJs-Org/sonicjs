@@ -312,6 +312,42 @@ const status = await migrationService.getMigrationStatus()
 await migrationService.ensureSchemaCompatibility()
 ```
 
+### Custom Migration Tracking Table
+
+Migration status reads `d1_migrations` by default. Wrangler or a hosting adapter
+can record applied migrations in another table with `name` and `applied_at` columns.
+
+Each `name` value in a custom ledger must begin with the matching bundled numeric
+migration ID, including leading zeros (for example, `0001_core.sql` for bundled
+ID `0001`). Status parsing extracts the leading digits and matches that ID exactly.
+
+Configure that table explicitly:
+
+```typescript
+import { createSonicJSApp, MigrationService } from '@sonicjs-cms/core'
+
+const app = createSonicJSApp({
+  migrations: { tableName: 'custom_migration_history' }
+})
+
+// The same option is available to direct service callers.
+const migrationService = new MigrationService(db, {
+  tableName: 'custom_migration_history'
+})
+```
+
+For Wrangler-managed migrations, set `migrations_table` to the same value in the
+relevant `[[d1_databases]]` binding in `wrangler.toml`:
+
+```toml
+migrations_table = "custom_migration_history"
+```
+
+Table names must match `^[A-Za-z_][A-Za-z0-9_]*$`. Invalid names are rejected when
+creating the app or service. Status reads use only the configured table; they do
+not probe other ledgers, create or populate a tracking table, or apply migrations.
+The migration runner or hosting adapter remains responsible for its ledger.
+
 ## 🏗️ Architecture
 
 ```
@@ -400,9 +436,9 @@ migrations/*.sql → scripts/generate-migrations.ts → src/db/migrations-bundle
 The `generate-migrations.ts` script:
 - Reads all `.sql` files from `migrations/`
 - Generates `src/db/migrations-bundle.ts` with embedded SQL
-- Lets `MigrationService` compare bundled migrations against D1's `d1_migrations` status
+- Lets `MigrationService` compare bundled migrations against the configured tracking table (default: `d1_migrations`)
 
-**Important**: Cloudflare D1/Wrangler is the migration runner and `d1_migrations` is the canonical tracking table. Run migrations with `wrangler d1 migrations apply`; SonicJS only reports status and runs idempotent compatibility repairs at bootstrap.
+**Important**: Cloudflare D1/Wrangler is the migration runner and owns its tracking table (default: `d1_migrations`, configurable with `migrations_table`). Run migrations with `wrangler d1 migrations apply`; SonicJS only reports status and runs idempotent compatibility repairs at bootstrap.
 
 ## 🔄 Versioning
 

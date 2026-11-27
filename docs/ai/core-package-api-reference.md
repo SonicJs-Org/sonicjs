@@ -134,19 +134,46 @@ const result = await fullCollectionSync(db)
 
 #### MigrationService
 
-Class for managing database migrations.
+Reports bundled migration status from an externally managed tracking table and
+runs idempotent schema compatibility repairs separately.
 
 ```typescript
 import { MigrationService } from '@sonicjs-cms/core'
 
 const migrationService = new MigrationService(db)
-await migrationService.runPendingMigrations()
+const status = await migrationService.getMigrationStatus()
+
+// Optional: use the ledger owned by a custom migration runner or hosting adapter.
+const customMigrationService = new MigrationService(db, {
+  tableName: 'custom_migration_history'
+})
 ```
 
+The optional second constructor argument is `MigrationServiceOptions`, containing
+`tableName?: string` (default: `d1_migrations`). The table must expose `name` and
+`applied_at` columns. Each `name` value in a custom ledger must begin with the
+matching bundled numeric migration ID, including leading zeros (for example,
+`0001_core.sql` for bundled ID `0001`). Status parsing extracts the leading digits
+and matches that ID exactly. Table names must match `^[A-Za-z_][A-Za-z0-9_]*$`; invalid
+values are rejected before querying the database.
+
+For built-in admin status routes, pass the same options through
+`createSonicJSApp({ migrations: { tableName: 'custom_migration_history' } })`.
+Wrangler users must set the binding's `migrations_table` to the same value.
+Status reads do not create or populate ledgers, probe fallback tables, or run
+migrations.
+
 **Methods:**
-- `getMigrationStatus()` - Get current migration status
-- `runPendingMigrations()` - Apply all pending migrations
-- `rollbackMigration(migrationId)` - Rollback a specific migration
+
+- `getMigrationStatus()` - Read current status for bundled migrations
+- `getAvailableMigrations()` - List bundled migrations with their applied state
+- `isMigrationApplied(migrationId)` - Read whether a migration ID is recorded
+- `getLastAppliedMigration()` - Return the last applied bundled migration, or `null`
+- `ensureSchemaCompatibility()` - Run compatibility repairs; this can change the schema
+- `runPendingMigrations()` - Return `success: false` and Wrangler instructions; does not apply migrations
+
+Migration execution belongs to Cloudflare D1/Wrangler or the hosting adapter.
+`MigrationService` does not provide a rollback method.
 
 ### Logging
 

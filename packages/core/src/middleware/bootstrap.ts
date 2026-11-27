@@ -370,6 +370,12 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
               const configs = await loadCollectionConfigs()
               getCollectionRegistry().register(configs)
             } catch { /* registry optional in fast-path */ }
+            // Memory warm on first request (feature-flagged via core-cache plugin settings).
+            // Runs after registry population so collections are available to warm.
+            try {
+              const { warmMemoryOnFirstRequest } = await import("../plugins/cache/services/cache-warming")
+              runInBackground(c, warmMemoryOnFirstRequest(c.env.DB as D1Database))
+            } catch { /* optional */ }
             // Sync document types to D1 even on KV fast-path — idempotent no-ops when
             // nothing changed, but ensures newly added code collections reach D1 without
             // requiring a version bump or full cold-start bootstrap.
@@ -478,7 +484,7 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       } catch (error) {
         console.error("[Bootstrap] Error wiring CACHE_KV namespace:", error);
       }
-
+      // Memory warm on first request (feature-flagged via core-cache plugin settings).
       // 2. Populate the in-memory collection registry from code-defined configs.
       // This is the source of truth going forward; the DB `collections` table is
       // being decommissioned (see docs/ai/plans/drop-db-collections-plan.md).
@@ -490,6 +496,13 @@ export function bootstrapMiddleware(config: SonicJSConfig = {}, allPlugins?: Arr
       } catch (error) {
         console.error("[Bootstrap] Error populating collection registry:", error);
       }
+
+      // Memory warm on first request (feature-flagged via core-cache plugin settings).
+      // Placed after registry population so collections are available to warm.
+      try {
+        const { warmMemoryOnFirstRequest } = await import("../plugins/cache/services/cache-warming")
+        runInBackground(c, warmMemoryOnFirstRequest(c.env.DB as D1Database))
+      } catch { /* optional */ }
 
       // 3–4. System-data seeding. Ordered in two phases because of a foreign-key
       // dependency that a flat parallel batch violates on a fresh DB:

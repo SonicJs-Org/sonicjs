@@ -763,6 +763,15 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
   app.route('/api/media', apiMediaRoutes)
   app.route('/api/system', apiSystemRoutes)
   app.route('/api/documents', apiDocumentsRoutes)
+  // Public event tracking API — POST /api/events (open), GET /api/events (admin).
+  // MUST be before the bare /api router below whose /:collection wildcard would
+  // otherwise match "events" and answer with 404 "Collection not found" (GET/POST)
+  // or 401 from requireAuth() — same shadow class as /api/search (#1058) and
+  // /api/v1/* (#1218).  The CSRF exemption in middleware/csrf.ts is path-based
+  // and needs no change.  The analyticsPlugin.register() also mounts this path
+  // via corePluginsBeforeCatchAll below; that duplicate is harmless — Hono
+  // serves the first registered handler, which is now this one.
+  app.route('/api/events', eventsApiRoutes)
 
   // /api/v1/* — backwards-compat alias.  MUST be registered before the bare
   // /api router below, whose /:collection wildcard otherwise matches the path
@@ -810,9 +819,6 @@ export function createSonicJSApp(config: SonicJSConfig = {}): SonicJSApp {
       registerPluginRoutes(app, config.plugins.register, { source: 'user' })
     }
   }
-
-  // Public event tracking API — POST /api/events (open), GET /api/events (admin)
-  app.route('/api/events', eventsApiRoutes)
 
   app.route('/admin/dashboard', adminDashboardRoutes)
   app.route('/admin/plugins', adminPluginRoutes)

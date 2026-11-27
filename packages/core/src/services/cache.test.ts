@@ -22,17 +22,19 @@ describe('CacheService', () => {
   describe('generateKey', () => {
     it('should generate key with prefix and type', () => {
       const key = cacheService.generateKey('users')
-      expect(key).toBe('test:users')
+      // After #1254: delegates to plugin's generateKey which appends ':v1'
+      expect(key).toBe('test:users::v1')
     })
 
     it('should generate key with prefix, type, and identifier', () => {
       const key = cacheService.generateKey('users', '123')
-      expect(key).toBe('test:users:123')
+      expect(key).toBe('test:users:123:v1')
     })
 
     it('should generate key without identifier when undefined', () => {
       const key = cacheService.generateKey('settings', undefined)
-      expect(key).toBe('test:settings')
+      // empty string coercion via `identifier ?? ''`
+      expect(key).toBe('test:settings::v1')
     })
   })
 
@@ -362,14 +364,14 @@ describe('getCacheService', () => {
   it('should create service with provided config', () => {
     const service = getCacheService({ ttl: 120, keyPrefix: 'custom' })
     const key = service.generateKey('type', 'id')
-    expect(key).toBe('custom:type:id')
+    expect(key).toBe('custom:type:id:v1')
   })
 
   it('should create independent service instances', () => {
     const service1 = getCacheService({ ttl: 60, keyPrefix: 'svc1' })
     const service2 = getCacheService({ ttl: 60, keyPrefix: 'svc2' })
 
-    expect(service1.generateKey('test')).toBe('svc1:test')
-    expect(service2.generateKey('test')).toBe('svc2:test')
+    expect(service1.generateKey('test')).toBe('svc1:test::v1')
+    expect(service2.generateKey('test')).toBe('svc2:test::v1')
   })
 })

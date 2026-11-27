@@ -44,6 +44,47 @@ async function search(request: import('@playwright/test').APIRequestContext, que
   }
 }
 
+/**
+ * Poll search until the document with `id` appears, or the timeout expires.
+ *
+ * D1 writes are committed synchronously on the primary but Cloudflare can serve
+ * reads from a replica with brief propagation lag. `expect.poll` retries the
+ * assertion rather than hard-failing on the first attempt, eliminating flakes
+ * caused by read-after-write lag without adding fixed sleeps.
+ */
+async function expectDocInSearch(
+  request: import('@playwright/test').APIRequestContext,
+  marker: string,
+  id: string,
+  message: string,
+): Promise<void> {
+  await expect.poll(
+    async () => {
+      const data = await search(request, marker)
+      return data.results.some((r) => r.id === id)
+    },
+    { message, timeout: 6000, intervals: [500, 1000, 2000, 2000] },
+  ).toBe(true)
+}
+
+/**
+ * Poll search to confirm the document with `id` is ABSENT (deindex verification).
+ */
+async function expectDocNotInSearch(
+  request: import('@playwright/test').APIRequestContext,
+  marker: string,
+  id: string,
+  message: string,
+): Promise<void> {
+  await expect.poll(
+    async () => {
+      const data = await search(request, marker)
+      return !data.results.some((r) => r.id === id)
+    },
+    { message, timeout: 6000, intervals: [500, 1000, 2000, 2000] },
+  ).toBe(true)
+}
+
 test.describe('FTS5 lexical search @api', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
@@ -54,13 +95,13 @@ test.describe('FTS5 lexical search @api', () => {
     const { id } = await createBlogPost(page.request, marker)
     await publish(page.request, id)
 
+    await expectDocInSearch(page.request, marker, id, 'published doc should appear in keyword search')
+    // Fetch the hit for field-level assertions after we know it's present.
     const data = await search(page.request, marker)
+    const hit = data.results.find((r) => r.id === id)!
     expect(data.mode).toBe('keyword')
-    expect(data.total).toBeGreaterThanOrEqual(1)
-    const hit = data.results.find((r) => r.id === id)
-    expect(hit, 'published doc should appear in keyword search').toBeTruthy()
-    expect(hit!.title).toContain('<mark>') // FTS highlight wraps the matched term
-    expect(typeof hit!.relevance_score).toBe('number')
+    expect(hit.title).toContain('<mark>') // FTS highlight wraps the matched term
+    expect(typeof hit.relevance_score).toBe('number')
   })
 
   test('post body text is searchable with a highlighted snippet (fulltext content field)', async ({ page }) => {
@@ -86,11 +127,11 @@ test.describe('FTS5 lexical search @api', () => {
     const id = (created.data.id ?? created.data.rootId) as string
     await publish(page.request, id)
 
+    await expectDocInSearch(page.request, marker, id, 'doc should be found by body-only text')
     const data = await search(page.request, marker)
-    const hit = data.results.find((r) => r.id === id)
-    expect(hit, 'doc should be found by body-only text').toBeTruthy()
-    expect(hit!.snippet ?? '').toContain('<mark>') // snippet() highlights the body match
-    expect(hit!.snippet ?? '').not.toContain('<h2>') // HTML stripped before indexing
+    const hit = data.results.find((r) => r.id === id)!
+    expect(hit.snippet ?? '').toContain('<mark>') // snippet() highlights the body match
+    expect(hit.snippet ?? '').not.toContain('<h2>') // HTML stripped before indexing
   })
 
   test('a draft (unpublished) is NOT returned by public search', async ({ page }) => {
@@ -104,22 +145,22 @@ test.describe('FTS5 lexical search @api', () => {
     const marker = `badger${Date.now()}`
     const { id } = await createBlogPost(page.request, marker)
     await publish(page.request, id)
-    expect((await search(page.request, marker)).total).toBeGreaterThanOrEqual(1)
+    await expectDocInSearch(page.request, marker, id, 'doc should appear before unpublish')
 
     const res = await page.request.post(`/admin/documents/${id}/unpublish`, { headers: JSON_HEADERS, data: {} })
     expect(res.ok(), `unpublish failed: ${res.status()}`).toBeTruthy()
-    expect((await search(page.request, marker)).results.some((r) => r.id === id)).toBeFalsy()
+    await expectDocNotInSearch(page.request, marker, id, 'unpublished doc should be removed from search')
   })
 
   test('delete removes a doc from public search', async ({ page }) => {
     const marker = `otter${Date.now()}`
     const { id } = await createBlogPost(page.request, marker)
     await publish(page.request, id)
-    expect((await search(page.request, marker)).total).toBeGreaterThanOrEqual(1)
+    await expectDocInSearch(page.request, marker, id, 'doc should appear before delete')
 
     const res = await page.request.delete(`/admin/documents/${id}`)
     expect(res.ok(), `delete failed: ${res.status()}`).toBeTruthy()
-    expect((await search(page.request, marker)).results.some((r) => r.id === id)).toBeFalsy()
+    await expectDocNotInSearch(page.request, marker, id, 'deleted doc should be removed from search')
   })
 
   // ── SECURITY regressions (fresh-review findings) ─────────────────────────────────────────────
@@ -142,11 +183,11 @@ test.describe('FTS5 lexical search @api', () => {
     const marker = `stoat${Date.now()}`
     const { rootId } = await createBlogPost(page.request, marker)
     await publish(page.request, rootId)
-    expect((await search(page.request, marker)).total).toBeGreaterThanOrEqual(1)
+    await expectDocInSearch(page.request, marker, rootId, 'doc should appear before admin-content delete')
 
     const res = await page.request.delete(`/admin/content/${rootId}`)
     expect(res.ok(), `admin-content delete failed: ${res.status()}`).toBeTruthy()
-    expect((await search(page.request, marker)).results.some((r) => r.id === rootId)).toBeFalsy()
+    await expectDocNotInSearch(page.request, marker, rootId, 'admin-content deleted doc should be deindexed')
   })
 
   test('deleting via /api/:collection/:id also removes a doc from public search', async ({ page }) => {
@@ -154,11 +195,11 @@ test.describe('FTS5 lexical search @api', () => {
     const marker = `heron${Date.now()}`
     const { rootId } = await createBlogPost(page.request, marker)
     await publish(page.request, rootId)
-    expect((await search(page.request, marker)).total).toBeGreaterThanOrEqual(1)
+    await expectDocInSearch(page.request, marker, rootId, 'doc should appear before api collection delete')
 
     const res = await page.request.delete(`/api/blog-posts/${rootId}`)
     expect(res.ok(), `api delete failed: ${res.status()}`).toBeTruthy()
-    expect((await search(page.request, marker)).results.some((r) => r.id === rootId)).toBeFalsy()
+    await expectDocNotInSearch(page.request, marker, rootId, 'api-deleted doc should be deindexed')
   })
 
   test('deleting via /api/content/:id also removes a doc from public search', async ({ page }) => {
@@ -166,11 +207,11 @@ test.describe('FTS5 lexical search @api', () => {
     const marker = `otter${Date.now()}`
     const { rootId } = await createBlogPost(page.request, marker)
     await publish(page.request, rootId)
-    expect((await search(page.request, marker)).total).toBeGreaterThanOrEqual(1)
+    await expectDocInSearch(page.request, marker, rootId, 'doc should appear before api/content delete')
 
     const res = await page.request.delete(`/api/content/${rootId}`)
     expect(res.ok(), `api-content-crud delete failed: ${res.status()}`).toBeTruthy()
-    expect((await search(page.request, marker)).results.some((r) => r.id === rootId)).toBeFalsy()
+    await expectDocNotInSearch(page.request, marker, rootId, 'api/content deleted doc should be deindexed')
   })
 
   test('HTML in a published title is escaped in search results — only <mark> survives (R8)', async ({ page }) => {
@@ -189,10 +230,10 @@ test.describe('FTS5 lexical search @api', () => {
     const id = (created.data.id ?? created.data.rootId) as string
     await publish(page.request, id)
 
-    const hit = (await search(page.request, marker)).results.find((r) => r.id === id)
-    expect(hit, 'doc should be found').toBeTruthy()
-    expect(hit!.title).not.toContain('<img') // injected tag never reaches the client raw
-    expect(hit!.title).toContain('&lt;img') // it is escaped
-    expect(hit!.title).toContain('<mark>') // the highlight markup we control does survive
+    await expectDocInSearch(page.request, marker, id, 'XSS doc should be found')
+    const hit = (await search(page.request, marker)).results.find((r) => r.id === id)!
+    expect(hit.title).not.toContain('<img') // injected tag never reaches the client raw
+    expect(hit.title).toContain('&lt;img') // it is escaped
+    expect(hit.title).toContain('<mark>') // the highlight markup we control does survive
   })
 })

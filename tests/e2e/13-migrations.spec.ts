@@ -26,15 +26,27 @@ test.describe('Migrations API Endpoints @content @media @api', () => {
     // every count is zero. This one reads the numbers, because the handler stopped repairing
     // the schema as a side effect of being called and that change had to be visible somewhere:
     // a status read that silently reported nothing would pass the shape test unchanged.
-    const response = await page.request.get('/admin/api/migrations/status');
-    expect(response.status()).toBe(200);
+    //
+    // Uses expect.poll: D1 replication can briefly lag after e2e-setup applies migrations,
+    // causing the first read to show pending migrations that clear within a few seconds.
+    await expect.poll(
+      async () => {
+        const response = await page.request.get('/admin/api/migrations/status')
+        if (response.status() !== 200) return { pending: -1, total: 0, applied: 0 }
+        const { data } = await response.json()
+        return { pending: data.pendingMigrations ?? -1, total: data.totalMigrations ?? 0, applied: data.appliedMigrations ?? 0 }
+      },
+      { message: 'migrations are pending on a migrated database (D1 replication lag?)', timeout: 10000, intervals: [1000, 2000, 3000] },
+    ).toMatchObject({ pending: 0 })
 
-    const { data } = await response.json();
-    expect(data.totalMigrations, 'no migrations in the bundle').toBeGreaterThan(0);
-    expect(data.migrations).toHaveLength(data.totalMigrations);
-    expect(data.appliedMigrations + data.pendingMigrations).toBe(data.totalMigrations);
-    // A migrated database has nothing outstanding -- this is what the admin banner reads.
-    expect(data.pendingMigrations, 'migrations are pending on a migrated database').toBe(0);
+    // Also check the shape invariant once migrations are confirmed applied.
+    const response = await page.request.get('/admin/api/migrations/status')
+    expect(response.status()).toBe(200)
+    const { data } = await response.json()
+    expect(data.totalMigrations, 'no migrations in the bundle').toBeGreaterThan(0)
+    expect(data.migrations).toHaveLength(data.totalMigrations)
+    expect(data.appliedMigrations + data.pendingMigrations).toBe(data.totalMigrations)
+    expect(data.pendingMigrations, 'migrations are pending on a migrated database').toBe(0)
   });
 
   test('should report the same status when read twice', async ({ page }) => {

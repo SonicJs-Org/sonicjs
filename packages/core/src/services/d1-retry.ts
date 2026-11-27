@@ -19,7 +19,18 @@ export function isTransientD1Error(error: unknown): boolean {
     msg.includes('reset because its code was updated') ||
     msg.includes('please try again') ||
     msg.includes('overloaded') ||
-    msg.includes('too many requests')
+    msg.includes('too many requests') ||
+    // Additional CF D1 / Workers connection errors — these definitively indicate the
+    // write did NOT commit (connection severed before the response), so retrying is safe.
+    msg.includes('connection reset') ||
+    msg.includes('connection refused') ||
+    msg.includes('remotetransactionfailed') ||
+    msg.includes('service temporarily unavailable') ||
+    // SQLite busy errors that occur under concurrent D1 load
+    msg.includes('database is locked') ||
+    msg.includes('sqlite_busy') ||
+    // CF D1 error code prefix — typically wraps retryable infrastructure faults
+    (msg.includes('d1_error') && !msg.includes('no such table') && !msg.includes('no such column'))
   )
 }
 
@@ -29,7 +40,7 @@ export function isTransientD1Error(error: unknown): boolean {
  * collide again in lockstep. Non-transient errors and the final attempt re-throw unchanged, so
  * callers' error contracts are intact.
  */
-export async function retryTransientD1<T>(fn: () => Promise<T>, attempts = 4, baseDelayMs = 25): Promise<T> {
+export async function retryTransientD1<T>(fn: () => Promise<T>, attempts = 6, baseDelayMs = 25): Promise<T> {
   let lastError: unknown
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {

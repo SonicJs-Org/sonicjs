@@ -58,6 +58,10 @@ test.describe("Source: 43-cache-plugin.spec.ts", () => {
       await page.goto('/admin/cache');
       await waitForHTMX(page);
 
+      // Guard: if the page navigated away (e.g. session expired) this catches it
+      // before the content assertion produces a confusing "does not contain 'cache'" message.
+      await expect(page).toHaveURL(/\/admin\/cache/);
+
       // Verify we get 200 OK (not 404)
       const response = await page.request.get('/admin/cache');
       expect(response.status()).toBe(200);

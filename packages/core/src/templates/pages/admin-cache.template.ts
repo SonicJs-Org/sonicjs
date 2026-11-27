@@ -390,6 +390,53 @@ function renderUrlCatalogTab(catalog: CacheDashboardData['catalog']): string {
     ? `<span class="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300">${swrPending} stale pending</span>`
     : ''
 
+  // Always include the pagination script regardless of whether there are entries.
+  // When the catalog is empty the early-return renders a "No entries yet" placeholder,
+  // but the script still needs to be present so tests (and prewarm flows) can inject
+  // rows and call window.urlCatalogRenderPage() without the page needing a reload.
+  const urlCatalogPaginationScript = `
+    <script>
+(function () {
+  var PAGE_SIZE = 25;
+  var currentPage = 1;
+
+  function getRows() {
+    var tbody = document.getElementById('url-catalog-tbody');
+    return tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
+  }
+
+  function renderPage(page) {
+    var rows = getRows();
+    if (rows.length === 0) return;
+    var totalPages = Math.ceil(rows.length / PAGE_SIZE);
+    currentPage = Math.max(1, Math.min(page, totalPages));
+    rows.forEach(function (row, i) {
+      row.style.display = (i >= (currentPage - 1) * PAGE_SIZE && i < currentPage * PAGE_SIZE) ? '' : 'none';
+    });
+    var info = document.getElementById('url-catalog-page-info');
+    var prevBtn = document.getElementById('url-catalog-prev');
+    var nextBtn = document.getElementById('url-catalog-next');
+    if (info) {
+      var start = (currentPage - 1) * PAGE_SIZE + 1;
+      var end = Math.min(currentPage * PAGE_SIZE, rows.length);
+      var tbody = document.getElementById('url-catalog-tbody');
+      var totalEntries = parseInt(tbody ? (tbody.getAttribute('data-total-entries') || String(rows.length)) : String(rows.length), 10);
+      var suffix = (totalEntries > rows.length) ? ' (top ' + rows.length + ' loaded)' : '';
+      info.textContent = start + '\u2013' + end + ' of ' + rows.length + suffix;
+    }
+    if (prevBtn) prevBtn.disabled = currentPage <= 1;
+    if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+  }
+
+  window.urlCatalogPrevPage = function () { renderPage(currentPage - 1); };
+  window.urlCatalogNextPage = function () { renderPage(currentPage + 1); };
+  window.urlCatalogRenderPage = renderPage;
+
+  document.addEventListener('DOMContentLoaded', function () { renderPage(1); });
+})();
+    </script>
+  `
+
   if (entries.length === 0) {
     return `
       ${statCards}
@@ -411,6 +458,7 @@ function renderUrlCatalogTab(catalog: CacheDashboardData['catalog']): string {
           </div>
         </div>
       </div>
+      ${urlCatalogPaginationScript}
     `
   }
 
@@ -522,45 +570,7 @@ function renderUrlCatalogTab(catalog: CacheDashboardData['catalog']): string {
       </div>
     </div>
 
-    <script>
-(function () {
-  var PAGE_SIZE = 25;
-  var currentPage = 1;
-
-  function getRows() {
-    var tbody = document.getElementById('url-catalog-tbody');
-    return tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
-  }
-
-  function renderPage(page) {
-    var rows = getRows();
-    if (rows.length === 0) return;
-    var totalPages = Math.ceil(rows.length / PAGE_SIZE);
-    currentPage = Math.max(1, Math.min(page, totalPages));
-    rows.forEach(function (row, i) {
-      row.style.display = (i >= (currentPage - 1) * PAGE_SIZE && i < currentPage * PAGE_SIZE) ? '' : 'none';
-    });
-    var info = document.getElementById('url-catalog-page-info');
-    var prevBtn = document.getElementById('url-catalog-prev');
-    var nextBtn = document.getElementById('url-catalog-next');
-    if (info) {
-      var start = (currentPage - 1) * PAGE_SIZE + 1;
-      var end = Math.min(currentPage * PAGE_SIZE, rows.length);
-      var totalEntries = parseInt(tbody ? (tbody.getAttribute('data-total-entries') || String(rows.length)) : String(rows.length), 10);
-      var suffix = (totalEntries > rows.length) ? ' (top ' + rows.length + ' loaded)' : '';
-      info.textContent = start + '\u2013' + end + ' of ' + rows.length + suffix;
-    }
-    if (prevBtn) prevBtn.disabled = currentPage <= 1;
-    if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
-  }
-
-  window.urlCatalogPrevPage = function () { renderPage(currentPage - 1); };
-  window.urlCatalogNextPage = function () { renderPage(currentPage + 1); };
-  window.urlCatalogRenderPage = renderPage;
-
-  document.addEventListener('DOMContentLoaded', function () { renderPage(1); });
-})();
-    </script>
+    ${urlCatalogPaginationScript}
   `
 }
 

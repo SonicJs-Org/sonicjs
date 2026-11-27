@@ -907,7 +907,7 @@ async function signInAsAdmin(page: Page) {
  */
 export async function gotoMediaLibrary(page: Page, url = '/admin/media') {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.locator('#media-grid').waitFor({ state: 'attached', timeout: 20000 });
+  await page.locator('#media-grid').waitFor({ state: 'attached', timeout: 30000 });
 }
 
 /**

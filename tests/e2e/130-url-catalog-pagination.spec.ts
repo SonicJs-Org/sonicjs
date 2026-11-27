@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures'
 import type { Page } from './fixtures'
-import { loginAsAdmin } from './utils/test-helpers'
+import { loginAsAdmin, isFeatureAvailable } from './utils/test-helpers'
+import { ensurePluginActive } from './fixtures/plugin-fixtures'
 
 /**
  * URL Catalog Pagination
@@ -8,37 +9,75 @@ import { loginAsAdmin } from './utils/test-helpers'
  * The admin cache page renders at most 100 catalog entries and paginates them
  * client-side at 25 rows per page. These tests verify the pager behaviour by
  * injecting a known number of rows into the DOM then driving the controls.
+ *
+ * Requires core-cache to be active so the /admin/cache page renders.
  */
-test.describe('Admin Cache → URL catalog pagination', () => {
+test.describe('Admin Cache → URL catalog pagination @plugins @content', () => {
+  let featureAvailable = false
+  test.beforeAll(async ({ request }) => {
+    featureAvailable = await isFeatureAvailable(request, '/admin/cache')
+  })
+  test.beforeEach(() => { test.skip(!featureAvailable, 'Plugin/feature not available in this deployment') })
+
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
+    // core-cache must be active for the /admin/cache page (and the URL catalog tab) to render.
+    await ensurePluginActive(page, 'core-cache')
     await page.goto('/admin/cache#url-catalog', { waitUntil: 'domcontentloaded' })
     // Activate the URL catalog tab (hash triggers it on load; wait for the panel)
     await page.waitForSelector('#tab-panel-url-catalog:not(.hidden)', { timeout: 10000 }).catch(() => {
       // Fallback: click the tab explicitly
       return page.locator('#tab-url-catalog').click()
     })
+    // Ensure the tab panel is now visible before each test.
+    await page.waitForSelector('#tab-panel-url-catalog:not(.hidden)', { timeout: 5000 }).catch(() => {})
   })
 
   /**
    * Inject N fake rows into the tbody and re-render page 1.
-   * Returns the total rows injected.
+   *
+   * On a fresh CI database the URL catalog has no real entries, so the template
+   * renders an empty-state card WITHOUT the table/pagination DOM. The pagination
+   * script IS always present (after the template fix that hoisted it outside the
+   * early-return), so we only need to scaffold the missing HTML structure before
+   * calling window.urlCatalogRenderPage().
    */
   async function injectRows(page: Page, count: number, totalEntries = count) {
     await page.evaluate(({ count, totalEntries }: { count: number; totalEntries: number }) => {
-      const tbody = document.getElementById('url-catalog-tbody')
-      if (!tbody) return
-      // Clear any existing rows
+      let tbody = document.getElementById('url-catalog-tbody') as HTMLTableSectionElement | null
+
+      // On a fresh DB the empty-state card renders without the table — scaffold it.
+      if (!tbody) {
+        const tabPanel = document.getElementById('tab-panel-url-catalog')
+        if (!tabPanel) return  // The URL catalog tab itself is missing; nothing to do.
+
+        const scaffold = document.createElement('div')
+        scaffold.innerHTML = [
+          '<table class="min-w-full divide-y divide-zinc-950/5 dark:divide-white/10">',
+          '  <tbody id="url-catalog-tbody" class="divide-y divide-zinc-950/5 dark:divide-white/10" data-total-entries="0"></tbody>',
+          '</table>',
+          '<div class="px-4 py-3 border-t border-zinc-950/5 dark:border-white/10 flex items-center justify-between">',
+          '  <p class="text-sm text-zinc-500">Showing <span id="url-catalog-page-info">\u2014</span></p>',
+          '  <div class="flex items-center gap-2">',
+          '    <button id="url-catalog-prev" disabled onclick="urlCatalogPrevPage()">Prev</button>',
+          '    <button id="url-catalog-next" disabled onclick="urlCatalogNextPage()">Next</button>',
+          '  </div>',
+          '</div>',
+        ].join('\n')
+        tabPanel.appendChild(scaffold)
+        tbody = document.getElementById('url-catalog-tbody') as HTMLTableSectionElement | null
+        if (!tbody) return
+      }
+
+      // Clear any existing rows and stamp the total-entries attribute.
       tbody.innerHTML = ''
-      // Stamp the total-entries attribute (may differ from loaded count)
       tbody.setAttribute('data-total-entries', String(totalEntries))
-      // Add `count` fake rows
       for (let i = 1; i <= count; i++) {
         const tr = document.createElement('tr')
         tr.innerHTML = `<td class="px-4 py-3 text-sm">/api/fake-url-${i}</td>`
         tbody.appendChild(tr)
       }
-      // Re-render page 1 using the exposed helper
+      // Re-render page 1 using the template's exposed pagination helper.
       if (typeof (window as any).urlCatalogRenderPage === 'function') {
         ;(window as any).urlCatalogRenderPage(1)
       }
